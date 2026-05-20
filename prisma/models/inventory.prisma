@@ -2,12 +2,7 @@
 // ENUMS
 // ======================================================
 
-enum InventoryLocationType {
-  WAREHOUSE
-  SHOWROOM
-}
-
-enum InventoryStatus {
+enum WarehouseStatus {
   ACTIVE
   INACTIVE
 }
@@ -62,15 +57,14 @@ enum InventoryTransferStatus {
 // Models
 // ======================================================
 
-model InventoryLocation {
+model Warehouse {
   id         String @id @default(uuid()) @db.Uuid
   businessId String @map("business_id") @db.Uuid
 
-  name         String                @db.VarChar(150)
-  locationType InventoryLocationType @map("location_type")
-  phone        String?               @db.VarChar(30)
-  address      String?
-  status       InventoryStatus       @default(ACTIVE)
+  name    String          @db.VarChar(150)
+  phone   String?         @db.VarChar(30)
+  address String?
+  status  WarehouseStatus @default(ACTIVE)
 
   createdBy String?   @map("created_by") @db.Uuid
   updatedBy String?   @map("updated_by") @db.Uuid
@@ -83,22 +77,22 @@ model InventoryLocation {
   movements   InventoryStockMovement[]
   adjustments InventoryStockAdjustment[]
 
-  transfersFrom InventoryStockTransfer[] @relation("TransferFromLocation")
-  transfersTo   InventoryStockTransfer[] @relation("TransferToLocation")
+  transfersFrom InventoryStockTransfer[] @relation("TransferFromWarehouse")
+  transfersTo   InventoryStockTransfer[] @relation("TransferToWarehouse")
 
   @@unique([businessId, name])
   @@index([businessId])
-  @@index([locationType])
   @@index([status])
-  @@map("inventory_locations")
+  @@index([deletedAt])
+  @@map("inventory_warehouses")
 }
 
 model InventoryStock {
-  id         String  @id @default(uuid()) @db.Uuid
-  businessId String  @map("business_id") @db.Uuid
-  locationId String  @map("location_id") @db.Uuid
-  productId  String  @map("product_id") @db.Uuid
-  variantId  String? @map("variant_id") @db.Uuid
+  id          String @id @default(uuid()) @db.Uuid
+  businessId  String @map("business_id") @db.Uuid
+  warehouseId String @map("warehouse_id") @db.Uuid
+  productId   String @map("product_id") @db.Uuid
+  variantId   String @map("variant_id") @db.Uuid
 
   totalQuantity    Decimal @default(0) @map("total_quantity") @db.Decimal(14, 3)
   quantityReserved Decimal @default(0) @map("quantity_reserved") @db.Decimal(14, 3)
@@ -107,21 +101,22 @@ model InventoryStock {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  location InventoryLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
 
+  @@unique([businessId, warehouseId, variantId])
   @@index([businessId])
-  @@index([locationId])
+  @@index([warehouseId])
   @@index([productId])
   @@index([variantId])
   @@map("inventory_stocks")
 }
 
 model InventoryStockBatch {
-  id         String  @id @default(uuid()) @db.Uuid
-  businessId String  @map("business_id") @db.Uuid
-  locationId String  @map("location_id") @db.Uuid
-  productId  String  @map("product_id") @db.Uuid
-  variantId  String? @map("variant_id") @db.Uuid
+  id          String @id @default(uuid()) @db.Uuid
+  businessId  String @map("business_id") @db.Uuid
+  warehouseId String @map("warehouse_id") @db.Uuid
+  productId   String @map("product_id") @db.Uuid
+  variantId   String @map("variant_id") @db.Uuid
 
   batchNo           String  @map("batch_no") @db.VarChar(100)
   quantityReceived  Decimal @default(0) @map("quantity_received") @db.Decimal(14, 3)
@@ -134,10 +129,10 @@ model InventoryStockBatch {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  location InventoryLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
 
   @@index([businessId])
-  @@index([locationId])
+  @@index([warehouseId])
   @@index([productId])
   @@index([variantId])
   @@index([batchNo])
@@ -146,11 +141,11 @@ model InventoryStockBatch {
 }
 
 model InventoryStockMovement {
-  id         String  @id @default(uuid()) @db.Uuid
-  businessId String  @map("business_id") @db.Uuid
-  locationId String  @map("location_id") @db.Uuid
-  productId  String  @map("product_id") @db.Uuid
-  variantId  String? @map("variant_id") @db.Uuid
+  id          String @id @default(uuid()) @db.Uuid
+  businessId  String @map("business_id") @db.Uuid
+  warehouseId String @map("warehouse_id") @db.Uuid
+  productId   String @map("product_id") @db.Uuid
+  variantId   String @map("variant_id") @db.Uuid
 
   movementType InventoryMovementType @map("movement_type")
   quantity     Decimal               @db.Decimal(14, 3)
@@ -162,10 +157,10 @@ model InventoryStockMovement {
   createdBy String?  @map("created_by") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at")
 
-  location InventoryLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
 
   @@index([businessId])
-  @@index([locationId])
+  @@index([warehouseId])
   @@index([productId])
   @@index([variantId])
   @@index([movementType])
@@ -175,9 +170,9 @@ model InventoryStockMovement {
 }
 
 model InventoryStockAdjustment {
-  id         String @id @default(uuid()) @db.Uuid
-  businessId String @map("business_id") @db.Uuid
-  locationId String @map("location_id") @db.Uuid
+  id          String @id @default(uuid()) @db.Uuid
+  businessId  String @map("business_id") @db.Uuid
+  warehouseId String @map("warehouse_id") @db.Uuid
 
   adjustmentNo   String                    @map("adjustment_no") @db.VarChar(100)
   adjustmentType InventoryAdjustmentType   @map("adjustment_type")
@@ -192,22 +187,22 @@ model InventoryStockAdjustment {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  location InventoryLocation              @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  items    InventoryStockAdjustmentItem[]
+  warehouse Warehouse                      @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  items     InventoryStockAdjustmentItem[]
 
   @@unique([businessId, adjustmentNo])
   @@index([businessId])
-  @@index([locationId])
+  @@index([warehouseId])
   @@index([adjustmentType])
   @@index([status])
   @@map("inventory_stock_adjustments")
 }
 
 model InventoryStockAdjustmentItem {
-  id           String  @id @default(uuid()) @db.Uuid
-  adjustmentId String  @map("adjustment_id") @db.Uuid
-  productId    String  @map("product_id") @db.Uuid
-  variantId    String? @map("variant_id") @db.Uuid
+  id           String @id @default(uuid()) @db.Uuid
+  adjustmentId String @map("adjustment_id") @db.Uuid
+  productId    String @map("product_id") @db.Uuid
+  variantId    String @map("variant_id") @db.Uuid
 
   oldQuantity   Decimal @map("old_quantity") @db.Decimal(14, 3)
   adjustmentQty Decimal @map("adjustment_qty") @db.Decimal(14, 3)
@@ -228,9 +223,9 @@ model InventoryStockTransfer {
   id         String @id @default(uuid()) @db.Uuid
   businessId String @map("business_id") @db.Uuid
 
-  transferNo     String @map("transfer_no") @db.VarChar(100)
-  fromLocationId String @map("from_location_id") @db.Uuid
-  toLocationId   String @map("to_location_id") @db.Uuid
+  transferNo      String @map("transfer_no") @db.VarChar(100)
+  fromWarehouseId String @map("from_warehouse_id") @db.Uuid
+  toWarehouseId   String @map("to_warehouse_id") @db.Uuid
 
   status InventoryTransferStatus @default(DRAFT)
   note   String?
@@ -245,24 +240,24 @@ model InventoryStockTransfer {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  fromLocation InventoryLocation @relation("TransferFromLocation", fields: [fromLocationId], references: [id], onDelete: Restrict)
-  toLocation   InventoryLocation @relation("TransferToLocation", fields: [toLocationId], references: [id], onDelete: Restrict)
+  fromWarehouse Warehouse @relation("TransferFromWarehouse", fields: [fromWarehouseId], references: [id], onDelete: Restrict)
+  toWarehouse   Warehouse @relation("TransferToWarehouse", fields: [toWarehouseId], references: [id], onDelete: Restrict)
 
   items InventoryStockTransferItem[]
 
   @@unique([businessId, transferNo])
   @@index([businessId])
-  @@index([fromLocationId])
-  @@index([toLocationId])
+  @@index([fromWarehouseId])
+  @@index([toWarehouseId])
   @@index([status])
   @@map("inventory_stock_transfers")
 }
 
 model InventoryStockTransferItem {
-  id         String  @id @default(uuid()) @db.Uuid
-  transferId String  @map("transfer_id") @db.Uuid
-  productId  String  @map("product_id") @db.Uuid
-  variantId  String? @map("variant_id") @db.Uuid
+  id         String @id @default(uuid()) @db.Uuid
+  transferId String @map("transfer_id") @db.Uuid
+  productId  String @map("product_id") @db.Uuid
+  variantId  String @map("variant_id") @db.Uuid
 
   requestedQuantity   Decimal @default(0) @map("requested_quantity") @db.Decimal(14, 3)
   transferredQuantity Decimal @default(0) @map("transferred_quantity") @db.Decimal(14, 3)

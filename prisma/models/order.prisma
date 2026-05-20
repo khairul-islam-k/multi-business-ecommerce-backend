@@ -197,10 +197,10 @@ model OrderCartItem {
 }
 
 model OrderOrder {
-  id         String  @id @default(uuid()) @db.Uuid
-  businessId String  @map("business_id") @db.Uuid
-  customerId String? @map("customer_id") @db.Uuid
-  locationId String? @map("location_id") @db.Uuid
+  id          String  @id @default(uuid()) @db.Uuid
+  businessId  String  @map("business_id") @db.Uuid
+  customerId  String? @map("customer_id") @db.Uuid
+  warehouseId String? @map("warehouse_id") @db.Uuid
 
   orderNo       String             @map("order_no") @db.VarChar(100)
   orderType     OrderType          @map("order_type")
@@ -238,7 +238,7 @@ model OrderOrder {
   @@unique([businessId, orderNo])
   @@index([businessId])
   @@index([customerId])
-  @@index([locationId])
+  @@index([warehouseId])
   @@index([status])
   @@index([paymentStatus])
   @@index([createdAt])
