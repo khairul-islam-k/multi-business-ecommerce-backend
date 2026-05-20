@@ -1,8 +1,8 @@
 {
-  "name": "onecomm-backend",
+  "name": "onecomm-api",
   "version": "0.0.1",
   "description": "",
-  "author": "",
+  "author": "Utsho MH",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
