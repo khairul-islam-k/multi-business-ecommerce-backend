@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   InternalServerErrorException,
@@ -6,7 +7,8 @@ import {
 } from "@nestjs/common";
 import {
   PackageBillingCycle,
-  PackageSubscriptionAddonStatus,
+  PackageLimitKey,
+  PackageResetCycle,
   PackageSubscriptionStatus,
   PackageStatus,
   Prisma,
@@ -24,29 +26,61 @@ const ACTIVE_SUBSCRIPTION_STATUSES = [
 
 const DEFAULT_TRIAL_DAYS = 7;
 
+const PLAN_SNAPSHOT_INCLUDE = {
+  limits: true,
+  features: {
+    where: {
+      isActive: true,
+    },
+    orderBy: {
+      sortOrder: "asc",
+    },
+  },
+} satisfies Prisma.PackagePlanInclude;
+
 export const PACKAGE_SUBSCRIPTION_INCLUDE = {
   package: {
-    include: {
-      limits: true,
-      features: {
-        where: {
-          isActive: true,
-        },
-        orderBy: {
-          sortOrder: "asc",
-        },
-      },
-    },
-  },
-  addons: {
-    where: {
-      status: PackageSubscriptionAddonStatus.ACTIVE,
-    },
-    include: {
-      addon: true,
-    },
+    include: PLAN_SNAPSHOT_INCLUDE,
   },
 } satisfies Prisma.PackageSubscriptionInclude;
+
+export type PackagePlanSnapshot = {
+  planId: string;
+  name: string;
+  description: string | null;
+  price: number;
+  billingCycle: PackageBillingCycle;
+  currencyCode: string;
+  freeTrialDays: number;
+  limits: {
+    limitKey: PackageLimitKey;
+    limitValue: number;
+    resetCycle: PackageResetCycle;
+    description: string | null;
+  }[];
+  features: {
+    title: string;
+    description: string | null;
+    sortOrder: number;
+  }[];
+  capturedAt: string;
+};
+
+export type PlanChangeCharge = {
+  targetPlanId: string;
+  targetPlanPrice: number;
+  currentUnusedBalance: number;
+  amountDue: number;
+  currencyCode: string;
+  currentSubscriptionId: string | null;
+  currentPlanId: string | null;
+  currentPlanPrice: number;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  totalPeriodMs: number;
+  remainingPeriodMs: number;
+  calculatedAt: string;
+};
 
 @Injectable()
 export class PackageSubscriptionService {
@@ -154,6 +188,7 @@ export class PackageSubscriptionService {
         status: PackageStatus.ACTIVE,
         deletedAt: null,
       },
+      include: PLAN_SNAPSHOT_INCLUDE,
       orderBy: {
         sortOrder: "asc",
       },
@@ -173,6 +208,7 @@ export class PackageSubscriptionService {
       data: {
         tenantId,
         packageId: plan.id,
+        planSnapshot: this.buildPlanSnapshot(plan, now),
         status: PackageSubscriptionStatus.TRIALING,
         billingCycle: plan.billingCycle,
         price: plan.price,
@@ -189,6 +225,7 @@ export class PackageSubscriptionService {
     tenantId: string,
     planId: string,
     tx?: Prisma.TransactionClient,
+    planSnapshot?: PackagePlanSnapshot,
   ) {
     const client = tx ?? this.prisma;
 
@@ -198,6 +235,7 @@ export class PackageSubscriptionService {
         status: PackageStatus.ACTIVE,
         deletedAt: null,
       },
+      include: PLAN_SNAPSHOT_INCLUDE,
     });
 
     if (!plan) {
@@ -205,7 +243,8 @@ export class PackageSubscriptionService {
     }
 
     const now = new Date();
-    const currentPeriodEnd = this.getPeriodEnd(now, plan.billingCycle);
+    const snapshot = planSnapshot ?? this.buildPlanSnapshot(plan, now);
+    const currentPeriodEnd = this.getPeriodEnd(now, snapshot.billingCycle);
 
     await client.packageSubscription.updateMany({
       where: {
@@ -225,10 +264,11 @@ export class PackageSubscriptionService {
       data: {
         tenantId,
         packageId: plan.id,
+        planSnapshot: snapshot,
         status: PackageSubscriptionStatus.ACTIVE,
-        billingCycle: plan.billingCycle,
-        price: plan.price,
-        currencyCode: plan.currencyCode,
+        billingCycle: snapshot.billingCycle,
+        price: snapshot.price,
+        currencyCode: snapshot.currencyCode,
         startedAt: now,
         currentPeriodStart: now,
         currentPeriodEnd,
@@ -256,6 +296,115 @@ export class PackageSubscriptionService {
     });
   }
 
+  async calculatePlanChangeCharge(
+    tenantId: string,
+    targetPlanId: string,
+    now = new Date(),
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx ?? this.prisma;
+    const targetPlan = await client.packagePlan.findFirst({
+      where: {
+        id: targetPlanId,
+        status: PackageStatus.ACTIVE,
+        deletedAt: null,
+      },
+      include: PLAN_SNAPSHOT_INCLUDE,
+    });
+
+    if (!targetPlan) {
+      throw new NotFoundException("Package plan not found");
+    }
+
+    const currentSubscription = await client.packageSubscription.findFirst({
+      where: {
+        tenantId,
+        status: {
+          in: ACTIVE_SUBSCRIPTION_STATUSES,
+        },
+      },
+      orderBy: {
+        currentPeriodEnd: "desc",
+      },
+    });
+
+    if (!currentSubscription) {
+      return {
+        charge: {
+          targetPlanId: targetPlan.id,
+          targetPlanPrice: Number(targetPlan.price),
+          currentUnusedBalance: 0,
+          amountDue: Number(targetPlan.price),
+          currencyCode: targetPlan.currencyCode,
+          currentSubscriptionId: null,
+          currentPlanId: null,
+          currentPlanPrice: 0,
+          currentPeriodStart: null,
+          currentPeriodEnd: null,
+          totalPeriodMs: 0,
+          remainingPeriodMs: 0,
+          calculatedAt: now.toISOString(),
+        } satisfies PlanChangeCharge,
+        targetPlan,
+        targetPlanSnapshot: this.buildPlanSnapshot(targetPlan, now),
+      };
+    }
+
+    if (currentSubscription.packageId === targetPlan.id) {
+      throw new BadRequestException(
+        "Tenant is already subscribed to this plan",
+      );
+    }
+
+    if (currentSubscription.currencyCode !== targetPlan.currencyCode) {
+      throw new BadRequestException(
+        "Cannot calculate plan change across different currencies",
+      );
+    }
+
+    const currentUnusedBalance = this.calculateUnusedSubscriptionBalance({
+      price: Number(currentSubscription.price),
+      billingCycle: currentSubscription.billingCycle,
+      currentPeriodStart: currentSubscription.currentPeriodStart,
+      currentPeriodEnd: currentSubscription.currentPeriodEnd,
+      now,
+    });
+    const amountDue = Math.max(
+      Number(targetPlan.price) - currentUnusedBalance,
+      0,
+    );
+    const totalPeriodMs = Math.max(
+      currentSubscription.currentPeriodEnd.getTime() -
+        currentSubscription.currentPeriodStart.getTime(),
+      0,
+    );
+    const remainingPeriodMs = Math.max(
+      currentSubscription.currentPeriodEnd.getTime() - now.getTime(),
+      0,
+    );
+
+    return {
+      charge: {
+        targetPlanId: targetPlan.id,
+        targetPlanPrice: Number(targetPlan.price),
+        currentUnusedBalance,
+        amountDue,
+        currencyCode: targetPlan.currencyCode,
+        currentSubscriptionId: currentSubscription.id,
+        currentPlanId: currentSubscription.packageId,
+        currentPlanPrice: Number(currentSubscription.price),
+        currentPeriodStart:
+          currentSubscription.currentPeriodStart.toISOString(),
+        currentPeriodEnd: currentSubscription.currentPeriodEnd.toISOString(),
+        totalPeriodMs,
+        remainingPeriodMs,
+        calculatedAt: now.toISOString(),
+      } satisfies PlanChangeCharge,
+      targetPlan,
+      targetPlanSnapshot: this.buildPlanSnapshot(targetPlan, now),
+    };
+  }
+
   private getPeriodEnd(start: Date, billingCycle: PackageBillingCycle) {
     if (
       billingCycle === PackageBillingCycle.FREE ||
@@ -279,5 +428,87 @@ export class PackageSubscriptionService {
     const nextDate = new Date(date);
     nextDate.setDate(nextDate.getDate() + days);
     return nextDate;
+  }
+
+  private buildPlanSnapshot(
+    plan: Prisma.PackagePlanGetPayload<{
+      include: typeof PLAN_SNAPSHOT_INCLUDE;
+    }>,
+    capturedAt: Date,
+  ): PackagePlanSnapshot {
+    return {
+      planId: plan.id,
+      name: plan.name,
+      description: plan.description,
+      price: Number(plan.price),
+      billingCycle: plan.billingCycle,
+      currencyCode: plan.currencyCode,
+      freeTrialDays: plan.freeTrialDays,
+      limits: plan.limits.map((limit) => ({
+        limitKey: limit.limitKey,
+        limitValue: limit.limitValue,
+        resetCycle: limit.resetCycle,
+        description: limit.description,
+      })),
+      features: plan.features.map((feature) => ({
+        title: feature.title,
+        description: feature.description,
+        sortOrder: feature.sortOrder,
+      })),
+      capturedAt: capturedAt.toISOString(),
+    };
+  }
+
+  /**
+   * Calculates how much unused value remains on the tenant's current plan.
+   *
+   * Formula for recurring plans:
+   *   unused balance = current plan price * (remaining period ms / total period ms)
+   *
+   * Checkout then charges:
+   *   amount due = max(target plan full price - unused balance, 0)
+   *
+   * Example: a tenant bought Starter for 30/month, used 5 days of a 30-day
+   * period, then upgrades to Business for 60/month. The unused Starter balance
+   * is 30 * 25/30 = 25, so the upgrade checkout amount is 60 - 25 = 35.
+   *
+   * FREE plans produce no credit. LIFETIME plans do not have a meaningful
+   * period to prorate, so the paid price is treated as the available balance
+   * while the subscription is still active.
+   */
+  private calculateUnusedSubscriptionBalance(params: {
+    price: number;
+    billingCycle: PackageBillingCycle;
+    currentPeriodStart: Date;
+    currentPeriodEnd: Date;
+    now: Date;
+  }) {
+    if (params.price <= 0 || params.billingCycle === PackageBillingCycle.FREE) {
+      return 0;
+    }
+
+    if (params.billingCycle === PackageBillingCycle.LIFETIME) {
+      return this.roundMoney(params.price);
+    }
+
+    const totalPeriodMs = Math.max(
+      params.currentPeriodEnd.getTime() - params.currentPeriodStart.getTime(),
+      0,
+    );
+
+    if (totalPeriodMs === 0) {
+      return 0;
+    }
+
+    const remainingPeriodMs = Math.max(
+      params.currentPeriodEnd.getTime() - params.now.getTime(),
+      0,
+    );
+
+    return this.roundMoney(params.price * (remainingPeriodMs / totalPeriodMs));
+  }
+
+  private roundMoney(amount: number) {
+    return Math.round(amount * 100) / 100;
   }
 }

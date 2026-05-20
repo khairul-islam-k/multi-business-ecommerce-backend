@@ -23,22 +23,23 @@ enum PackageResetCycle {
 }
 
 enum PackageLimitKey {
-  MAX_ROLES       @map("max_roles")
-  MAX_MEDIAS      @map("max_medias")
-  MAX_EMPLOYEES   @map("max_employees")
-  MAX_BUSINESSES  @map("max_businesses")
+  MAX_TAGS       @map("max_tags")
+  MAX_UNITS      @map("max_units")
+  MAX_ROLES      @map("max_roles")
+  MAX_MEDIAS     @map("max_medias")
+  MAX_BRANDS     @map("max_brands")
+  MAX_PRODUCTS   @map("max_products")
+  MAX_VARIANTS   @map("max_variants")
+  MAX_EMPLOYEES  @map("max_employees")
+  MAX_ATTRIBUTES @map("max_attributes")
+  MAX_BUSINESSES @map("max_businesses")
+  MAX_CATEGORIES @map("max_categories")
 }
 
 enum PackageSubscriptionStatus {
   TRIALING
   ACTIVE
   PAST_DUE
-  CANCELLED
-  EXPIRED
-}
-
-enum PackageSubscriptionAddonStatus {
-  ACTIVE
   CANCELLED
   EXPIRED
 }
@@ -52,7 +53,6 @@ enum PackagePaymentStatus {
 
 enum PackagePaymentType {
   PLAN_CHANGE
-  ADDON_PURCHASE
 }
 
 // =======================
@@ -86,16 +86,16 @@ model PackagePlan {
 }
 
 model PackagePlanFeature {
-  id          String      @id @default(uuid()) @db.Uuid
-  packageId   String      @map("package_id") @db.Uuid
-  title       String      @db.VarChar(255)
+  id          String   @id @default(uuid()) @db.Uuid
+  packageId   String   @map("package_id") @db.Uuid
+  title       String   @db.VarChar(255)
   description String?
-  sortOrder   Int         @default(0) @map("sort_order")
-  isActive    Boolean     @default(true) @map("is_active")
-  createdAt   DateTime    @default(now()) @map("created_at")
-  updatedAt   DateTime    @updatedAt @map("updated_at")
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  package     PackagePlan @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  package PackagePlan @relation(fields: [packageId], references: [id], onDelete: Cascade)
 
   @@index([packageId])
   @@index([packageId, sortOrder])
@@ -113,46 +113,18 @@ model PackagePlanLimit {
   createdAt   DateTime          @default(now()) @map("created_at")
   updatedAt   DateTime          @updatedAt @map("updated_at")
 
-  package     PackagePlan       @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  package PackagePlan @relation(fields: [packageId], references: [id], onDelete: Cascade)
 
   @@unique([packageId, limitKey])
   @@index([limitKey])
   @@map("package_plan_limits")
 }
 
-model PackageAddon {
-  id            String              @id @default(uuid()) @db.Uuid
-  name          String              @db.VarChar(150)
-  description   String?
-  price         Decimal             @default(0) @db.Decimal(12, 2)
-  billingCycle  PackageBillingCycle @map("billing_cycle")
-  currencyCode  String              @default("BDT") @map("currency_code") @db.VarChar(10)
-
-  limitKey      PackageLimitKey     @map("limit_key")
-  limitValue    Int                 @map("limit_value")
-  resetCycle    PackageResetCycle   @default(LIFETIME) @map("reset_cycle")
-
-  status        PackageStatus       @default(ACTIVE)
-  sortOrder     Int                 @default(0) @map("sort_order")
-  createdBy     String?             @map("created_by") @db.Uuid
-  updatedBy     String?             @map("updated_by") @db.Uuid
-  createdAt     DateTime            @default(now()) @map("created_at")
-  updatedAt     DateTime            @updatedAt @map("updated_at")
-  deletedAt     DateTime?           @map("deleted_at")
-
-  subscriptions PackageSubscriptionAddon[]
-  mockPayments  PackageMockPayment[]
-
-  @@unique([name])
-  @@index([limitKey])
-  @@index([status])
-  @@map("package_addons")
-}
-
 model PackageSubscription {
   id                 String                    @id @default(uuid()) @db.Uuid
   tenantId           String                    @map("tenant_id") @db.Uuid
   packageId          String                    @map("package_id") @db.Uuid
+  planSnapshot       Json?                     @map("plan_snapshot")
   status             PackageSubscriptionStatus @default(TRIALING)
   billingCycle       PackageBillingCycle       @map("billing_cycle")
   price              Decimal                   @default(0) @db.Decimal(12, 2)
@@ -167,11 +139,10 @@ model PackageSubscription {
   createdAt          DateTime                  @default(now()) @map("created_at")
   updatedAt          DateTime                  @updatedAt @map("updated_at")
 
-  package            PackagePlan               @relation(fields: [packageId], references: [id])
-  tenant             SystemUser                @relation("TenantPackageSubscriptions", fields: [tenantId], references: [id], onDelete: Cascade)
-  addons             PackageSubscriptionAddon[]
-  usageCounters      PackageUsageCounter[]
-  mockPayments       PackageMockPayment[]
+  package       PackagePlan           @relation(fields: [packageId], references: [id])
+  tenant        SystemUser            @relation("TenantPackageSubscriptions", fields: [tenantId], references: [id], onDelete: Cascade)
+  usageCounters PackageUsageCounter[]
+  mockPayments  PackageMockPayment[]
 
   @@index([tenantId])
   @@index([packageId])
@@ -180,37 +151,17 @@ model PackageSubscription {
   @@map("package_subscriptions")
 }
 
-model PackageSubscriptionAddon {
-  id             String                         @id @default(uuid()) @db.Uuid
-  subscriptionId String                         @map("subscription_id") @db.Uuid
-  addonId        String                         @map("addon_id") @db.Uuid
-  quantity       Int                            @default(1)
-  status         PackageSubscriptionAddonStatus @default(ACTIVE)
-  price          Decimal                        @default(0) @db.Decimal(12, 2)
-  currencyCode   String                         @default("BDT") @map("currency_code") @db.VarChar(10)
-  createdAt      DateTime                       @default(now()) @map("created_at")
-  updatedAt      DateTime                       @updatedAt @map("updated_at")
-
-  subscription   PackageSubscription            @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  addon          PackageAddon                   @relation(fields: [addonId], references: [id])
-
-  @@unique([subscriptionId, addonId])
-  @@index([addonId])
-  @@index([status])
-  @@map("package_subscription_addons")
-}
-
 model PackageUsageCounter {
-  id             String              @id @default(uuid()) @db.Uuid
-  subscriptionId String              @map("subscription_id") @db.Uuid
-  limitKey       PackageLimitKey     @map("limit_key")
-  usedValue      Int                 @default(0) @map("used_value")
-  periodStart    DateTime            @map("period_start")
-  periodEnd      DateTime            @map("period_end")
-  createdAt      DateTime            @default(now()) @map("created_at")
-  updatedAt      DateTime            @updatedAt @map("updated_at")
+  id             String          @id @default(uuid()) @db.Uuid
+  subscriptionId String          @map("subscription_id") @db.Uuid
+  limitKey       PackageLimitKey @map("limit_key")
+  usedValue      Int             @default(0) @map("used_value")
+  periodStart    DateTime        @map("period_start")
+  periodEnd      DateTime        @map("period_end")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
 
-  subscription   PackageSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  subscription PackageSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
   @@unique([subscriptionId, limitKey, periodStart, periodEnd])
   @@index([limitKey])
@@ -223,29 +174,24 @@ model PackageMockPayment {
   tenantId       String               @map("tenant_id") @db.Uuid
   subscriptionId String?              @map("subscription_id") @db.Uuid
   planId         String?              @map("plan_id") @db.Uuid
-  addonId        String?              @map("addon_id") @db.Uuid
   type           PackagePaymentType
   status         PackagePaymentStatus @default(PENDING)
   amount         Decimal              @default(0) @db.Decimal(12, 2)
   currencyCode   String               @default("BDT") @map("currency_code") @db.VarChar(10)
-  quantity       Int                  @default(1)
   metadata       Json?
   expiresAt      DateTime             @map("expires_at")
   confirmedAt    DateTime?            @map("confirmed_at")
   createdAt      DateTime             @default(now()) @map("created_at")
   updatedAt      DateTime             @updatedAt @map("updated_at")
 
-  tenant         SystemUser           @relation("TenantPackageMockPayments", fields: [tenantId], references: [id], onDelete: Cascade)
-  subscription   PackageSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  plan           PackagePlan?         @relation(fields: [planId], references: [id], onDelete: SetNull)
-  addon          PackageAddon?        @relation(fields: [addonId], references: [id], onDelete: SetNull)
+  tenant       SystemUser           @relation("TenantPackageMockPayments", fields: [tenantId], references: [id], onDelete: Cascade)
+  subscription PackageSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  plan         PackagePlan?         @relation(fields: [planId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
   @@index([subscriptionId])
   @@index([planId])
-  @@index([addonId])
   @@index([status])
   @@index([expiresAt])
   @@map("package_mock_payments")
 }
-

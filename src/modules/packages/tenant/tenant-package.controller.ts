@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Delete,
   ForbiddenException,
   Get,
   Param,
@@ -24,10 +23,7 @@ import { QueryPackageDto } from "../dto/query-package.dto";
 import { SubscriptionGuard } from "../guards/subscription.guard";
 import { PackageSubscriptionService } from "../package-subscription.service";
 import { TenantPackageService } from "./tenant-package.service";
-import {
-  CancelTenantSubscriptionDto,
-  CheckoutPackageAddonDto,
-} from "./dto/tenant-package.dto";
+import { CancelTenantSubscriptionDto } from "./dto/tenant-package.dto";
 
 @ApiTags("Tenant Packages")
 @UseGuards(JwtAuthGuard, PermissionGuard)
@@ -43,14 +39,6 @@ export class TenantPackageController {
   @ApiOperation({ summary: "Get available package plans" })
   findPlans(@Query() query: QueryPackageDto) {
     return this.packages.findAvailablePlans(query);
-  }
-
-  @ApiBearerAuth()
-  @RequirePermission(RbacFeature.PACKAGE_MANAGEMENT, PermissionAction.READ)
-  @Get("addons")
-  @ApiOperation({ summary: "Get available package add-ons" })
-  findAddons(@Query() query: QueryPackageDto) {
-    return this.packages.findAvailableAddons(query);
   }
 
   @ApiBearerAuth()
@@ -97,23 +85,6 @@ export class TenantPackageController {
   }
 
   @ApiBearerAuth()
-  @UseGuards(SubscriptionGuard)
-  @RequirePermission(RbacFeature.PACKAGE_MANAGEMENT, PermissionAction.CREATE)
-  @Post("addons/:addonId/checkout")
-  @ApiOperation({ summary: "Create package add-on checkout" })
-  checkoutAddon(
-    @CurrentUser() currentUser: CurrentUserPayload,
-    @Param("addonId", ParseUUIDPipe) addonId: string,
-    @Body() dto: CheckoutPackageAddonDto,
-  ) {
-    return this.packages.checkoutAddon(
-      this.getTenantId(currentUser),
-      addonId,
-      dto,
-    );
-  }
-
-  @ApiBearerAuth()
   @RequirePermission(RbacFeature.PACKAGE_MANAGEMENT, PermissionAction.CREATE)
   @Post("mock-payments/:paymentId/confirm")
   @ApiOperation({ summary: "Confirm mock payment" })
@@ -137,21 +108,6 @@ export class TenantPackageController {
     @Body() dto: CancelTenantSubscriptionDto,
   ) {
     return this.packages.cancelSubscription(this.getTenantId(currentUser), dto);
-  }
-
-  @ApiBearerAuth()
-  @UseGuards(SubscriptionGuard)
-  @RequirePermission(RbacFeature.PACKAGE_MANAGEMENT, PermissionAction.DELETE)
-  @Delete("subscription/addons/:subscriptionAddonId")
-  @ApiOperation({ summary: "Remove subscription add-on" })
-  removeAddon(
-    @CurrentUser() currentUser: CurrentUserPayload,
-    @Param("subscriptionAddonId", ParseUUIDPipe) subscriptionAddonId: string,
-  ) {
-    return this.packages.removeAddon(
-      this.getTenantId(currentUser),
-      subscriptionAddonId,
-    );
   }
 
   private getTenantId(currentUser: CurrentUserPayload) {

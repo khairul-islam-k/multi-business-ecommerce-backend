@@ -122,10 +122,9 @@ export class ProductAttributeService {
     attributeId: string,
   ) {
     await this.findAttributeOrThrow(businessId, productId, attributeId);
+    await this.assertAttributeCanBeDeleted(attributeId);
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.productVariantAttribute.deleteMany({ where: { attributeId } });
-
       await tx.productAttributeValue.updateMany({
         where: { attributeId, deletedAt: null },
         data: {
@@ -214,12 +213,9 @@ export class ProductAttributeService {
     valueId: string,
   ) {
     await this.findValueOrThrow(businessId, productId, attributeId, valueId);
+    await this.assertAttributeValueCanBeDeleted(attributeId, valueId);
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.productVariantAttribute.deleteMany({
-        where: { attributeId, attributeValueId: valueId },
-      });
-
       await tx.productAttributeValue.update({
         where: { id: valueId },
         data: {
@@ -283,5 +279,32 @@ export class ProductAttributeService {
     }
 
     return normalizedValues;
+  }
+
+  private async assertAttributeCanBeDeleted(attributeId: string) {
+    const variantCount = await this.prisma.productVariantAttribute.count({
+      where: { attributeId },
+    });
+
+    if (variantCount > 0) {
+      throw new BadRequestException(
+        "Product attribute cannot be deleted while assigned to variants",
+      );
+    }
+  }
+
+  private async assertAttributeValueCanBeDeleted(
+    attributeId: string,
+    valueId: string,
+  ) {
+    const variantCount = await this.prisma.productVariantAttribute.count({
+      where: { attributeId, attributeValueId: valueId },
+    });
+
+    if (variantCount > 0) {
+      throw new BadRequestException(
+        "Product attribute value cannot be deleted while assigned to variants",
+      );
+    }
   }
 }

@@ -45,7 +45,6 @@ model ProductCategory {
   children ProductCategory[] @relation("CategoryTree")
   products Product[]
 
-  @@unique([businessId, parentId, name])
   @@index([businessId])
   @@index([parentId])
   @@index([status])
@@ -72,7 +71,6 @@ model ProductBrand {
   business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   products Product[]
 
-  @@unique([businessId, name])
   @@index([businessId])
   @@index([status])
   @@index([deletedAt])
@@ -95,7 +93,6 @@ model ProductUnit {
   business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   products Product[]
 
-  @@unique([businessId, name])
   @@index([businessId])
   @@index([status])
   @@index([deletedAt])
@@ -118,7 +115,6 @@ model ProductTag {
   business Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
   products ProductTagMap[]
 
-  @@unique([businessId, name])
   @@index([businessId])
   @@index([status])
   @@index([deletedAt])
@@ -154,7 +150,6 @@ model Product {
   images     ProductImage[]
   tags       ProductTagMap[]
 
-  @@unique([businessId, slug])
   @@index([businessId])
   @@index([categoryId])
   @@index([brandId])
@@ -187,8 +182,6 @@ model ProductVariant {
   images     ProductImage[]
   attributes ProductVariantAttribute[]
 
-  @@unique([businessId, sku])
-  @@unique([businessId, barcode])
   @@index([businessId])
   @@index([productId])
   @@index([status])
@@ -215,7 +208,6 @@ model ProductAttribute {
   values   ProductAttributeValue[]
   variants ProductVariantAttribute[]
 
-  @@unique([productId, name])
   @@index([businessId])
   @@index([productId])
   @@index([status])
@@ -240,7 +232,6 @@ model ProductAttributeValue {
   attribute ProductAttribute          @relation(fields: [attributeId], references: [id], onDelete: Cascade)
   variants  ProductVariantAttribute[]
 
-  @@unique([attributeId, value])
   @@index([businessId])
   @@index([attributeId])
   @@index([deletedAt])

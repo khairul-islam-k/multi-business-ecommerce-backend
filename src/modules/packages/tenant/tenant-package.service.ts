@@ -7,7 +7,6 @@ import {
   PackagePaymentStatus,
   PackagePaymentType,
   PackageStatus,
-  PackageSubscriptionAddonStatus,
   Prisma,
 } from "@prisma/client";
 
@@ -19,10 +18,8 @@ import {
 import { QueryPackageDto } from "../dto/query-package.dto";
 import { PackageLimitService } from "../package-limit.service";
 import { PackageSubscriptionService } from "../package-subscription.service";
-import {
-  CancelTenantSubscriptionDto,
-  CheckoutPackageAddonDto,
-} from "./dto/tenant-package.dto";
+import type { PackagePlanSnapshot } from "../package-subscription.service";
+import { CancelTenantSubscriptionDto } from "./dto/tenant-package.dto";
 
 const MOCK_PAYMENT_EXPIRY_MINUTES = 15;
 
@@ -90,52 +87,6 @@ export class TenantPackageService {
     });
   }
 
-  async findAvailableAddons(query: QueryPackageDto) {
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 10;
-    const skip = (page - 1) * limit;
-
-    const where: Prisma.PackageAddonWhereInput = {
-      deletedAt: null,
-      status: PackageStatus.ACTIVE,
-      ...(query.search
-        ? {
-            OR: [
-              {
-                name: {
-                  contains: query.search,
-                  mode: "insensitive",
-                },
-              },
-              {
-                description: {
-                  contains: query.search,
-                  mode: "insensitive",
-                },
-              },
-            ],
-          }
-        : {}),
-    };
-
-    const [items, total] = await Promise.all([
-      this.prisma.packageAddon.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
-      }),
-      this.prisma.packageAddon.count({ where }),
-    ]);
-
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
-  }
-
   async getCurrentSubscription(tenantId: string) {
     const subscription =
       await this.subscriptions.findCurrentSubscription(tenantId);
@@ -175,11 +126,6 @@ export class TenantPackageService {
               },
             },
           },
-          addons: {
-            include: {
-              addon: true,
-            },
-          },
         },
         orderBy: {
           createdAt: "desc",
@@ -203,26 +149,22 @@ export class TenantPackageService {
   }
 
   async checkoutPlan(tenantId: string, planId: string) {
-    const plan = await this.prisma.packagePlan.findFirst({
-      where: {
-        id: planId,
-        status: PackageStatus.ACTIVE,
-        deletedAt: null,
-      },
-    });
-
-    if (!plan) {
-      throw new NotFoundException("Package plan not found");
-    }
+    const { charge, targetPlan, targetPlanSnapshot } =
+      await this.subscriptions.calculatePlanChangeCharge(tenantId, planId);
 
     const payment = await this.prisma.packageMockPayment.create({
       data: {
         tenantId,
-        planId: plan.id,
+        planId: targetPlan.id,
         type: PackagePaymentType.PLAN_CHANGE,
         status: PackagePaymentStatus.PENDING,
-        amount: plan.price,
-        currencyCode: plan.currencyCode,
+        amount: charge.amountDue,
+        currencyCode: charge.currencyCode,
+        metadata: {
+          calculation: "target_plan_price_minus_current_unused_balance",
+          charge,
+          targetPlanSnapshot,
+        },
         expiresAt: this.getPaymentExpiry(),
       },
       include: {
@@ -243,49 +185,6 @@ export class TenantPackageService {
     });
 
     return apiResponse(payment, "Package checkout created successfully");
-  }
-
-  async checkoutAddon(
-    tenantId: string,
-    addonId: string,
-    dto: CheckoutPackageAddonDto,
-  ) {
-    const [subscription, addon] = await Promise.all([
-      this.subscriptions.assertTenantCanAccess(tenantId),
-      this.prisma.packageAddon.findFirst({
-        where: {
-          id: addonId,
-          status: PackageStatus.ACTIVE,
-          deletedAt: null,
-        },
-      }),
-    ]);
-
-    if (!addon) {
-      throw new NotFoundException("Package add-on not found");
-    }
-
-    const quantity = dto.quantity ?? 1;
-    const amount = Number(addon.price) * quantity;
-
-    const payment = await this.prisma.packageMockPayment.create({
-      data: {
-        tenantId,
-        subscriptionId: subscription.id,
-        addonId: addon.id,
-        type: PackagePaymentType.ADDON_PURCHASE,
-        status: PackagePaymentStatus.PENDING,
-        amount,
-        currencyCode: addon.currencyCode,
-        quantity,
-        expiresAt: this.getPaymentExpiry(),
-      },
-      include: {
-        addon: true,
-      },
-    });
-
-    return apiResponse(payment, "Add-on checkout created successfully");
   }
 
   async confirmMockPayment(tenantId: string, paymentId: string) {
@@ -317,76 +216,24 @@ export class TenantPackageService {
       throw new ForbiddenException("Package mock payment has expired");
     }
 
-    const activeSubscription =
-      payment.type === PackagePaymentType.ADDON_PURCHASE
-        ? await this.subscriptions.assertTenantCanAccess(tenantId)
-        : null;
-
     const result = await this.prisma.$transaction(async (tx) => {
-      if (payment.type === PackagePaymentType.PLAN_CHANGE) {
-        if (!payment.planId) {
-          throw new ForbiddenException("Payment plan is missing");
-        }
-
-        const subscription =
-          await this.subscriptions.replaceCurrentSubscription(
-            tenantId,
-            payment.planId,
-            tx,
-          );
-
-        const confirmedPayment = await tx.packageMockPayment.update({
-          where: {
-            id: payment.id,
-          },
-          data: {
-            subscriptionId: subscription.id,
-            status: PackagePaymentStatus.CONFIRMED,
-            confirmedAt: new Date(),
-          },
-        });
-
-        return {
-          payment: confirmedPayment,
-          subscription,
-        };
+      if (!payment.planId) {
+        throw new ForbiddenException("Payment plan is missing");
       }
 
-      if (!payment.addonId) {
-        throw new ForbiddenException("Payment add-on is missing");
-      }
-
-      const subscriptionAddon = await tx.packageSubscriptionAddon.upsert({
-        where: {
-          subscriptionId_addonId: {
-            subscriptionId: activeSubscription!.id,
-            addonId: payment.addonId,
-          },
-        },
-        create: {
-          subscriptionId: activeSubscription!.id,
-          addonId: payment.addonId,
-          quantity: payment.quantity,
-          price: payment.amount,
-          currencyCode: payment.currencyCode,
-        },
-        update: {
-          status: PackageSubscriptionAddonStatus.ACTIVE,
-          quantity: {
-            increment: payment.quantity,
-          },
-        },
-        include: {
-          addon: true,
-        },
-      });
+      const subscription = await this.subscriptions.replaceCurrentSubscription(
+        tenantId,
+        payment.planId,
+        tx,
+        this.getPlanSnapshotFromPayment(payment.metadata),
+      );
 
       const confirmedPayment = await tx.packageMockPayment.update({
         where: {
           id: payment.id,
         },
         data: {
-          subscriptionId: activeSubscription!.id,
+          subscriptionId: subscription.id,
           status: PackagePaymentStatus.CONFIRMED,
           confirmedAt: new Date(),
         },
@@ -394,7 +241,7 @@ export class TenantPackageService {
 
       return {
         payment: confirmedPayment,
-        subscriptionAddon,
+        subscription,
       };
     });
 
@@ -410,36 +257,20 @@ export class TenantPackageService {
     return apiResponse(subscription, "Subscription cancelled successfully");
   }
 
-  async removeAddon(tenantId: string, subscriptionAddonId: string) {
-    const subscription =
-      await this.subscriptions.assertTenantCanAccess(tenantId);
-
-    const subscriptionAddon =
-      await this.prisma.packageSubscriptionAddon.findFirst({
-        where: {
-          id: subscriptionAddonId,
-          subscriptionId: subscription.id,
-          status: PackageSubscriptionAddonStatus.ACTIVE,
-        },
-      });
-
-    if (!subscriptionAddon) {
-      throw new NotFoundException("Active subscription add-on not found");
+  private getPlanSnapshotFromPayment(
+    metadata: Prisma.JsonValue,
+  ): PackagePlanSnapshot | undefined {
+    if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+      return undefined;
     }
 
-    const removedAddon = await this.prisma.packageSubscriptionAddon.update({
-      where: {
-        id: subscriptionAddon.id,
-      },
-      data: {
-        status: PackageSubscriptionAddonStatus.CANCELLED,
-      },
-    });
+    const snapshot = metadata.targetPlanSnapshot;
 
-    return apiResponse(
-      removedAddon,
-      "Subscription add-on removed successfully",
-    );
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+      return undefined;
+    }
+
+    return snapshot as PackagePlanSnapshot;
   }
 
   private getPaymentExpiry() {

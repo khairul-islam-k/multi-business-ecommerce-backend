@@ -15,13 +15,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { AdminPackageService } from "./admin-package.service";
 import { AdminGuard } from "../../auth/guards/admin.guard";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard";
-import { CurrentUser } from "../../auth/decorators/current-user.decorator";
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { QueryPackageDto } from "../dto/query-package.dto";
-import {
-  CreatePackageAddonDto,
-  UpdatePackageAddonDto,
-} from "./dto/package-addon.dto";
 import {
   CreatePackagePlanDto,
   UpdatePackagePlanDto,
@@ -71,40 +65,6 @@ export class AdminPackageController {
   @ApiOperation({ summary: "Delete package plan" })
   deletePlan(@Param("planId", ParseUUIDPipe) planId: string) {
     return this.packages.deletePlan(planId);
-  }
-
-  @Post("addons")
-  @ApiOperation({ summary: "Create package add-on" })
-  createAddon(
-    @CurrentUser() currentUser: CurrentUserPayload,
-    @Body() dto: CreatePackageAddonDto,
-  ) {
-    return this.packages.createAddon(dto, currentUser.id);
-  }
-
-  @Get("addons")
-  @ApiOperation({ summary: "Get package add-ons" })
-  findAddons(@Query() query: QueryPackageDto) {
-    return this.packages.findAddons(query);
-  }
-
-  @Patch("addons/:addonId")
-  @ApiOperation({ summary: "Update package add-on" })
-  updateAddon(
-    @CurrentUser() currentUser: CurrentUserPayload,
-    @Param("addonId", ParseUUIDPipe) addonId: string,
-    @Body() dto: UpdatePackageAddonDto,
-  ) {
-    return this.packages.updateAddon(addonId, dto, currentUser.id);
-  }
-
-  @Delete("addons/:addonId")
-  @ApiOperation({ summary: "Delete package add-on" })
-  deleteAddon(
-    @CurrentUser() currentUser: CurrentUserPayload,
-    @Param("addonId", ParseUUIDPipe) addonId: string,
-  ) {
-    return this.packages.deleteAddon(addonId, currentUser.id);
   }
 
   @Post("subscriptions")

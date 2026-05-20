@@ -41,25 +41,25 @@ enum NotificationType {
 // ======================================================
 
 model NotificationTemplate {
-  id         String                     @id @default(uuid()) @db.Uuid
-  businessId String?                    @map("business_id") @db.Uuid
+  id         String  @id @default(uuid()) @db.Uuid
+  businessId String? @map("business_id") @db.Uuid
 
-  name       String                     @db.VarChar(150)
-  code       String                     @db.VarChar(100)
-  channel    NotificationChannel
+  name    String              @db.VarChar(150)
+  code    String              @db.VarChar(100)
+  channel NotificationChannel
 
-  subject    String?                    @db.VarChar(255)
-  title      String?                    @db.VarChar(255)
-  body       String
-  variables  Json?
+  subject   String? @db.VarChar(255)
+  title     String? @db.VarChar(255)
+  body      String
+  variables Json?
 
-  status     NotificationTemplateStatus @default(ACTIVE)
+  status NotificationTemplateStatus @default(ACTIVE)
 
-  createdBy  String?                    @map("created_by") @db.Uuid
-  updatedBy  String?                    @map("updated_by") @db.Uuid
-  createdAt  DateTime                   @default(now()) @map("created_at")
-  updatedAt  DateTime                   @updatedAt @map("updated_at")
-  deletedAt  DateTime?                  @map("deleted_at")
+  createdBy String?   @map("created_by") @db.Uuid
+  updatedBy String?   @map("updated_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   notifications Notification[]
 
@@ -72,29 +72,29 @@ model NotificationTemplate {
 }
 
 model Notification {
-  id               String                    @id @default(uuid()) @db.Uuid
-  businessId        String?                   @map("business_id") @db.Uuid
+  id         String  @id @default(uuid()) @db.Uuid
+  businessId String? @map("business_id") @db.Uuid
 
-  recipientType     NotificationRecipientType @map("recipient_type")
-  recipientId       String                    @map("recipient_id") @db.Uuid
+  recipientType NotificationRecipientType @map("recipient_type")
+  recipientId   String                    @map("recipient_id") @db.Uuid
 
-  templateId        String?                   @map("template_id") @db.Uuid
+  templateId String? @map("template_id") @db.Uuid
 
-  title             String                    @db.VarChar(255)
-  message           String
-  channel           NotificationChannel
-  notificationType  NotificationType          @map("notification_type")
+  title            String              @db.VarChar(255)
+  message          String
+  channel          NotificationChannel
+  notificationType NotificationType    @map("notification_type")
 
-  data              Json?
-  status            NotificationStatus        @default(PENDING)
+  data   Json?
+  status NotificationStatus @default(PENDING)
 
-  readAt            DateTime?                 @map("read_at")
-  sentAt            DateTime?                 @map("sent_at")
+  readAt DateTime? @map("read_at")
+  sentAt DateTime? @map("sent_at")
 
-  createdAt         DateTime                  @default(now()) @map("created_at")
-  updatedAt         DateTime                  @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  template          NotificationTemplate?     @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  template NotificationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
 
   @@index([businessId])
   @@index([recipientType, recipientId])

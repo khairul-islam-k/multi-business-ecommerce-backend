@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma, ProductSimpleStatus } from "@prisma/client";
 
 import { PrismaService } from "../../../prisma/prisma.service";
@@ -194,6 +198,7 @@ export class ProductCategoryService {
     categoryId: string,
   ) {
     await this.findCategoryOrThrow(businessId, categoryId);
+    await this.assertCategoryCanBeDeleted(businessId, categoryId);
 
     await this.prisma.productCategory.update({
       where: { id: categoryId },
@@ -215,6 +220,32 @@ export class ProductCategoryService {
 
     if (!category) {
       throw new NotFoundException("Category not found");
+    }
+  }
+
+  private async assertCategoryCanBeDeleted(
+    businessId: string,
+    categoryId: string,
+  ) {
+    const [childCount, productCount] = await Promise.all([
+      this.prisma.productCategory.count({
+        where: { businessId, parentId: categoryId, deletedAt: null },
+      }),
+      this.prisma.product.count({
+        where: { businessId, categoryId, deletedAt: null },
+      }),
+    ]);
+
+    if (childCount > 0) {
+      throw new BadRequestException(
+        "Category cannot be deleted while it has active child categories",
+      );
+    }
+
+    if (productCount > 0) {
+      throw new BadRequestException(
+        "Category cannot be deleted while assigned to active products",
+      );
     }
   }
 }

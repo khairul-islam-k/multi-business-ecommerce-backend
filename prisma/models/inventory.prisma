@@ -63,8 +63,8 @@ enum InventoryTransferStatus {
 // ======================================================
 
 model InventoryLocation {
-  id           String                @id @default(uuid()) @db.Uuid
-  businessId   String                @map("business_id") @db.Uuid
+  id         String @id @default(uuid()) @db.Uuid
+  businessId String @map("business_id") @db.Uuid
 
   name         String                @db.VarChar(150)
   locationType InventoryLocationType @map("location_type")
@@ -72,16 +72,16 @@ model InventoryLocation {
   address      String?
   status       InventoryStatus       @default(ACTIVE)
 
-  createdBy    String?               @map("created_by") @db.Uuid
-  updatedBy    String?               @map("updated_by") @db.Uuid
-  createdAt    DateTime              @default(now()) @map("created_at")
-  updatedAt    DateTime              @updatedAt @map("updated_at")
-  deletedAt    DateTime?             @map("deleted_at")
+  createdBy String?   @map("created_by") @db.Uuid
+  updatedBy String?   @map("updated_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
-  stocks        InventoryStock[]
-  batches       InventoryStockBatch[]
-  movements     InventoryStockMovement[]
-  adjustments   InventoryStockAdjustment[]
+  stocks      InventoryStock[]
+  batches     InventoryStockBatch[]
+  movements   InventoryStockMovement[]
+  adjustments InventoryStockAdjustment[]
 
   transfersFrom InventoryStockTransfer[] @relation("TransferFromLocation")
   transfersTo   InventoryStockTransfer[] @relation("TransferToLocation")
@@ -94,20 +94,20 @@ model InventoryLocation {
 }
 
 model InventoryStock {
-  id               String   @id @default(uuid()) @db.Uuid
-  businessId        String   @map("business_id") @db.Uuid
-  locationId        String   @map("location_id") @db.Uuid
-  productId         String   @map("product_id") @db.Uuid
-  variantId         String?  @map("variant_id") @db.Uuid
+  id         String  @id @default(uuid()) @db.Uuid
+  businessId String  @map("business_id") @db.Uuid
+  locationId String  @map("location_id") @db.Uuid
+  productId  String  @map("product_id") @db.Uuid
+  variantId  String? @map("variant_id") @db.Uuid
 
-  totalQuantity     Decimal  @default(0) @map("total_quantity") @db.Decimal(14, 3)
-  quantityReserved  Decimal  @default(0) @map("quantity_reserved") @db.Decimal(14, 3)
-  lowStockAlertQty  Decimal  @default(0) @map("low_stock_alert_qty") @db.Decimal(14, 3)
+  totalQuantity    Decimal @default(0) @map("total_quantity") @db.Decimal(14, 3)
+  quantityReserved Decimal @default(0) @map("quantity_reserved") @db.Decimal(14, 3)
+  lowStockAlertQty Decimal @default(0) @map("low_stock_alert_qty") @db.Decimal(14, 3)
 
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  location          InventoryLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  location InventoryLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
   @@index([businessId])
   @@index([locationId])
@@ -117,24 +117,24 @@ model InventoryStock {
 }
 
 model InventoryStockBatch {
-  id                String    @id @default(uuid()) @db.Uuid
-  businessId         String    @map("business_id") @db.Uuid
-  locationId         String    @map("location_id") @db.Uuid
-  productId          String    @map("product_id") @db.Uuid
-  variantId          String?   @map("variant_id") @db.Uuid
+  id         String  @id @default(uuid()) @db.Uuid
+  businessId String  @map("business_id") @db.Uuid
+  locationId String  @map("location_id") @db.Uuid
+  productId  String  @map("product_id") @db.Uuid
+  variantId  String? @map("variant_id") @db.Uuid
 
-  batchNo            String    @map("batch_no") @db.VarChar(100)
-  quantityReceived   Decimal   @default(0) @map("quantity_received") @db.Decimal(14, 3)
-  quantityRemaining  Decimal   @default(0) @map("quantity_remaining") @db.Decimal(14, 3)
-  unitCost           Decimal   @default(0) @map("unit_cost") @db.Decimal(12, 2)
+  batchNo           String  @map("batch_no") @db.VarChar(100)
+  quantityReceived  Decimal @default(0) @map("quantity_received") @db.Decimal(14, 3)
+  quantityRemaining Decimal @default(0) @map("quantity_remaining") @db.Decimal(14, 3)
+  unitCost          Decimal @default(0) @map("unit_cost") @db.Decimal(12, 2)
 
-  receivedAt         DateTime  @default(now()) @map("received_at")
-  expiryDate         DateTime? @map("expiry_date")
+  receivedAt DateTime  @default(now()) @map("received_at")
+  expiryDate DateTime? @map("expiry_date")
 
-  createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime  @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  location           InventoryLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  location InventoryLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
   @@index([businessId])
   @@index([locationId])
@@ -146,23 +146,23 @@ model InventoryStockBatch {
 }
 
 model InventoryStockMovement {
-  id            String                  @id @default(uuid()) @db.Uuid
-  businessId    String                  @map("business_id") @db.Uuid
-  locationId    String                  @map("location_id") @db.Uuid
-  productId     String                  @map("product_id") @db.Uuid
-  variantId     String?                 @map("variant_id") @db.Uuid
+  id         String  @id @default(uuid()) @db.Uuid
+  businessId String  @map("business_id") @db.Uuid
+  locationId String  @map("location_id") @db.Uuid
+  productId  String  @map("product_id") @db.Uuid
+  variantId  String? @map("variant_id") @db.Uuid
 
-  movementType  InventoryMovementType   @map("movement_type")
-  quantity      Decimal                 @db.Decimal(14, 3)
+  movementType InventoryMovementType @map("movement_type")
+  quantity     Decimal               @db.Decimal(14, 3)
 
-  referenceType InventoryReferenceType?  @map("reference_type")
-  referenceId   String?                  @map("reference_id") @db.Uuid
+  referenceType InventoryReferenceType? @map("reference_type")
+  referenceId   String?                 @map("reference_id") @db.Uuid
 
-  note          String?
-  createdBy     String?                 @map("created_by") @db.Uuid
-  createdAt     DateTime                @default(now()) @map("created_at")
+  note      String?
+  createdBy String?  @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
 
-  location      InventoryLocation       @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  location InventoryLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
   @@index([businessId])
   @@index([locationId])
@@ -175,25 +175,25 @@ model InventoryStockMovement {
 }
 
 model InventoryStockAdjustment {
-  id             String                    @id @default(uuid()) @db.Uuid
-  businessId      String                    @map("business_id") @db.Uuid
-  locationId      String                    @map("location_id") @db.Uuid
+  id         String @id @default(uuid()) @db.Uuid
+  businessId String @map("business_id") @db.Uuid
+  locationId String @map("location_id") @db.Uuid
 
-  adjustmentNo    String                    @map("adjustment_no") @db.VarChar(100)
-  adjustmentType  InventoryAdjustmentType   @map("adjustment_type")
-  reason          String?
-  status          InventoryAdjustmentStatus @default(DRAFT)
+  adjustmentNo   String                    @map("adjustment_no") @db.VarChar(100)
+  adjustmentType InventoryAdjustmentType   @map("adjustment_type")
+  reason         String?
+  status         InventoryAdjustmentStatus @default(DRAFT)
 
-  createdBy       String?                   @map("created_by") @db.Uuid
-  approvedBy      String?                   @map("approved_by") @db.Uuid
-  approvedAt      DateTime?                 @map("approved_at")
+  createdBy  String?   @map("created_by") @db.Uuid
+  approvedBy String?   @map("approved_by") @db.Uuid
+  approvedAt DateTime? @map("approved_at")
 
-  createdAt       DateTime                  @default(now()) @map("created_at")
-  updatedAt       DateTime                  @updatedAt @map("updated_at")
-  deletedAt       DateTime?                 @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
-  location        InventoryLocation         @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  items           InventoryStockAdjustmentItem[]
+  location InventoryLocation              @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  items    InventoryStockAdjustmentItem[]
 
   @@unique([businessId, adjustmentNo])
   @@index([businessId])
@@ -204,19 +204,19 @@ model InventoryStockAdjustment {
 }
 
 model InventoryStockAdjustmentItem {
-  id            String   @id @default(uuid()) @db.Uuid
-  adjustmentId  String   @map("adjustment_id") @db.Uuid
-  productId     String   @map("product_id") @db.Uuid
-  variantId     String?  @map("variant_id") @db.Uuid
+  id           String  @id @default(uuid()) @db.Uuid
+  adjustmentId String  @map("adjustment_id") @db.Uuid
+  productId    String  @map("product_id") @db.Uuid
+  variantId    String? @map("variant_id") @db.Uuid
 
-  oldQuantity   Decimal  @map("old_quantity") @db.Decimal(14, 3)
-  adjustmentQty Decimal  @map("adjustment_qty") @db.Decimal(14, 3)
+  oldQuantity   Decimal @map("old_quantity") @db.Decimal(14, 3)
+  adjustmentQty Decimal @map("adjustment_qty") @db.Decimal(14, 3)
   reason        String?
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  adjustment    InventoryStockAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+  adjustment InventoryStockAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
 
   @@index([adjustmentId])
   @@index([productId])
@@ -225,30 +225,30 @@ model InventoryStockAdjustmentItem {
 }
 
 model InventoryStockTransfer {
-  id             String                  @id @default(uuid()) @db.Uuid
-  businessId      String                  @map("business_id") @db.Uuid
+  id         String @id @default(uuid()) @db.Uuid
+  businessId String @map("business_id") @db.Uuid
 
-  transferNo      String                  @map("transfer_no") @db.VarChar(100)
-  fromLocationId  String                  @map("from_location_id") @db.Uuid
-  toLocationId    String                  @map("to_location_id") @db.Uuid
+  transferNo     String @map("transfer_no") @db.VarChar(100)
+  fromLocationId String @map("from_location_id") @db.Uuid
+  toLocationId   String @map("to_location_id") @db.Uuid
 
-  status          InventoryTransferStatus @default(DRAFT)
-  note            String?
+  status InventoryTransferStatus @default(DRAFT)
+  note   String?
 
-  createdBy       String?                 @map("created_by") @db.Uuid
-  approvedBy      String?                 @map("approved_by") @db.Uuid
+  createdBy  String? @map("created_by") @db.Uuid
+  approvedBy String? @map("approved_by") @db.Uuid
 
-  shippedAt       DateTime?               @map("shipped_at")
-  receivedAt      DateTime?               @map("received_at")
+  shippedAt  DateTime? @map("shipped_at")
+  receivedAt DateTime? @map("received_at")
 
-  createdAt       DateTime                @default(now()) @map("created_at")
-  updatedAt       DateTime                @updatedAt @map("updated_at")
-  deletedAt       DateTime?               @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
-  fromLocation    InventoryLocation       @relation("TransferFromLocation", fields: [fromLocationId], references: [id], onDelete: Restrict)
-  toLocation      InventoryLocation       @relation("TransferToLocation", fields: [toLocationId], references: [id], onDelete: Restrict)
+  fromLocation InventoryLocation @relation("TransferFromLocation", fields: [fromLocationId], references: [id], onDelete: Restrict)
+  toLocation   InventoryLocation @relation("TransferToLocation", fields: [toLocationId], references: [id], onDelete: Restrict)
 
-  items           InventoryStockTransferItem[]
+  items InventoryStockTransferItem[]
 
   @@unique([businessId, transferNo])
   @@index([businessId])
@@ -259,19 +259,19 @@ model InventoryStockTransfer {
 }
 
 model InventoryStockTransferItem {
-  id                  String   @id @default(uuid()) @db.Uuid
-  transferId           String   @map("transfer_id") @db.Uuid
-  productId            String   @map("product_id") @db.Uuid
-  variantId            String?  @map("variant_id") @db.Uuid
+  id         String  @id @default(uuid()) @db.Uuid
+  transferId String  @map("transfer_id") @db.Uuid
+  productId  String  @map("product_id") @db.Uuid
+  variantId  String? @map("variant_id") @db.Uuid
 
-  requestedQuantity    Decimal  @default(0) @map("requested_quantity") @db.Decimal(14, 3)
-  transferredQuantity  Decimal  @default(0) @map("transferred_quantity") @db.Decimal(14, 3)
-  receivedQuantity     Decimal  @default(0) @map("received_quantity") @db.Decimal(14, 3)
+  requestedQuantity   Decimal @default(0) @map("requested_quantity") @db.Decimal(14, 3)
+  transferredQuantity Decimal @default(0) @map("transferred_quantity") @db.Decimal(14, 3)
+  receivedQuantity    Decimal @default(0) @map("received_quantity") @db.Decimal(14, 3)
 
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  transfer             InventoryStockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  transfer InventoryStockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
 
   @@index([transferId])
   @@index([productId])

@@ -13,10 +13,6 @@ import {
 import { PrismaService } from "../../../prisma/prisma.service";
 import { QueryPackageDto } from "../dto/query-package.dto";
 import {
-  CreatePackageAddonDto,
-  UpdatePackageAddonDto,
-} from "./dto/package-addon.dto";
-import {
   CreatePackagePlanDto,
   UpdatePackagePlanDto,
 } from "./dto/package-plan.dto";
@@ -45,14 +41,6 @@ const PACKAGE_PLAN_INCLUDE = {
     },
   },
 } satisfies Prisma.PackagePlanInclude;
-
-const PACKAGE_ADDON_INCLUDE = {
-  _count: {
-    select: {
-      subscriptions: true,
-    },
-  },
-} satisfies Prisma.PackageAddonInclude;
 
 @Injectable()
 export class AdminPackageService {
@@ -236,136 +224,6 @@ export class AdminPackageService {
     return apiResponse(null, "Package plan deleted successfully");
   }
 
-  async createAddon(dto: CreatePackageAddonDto, adminUserId: string) {
-    try {
-      const addon = await this.prisma.packageAddon.create({
-        data: {
-          name: dto.name.trim(),
-          description: dto.description?.trim() || null,
-          price: dto.price,
-          billingCycle: dto.billingCycle,
-          currencyCode: this.normalizeCurrency(dto.currencyCode),
-          limitKey: dto.limitKey,
-          limitValue: dto.limitValue,
-          resetCycle: dto.resetCycle,
-          status: dto.status ?? PackageStatus.ACTIVE,
-          sortOrder: dto.sortOrder ?? 0,
-          createdBy: adminUserId,
-          updatedBy: adminUserId,
-        },
-        include: PACKAGE_ADDON_INCLUDE,
-      });
-
-      return apiResponse(addon, "Package add-on created successfully");
-    } catch (error) {
-      this.handleUniqueError(error, "Package add-on name already exists");
-    }
-  }
-
-  async findAddons(query: QueryPackageDto) {
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 10;
-    const skip = (page - 1) * limit;
-
-    const where: Prisma.PackageAddonWhereInput = {
-      deletedAt: null,
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              {
-                name: {
-                  contains: query.search,
-                  mode: "insensitive",
-                },
-              },
-              {
-                description: {
-                  contains: query.search,
-                  mode: "insensitive",
-                },
-              },
-            ],
-          }
-        : {}),
-    };
-
-    const [items, total] = await Promise.all([
-      this.prisma.packageAddon.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
-        include: PACKAGE_ADDON_INCLUDE,
-      }),
-      this.prisma.packageAddon.count({ where }),
-    ]);
-
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
-  }
-
-  async updateAddon(
-    addonId: string,
-    dto: UpdatePackageAddonDto,
-    adminUserId: string,
-  ) {
-    await this.assertAddonExists(addonId);
-
-    try {
-      const addon = await this.prisma.packageAddon.update({
-        where: {
-          id: addonId,
-        },
-        data: {
-          ...(dto.name !== undefined && { name: dto.name.trim() }),
-          ...(dto.description !== undefined && {
-            description: dto.description?.trim() || null,
-          }),
-          ...(dto.price !== undefined && { price: dto.price }),
-          ...(dto.billingCycle !== undefined && {
-            billingCycle: dto.billingCycle,
-          }),
-          ...(dto.currencyCode !== undefined && {
-            currencyCode: this.normalizeCurrency(dto.currencyCode),
-          }),
-          ...(dto.limitKey !== undefined && { limitKey: dto.limitKey }),
-          ...(dto.limitValue !== undefined && { limitValue: dto.limitValue }),
-          ...(dto.resetCycle !== undefined && { resetCycle: dto.resetCycle }),
-          ...(dto.status !== undefined && { status: dto.status }),
-          ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
-          updatedBy: adminUserId,
-        },
-        include: PACKAGE_ADDON_INCLUDE,
-      });
-
-      return apiResponse(addon, "Package add-on updated successfully");
-    } catch (error) {
-      this.handleUniqueError(error, "Package add-on name already exists");
-    }
-  }
-
-  async deleteAddon(addonId: string, adminUserId: string) {
-    await this.assertAddonExists(addonId);
-
-    await this.prisma.packageAddon.update({
-      where: {
-        id: addonId,
-      },
-      data: {
-        status: PackageStatus.ARCHIVED,
-        deletedAt: new Date(),
-        updatedBy: adminUserId,
-      },
-    });
-
-    return apiResponse(null, "Package add-on deleted successfully");
-  }
-
   async createTenantSubscription(dto: CreateTenantSubscriptionDto) {
     const subscription = await this.subscriptions.replaceCurrentSubscription(
       dto.tenantId,
@@ -412,11 +270,6 @@ export class AdminPackageService {
               limits: true,
             },
           },
-          addons: {
-            include: {
-              addon: true,
-            },
-          },
         },
         orderBy: {
           createdAt: "desc",
@@ -455,11 +308,6 @@ export class AdminPackageService {
                 sortOrder: "asc",
               },
             },
-          },
-        },
-        addons: {
-          include: {
-            addon: true,
           },
         },
         usageCounters: true,
@@ -567,22 +415,6 @@ export class AdminPackageService {
 
     if (!plan) {
       throw new NotFoundException("Package plan not found");
-    }
-  }
-
-  private async assertAddonExists(addonId: string) {
-    const addon = await this.prisma.packageAddon.findFirst({
-      where: {
-        id: addonId,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    if (!addon) {
-      throw new NotFoundException("Package add-on not found");
     }
   }
 

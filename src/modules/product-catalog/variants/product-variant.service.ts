@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma, ProductVariantStatus } from "@prisma/client";
 
 import { PrismaService } from "../../../prisma/prisma.service";
@@ -200,6 +204,7 @@ export class ProductVariantService {
     variantId: string,
   ) {
     await this.lookup.assertVariantExists(businessId, productId, variantId);
+    await this.assertVariantCanBeDeleted(businessId, variantId);
 
     await this.prisma.productVariant.update({
       where: { id: variantId },
@@ -246,5 +251,43 @@ export class ProductVariantService {
           })),
         }
       : undefined;
+  }
+
+  private async assertVariantCanBeDeleted(
+    businessId: string,
+    variantId: string,
+  ) {
+    const referenceCounts = await Promise.all([
+      this.prisma.inventoryStock.count({ where: { businessId, variantId } }),
+      this.prisma.inventoryStockBatch.count({
+        where: { businessId, variantId },
+      }),
+      this.prisma.inventoryStockMovement.count({
+        where: { businessId, variantId },
+      }),
+      this.prisma.inventoryStockAdjustmentItem.count({ where: { variantId } }),
+      this.prisma.inventoryStockTransferItem.count({ where: { variantId } }),
+      this.prisma.orderCartItem.count({ where: { variantId } }),
+      this.prisma.orderOrderItem.count({ where: { variantId } }),
+      this.prisma.orderReturnItem.count({ where: { variantId } }),
+      this.prisma.invoiceItem.count({ where: { variantId } }),
+      this.prisma.supplierProductMap.count({
+        where: { businessId, variantId },
+      }),
+      this.prisma.supplierPurchaseOrderItem.count({
+        where: { variantId },
+      }),
+      this.prisma.supplierInvoiceItem.count({ where: { variantId } }),
+      this.prisma.supplierPurchaseReturnItem.count({
+        where: { variantId },
+      }),
+      this.prisma.courierShipmentItem.count({ where: { variantId } }),
+    ]);
+
+    if (referenceCounts.some((count) => count > 0)) {
+      throw new BadRequestException(
+        "Product variant cannot be deleted while referenced by inventory, order, invoice, supplier, or courier records",
+      );
+    }
   }
 }

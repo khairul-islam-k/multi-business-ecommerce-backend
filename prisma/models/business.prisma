@@ -3,16 +3,16 @@
 // =======================
 
 enum BusinessStatus {
-    TRIAL
-    ACTIVE
-    INACTIVE
-    SUSPENDED
+  TRIAL
+  ACTIVE
+  INACTIVE
+  SUSPENDED
 }
 
 enum BusinessMemberStatus {
-    ACTIVE
-    INACTIVE
-    SUSPENDED
+  ACTIVE
+  INACTIVE
+  SUSPENDED
 }
 
 // =======================
@@ -20,110 +20,110 @@ enum BusinessMemberStatus {
 // =======================
 
 model Business {
-    id           String         @id @default(uuid()) @db.Uuid
-    ownerUserId  String         @map("owner_user_id") @db.Uuid
-    name         String         @db.VarChar(150)
-    slug         String         @db.VarChar(180)
-    email        String?        @db.VarChar(255)
-    phone        String?        @db.VarChar(30)
-    country      String?        @db.VarChar(100)
-    currencyCode String         @default("BDT") @map("currency_code") @db.VarChar(10)
-    timezone     String         @default("Asia/Dhaka") @db.VarChar(100)
-    status       BusinessStatus @default(TRIAL)
+  id           String         @id @default(uuid()) @db.Uuid
+  ownerUserId  String         @map("owner_user_id") @db.Uuid
+  name         String         @db.VarChar(150)
+  slug         String         @db.VarChar(180)
+  email        String?        @db.VarChar(255)
+  phone        String?        @db.VarChar(30)
+  country      String?        @db.VarChar(100)
+  currencyCode String         @default("BDT") @map("currency_code") @db.VarChar(10)
+  timezone     String         @default("Asia/Dhaka") @db.VarChar(100)
+  status       BusinessStatus @default(TRIAL)
 
-    createdById String? @map("created_by") @db.Uuid
-    updatedById String? @map("updated_by") @db.Uuid
+  createdById String? @map("created_by") @db.Uuid
+  updatedById String? @map("updated_by") @db.Uuid
 
-    createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-    updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-    deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-    ownerUser SystemUser  @relation("BusinessOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
-    createdBy SystemUser? @relation("BusinessCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-    updatedBy SystemUser? @relation("BusinessUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  ownerUser SystemUser  @relation("BusinessOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  createdBy SystemUser? @relation("BusinessCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy SystemUser? @relation("BusinessUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 
-    settings  BusinessSetting?
-    branding  BusinessBranding?
-    members   BusinessMember[]
-    roles     RbacRole[]
-    mediaAssets MediaAsset[]
+  settings    BusinessSetting?
+  branding    BusinessBranding?
+  members     BusinessMember[]
+  roles       RbacRole[]
+  mediaAssets MediaAsset[]
 
-    productCategories      ProductCategory[]
-    productBrands          ProductBrand[]
-    productUnits           ProductUnit[]
-    productTags            ProductTag[]
-    products               Product[]
-    productVariants        ProductVariant[]
-    productAttributes      ProductAttribute[]
-    productAttributeValues ProductAttributeValue[]
-    productImages          ProductImage[]
+  productCategories      ProductCategory[]
+  productBrands          ProductBrand[]
+  productUnits           ProductUnit[]
+  productTags            ProductTag[]
+  products               Product[]
+  productVariants        ProductVariant[]
+  productAttributes      ProductAttribute[]
+  productAttributeValues ProductAttributeValue[]
+  productImages          ProductImage[]
 
-    auditLogs SystemAuditLog[]
+  auditLogs SystemAuditLog[]
 
-    @@unique([slug, ownerUserId])
-    @@index([ownerUserId])
-    @@index([status])
-    @@index([deletedAt])
-    @@map("businesses")
+  @@unique([slug, ownerUserId])
+  @@index([ownerUserId])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("businesses")
 }
 
 model BusinessSetting {
-    id                   String  @id @default(uuid()) @db.Uuid
-    businessId           String  @unique @map("business_id") @db.Uuid
-    orderPrefix          String  @default("ORD") @map("order_prefix") @db.VarChar(20)
-    invoicePrefix        String  @default("INV") @map("invoice_prefix") @db.VarChar(20)
-    lowStockThreshold    Int     @default(5) @map("low_stock_threshold")
-    allowBackorder       Boolean @default(false) @map("allow_backorder")
-    autoConfirmOrder     Boolean @default(false) @map("auto_confirm_order")
-    codEnabled           Boolean @default(true) @map("cod_enabled")
-    onlinePaymentEnabled Boolean @default(false) @map("online_payment_enabled")
+  id                   String  @id @default(uuid()) @db.Uuid
+  businessId           String  @unique @map("business_id") @db.Uuid
+  orderPrefix          String  @default("ORD") @map("order_prefix") @db.VarChar(20)
+  invoicePrefix        String  @default("INV") @map("invoice_prefix") @db.VarChar(20)
+  lowStockThreshold    Int     @default(5) @map("low_stock_threshold")
+  allowBackorder       Boolean @default(false) @map("allow_backorder")
+  autoConfirmOrder     Boolean @default(false) @map("auto_confirm_order")
+  codEnabled           Boolean @default(true) @map("cod_enabled")
+  onlinePaymentEnabled Boolean @default(false) @map("online_payment_enabled")
 
-    createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-    updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-    business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
-    @@map("business_settings")
+  @@map("business_settings")
 }
 
 model BusinessBranding {
-    id             String  @id @default(uuid()) @db.Uuid
-    businessId     String  @unique @map("business_id") @db.Uuid
-    logoUrl        String? @map("logo_url") @db.Text
-    faviconUrl     String? @map("favicon_url") @db.Text
-    primaryColor   String? @map("primary_color") @db.VarChar(20)
-    secondaryColor String? @map("secondary_color") @db.VarChar(20)
-    accentColor    String? @map("accent_color") @db.VarChar(20)
-    fontFamily     String? @map("font_family") @db.VarChar(100)
-    seoTitle       String? @map("seo_title") @db.VarChar(255)
-    seoDescription String? @map("seo_description") @db.Text
+  id             String  @id @default(uuid()) @db.Uuid
+  businessId     String  @unique @map("business_id") @db.Uuid
+  logoUrl        String? @map("logo_url") @db.Text
+  faviconUrl     String? @map("favicon_url") @db.Text
+  primaryColor   String? @map("primary_color") @db.VarChar(20)
+  secondaryColor String? @map("secondary_color") @db.VarChar(20)
+  accentColor    String? @map("accent_color") @db.VarChar(20)
+  fontFamily     String? @map("font_family") @db.VarChar(100)
+  seoTitle       String? @map("seo_title") @db.VarChar(255)
+  seoDescription String? @map("seo_description") @db.Text
 
-    createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-    updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-    business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
-    @@map("business_brandings")
+  @@map("business_brandings")
 }
 
 model BusinessMember {
-    id         String               @id @default(uuid()) @db.Uuid
-    businessId String               @map("business_id") @db.Uuid
-    userId     String               @map("user_id") @db.Uuid
-    status     BusinessMemberStatus @default(ACTIVE)
-    joinedAt   DateTime?            @map("joined_at") @db.Timestamptz(6)
+  id         String               @id @default(uuid()) @db.Uuid
+  businessId String               @map("business_id") @db.Uuid
+  userId     String               @map("user_id") @db.Uuid
+  status     BusinessMemberStatus @default(ACTIVE)
+  joinedAt   DateTime?            @map("joined_at") @db.Timestamptz(6)
 
-    createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-    updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-    deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-    business Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
-    user     SystemUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     SystemUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-    @@unique([businessId, userId])
-    @@index([businessId])
-    @@index([userId])
-    @@index([status])
-    @@index([deletedAt])
-    @@map("business_members")
+  @@unique([businessId, userId])
+  @@index([businessId])
+  @@index([userId])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("business_members")
 }

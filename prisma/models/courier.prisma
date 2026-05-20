@@ -56,15 +56,15 @@ enum CourierSettlementStatus {
 // ======================================================
 
 model Courier {
-  id          String        @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
   name        String        @db.VarChar(150)
   description String?
   status      CourierStatus @default(ACTIVE)
   sortOrder   Int           @default(0) @map("sort_order")
 
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   configs     CourierConfig[]
   charges     CourierShippingCharge[]
@@ -78,21 +78,21 @@ model Courier {
 }
 
 model CourierConfig {
-  id         String              @id @default(uuid()) @db.Uuid
-  businessId String              @map("business_id") @db.Uuid
-  courierId  String              @map("courier_id") @db.Uuid
+  id         String @id @default(uuid()) @db.Uuid
+  businessId String @map("business_id") @db.Uuid
+  courierId  String @map("courier_id") @db.Uuid
 
   configData Json                @map("config_data")
   mode       CourierConfigMode   @default(SANDBOX)
   status     CourierConfigStatus @default(ACTIVE)
 
-  createdBy  String?             @map("created_by") @db.Uuid
-  updatedBy  String?             @map("updated_by") @db.Uuid
-  createdAt  DateTime            @default(now()) @map("created_at")
-  updatedAt  DateTime            @updatedAt @map("updated_at")
-  deletedAt  DateTime?           @map("deleted_at")
+  createdBy String?   @map("created_by") @db.Uuid
+  updatedBy String?   @map("updated_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
-  courier    Courier             @relation(fields: [courierId], references: [id], onDelete: Restrict)
+  courier Courier @relation(fields: [courierId], references: [id], onDelete: Restrict)
 
   @@unique([businessId, courierId, mode])
   @@index([businessId])
@@ -102,21 +102,21 @@ model CourierConfig {
 }
 
 model CourierDeliveryZone {
-  id          String                    @id @default(uuid()) @db.Uuid
-  businessId  String                    @map("business_id") @db.Uuid
+  id         String @id @default(uuid()) @db.Uuid
+  businessId String @map("business_id") @db.Uuid
 
   name        String                    @db.VarChar(150)
   description String?
   status      CourierDeliveryZoneStatus @default(ACTIVE)
   sortOrder   Int                       @default(0) @map("sort_order")
 
-  createdAt   DateTime                  @default(now()) @map("created_at")
-  updatedAt   DateTime                  @updatedAt @map("updated_at")
-  deletedAt   DateTime?                 @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
-  areas       CourierDeliveryZoneArea[]
-  charges     CourierShippingCharge[]
-  shipments   CourierShipment[]
+  areas     CourierDeliveryZoneArea[]
+  charges   CourierShippingCharge[]
+  shipments CourierShipment[]
 
   @@unique([businessId, name])
   @@index([businessId])
@@ -125,16 +125,16 @@ model CourierDeliveryZone {
 }
 
 model CourierDeliveryZoneArea {
-  id             String   @id @default(uuid()) @db.Uuid
-  deliveryZoneId String   @map("delivery_zone_id") @db.Uuid
+  id             String @id @default(uuid()) @db.Uuid
+  deliveryZoneId String @map("delivery_zone_id") @db.Uuid
 
-  areaName       String   @map("area_name") @db.VarChar(150)
-  city           String?  @db.VarChar(100)
+  areaName String  @map("area_name") @db.VarChar(150)
+  city     String? @db.VarChar(100)
 
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  deliveryZone   CourierDeliveryZone @relation(fields: [deliveryZoneId], references: [id], onDelete: Cascade)
+  deliveryZone CourierDeliveryZone @relation(fields: [deliveryZoneId], references: [id], onDelete: Cascade)
 
   @@index([deliveryZoneId])
   @@index([city])
@@ -142,22 +142,22 @@ model CourierDeliveryZoneArea {
 }
 
 model CourierShippingCharge {
-  id              String                      @id @default(uuid()) @db.Uuid
-  businessId       String                      @map("business_id") @db.Uuid
-  deliveryZoneId   String                      @map("delivery_zone_id") @db.Uuid
-  courierId        String?                     @map("courier_id") @db.Uuid
+  id             String  @id @default(uuid()) @db.Uuid
+  businessId     String  @map("business_id") @db.Uuid
+  deliveryZoneId String  @map("delivery_zone_id") @db.Uuid
+  courierId      String? @map("courier_id") @db.Uuid
 
-  minWeight        Decimal?                    @map("min_weight") @db.Decimal(10, 3)
-  maxWeight        Decimal?                    @map("max_weight") @db.Decimal(10, 3)
-  shippingCharge   Decimal                     @default(0) @map("shipping_charge") @db.Decimal(12, 2)
-  codCharge        Decimal                     @default(0) @map("cod_charge") @db.Decimal(12, 2)
-  status           CourierShippingChargeStatus @default(ACTIVE)
+  minWeight      Decimal?                    @map("min_weight") @db.Decimal(10, 3)
+  maxWeight      Decimal?                    @map("max_weight") @db.Decimal(10, 3)
+  shippingCharge Decimal                     @default(0) @map("shipping_charge") @db.Decimal(12, 2)
+  codCharge      Decimal                     @default(0) @map("cod_charge") @db.Decimal(12, 2)
+  status         CourierShippingChargeStatus @default(ACTIVE)
 
-  createdAt        DateTime                    @default(now()) @map("created_at")
-  updatedAt        DateTime                    @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  deliveryZone     CourierDeliveryZone         @relation(fields: [deliveryZoneId], references: [id], onDelete: Cascade)
-  courier          Courier?                    @relation(fields: [courierId], references: [id], onDelete: SetNull)
+  deliveryZone CourierDeliveryZone @relation(fields: [deliveryZoneId], references: [id], onDelete: Cascade)
+  courier      Courier?            @relation(fields: [courierId], references: [id], onDelete: SetNull)
 
   @@index([businessId])
   @@index([deliveryZoneId])
@@ -167,40 +167,40 @@ model CourierShippingCharge {
 }
 
 model CourierShipment {
-  id                      String                @id @default(uuid()) @db.Uuid
-  businessId              String                @map("business_id") @db.Uuid
-  orderId                 String                @map("order_id") @db.Uuid
-  courierId               String?               @map("courier_id") @db.Uuid
-  deliveryZoneId          String?               @map("delivery_zone_id") @db.Uuid
+  id             String  @id @default(uuid()) @db.Uuid
+  businessId     String  @map("business_id") @db.Uuid
+  orderId        String  @map("order_id") @db.Uuid
+  courierId      String? @map("courier_id") @db.Uuid
+  deliveryZoneId String? @map("delivery_zone_id") @db.Uuid
 
-  shipmentNo              String                @map("shipment_no") @db.VarChar(100)
-  consignmentId           String?               @map("consignment_id") @db.VarChar(150)
-  trackingCode            String?               @map("tracking_code") @db.VarChar(150)
-  status                  CourierShipmentStatus @default(PENDING)
+  shipmentNo    String                @map("shipment_no") @db.VarChar(100)
+  consignmentId String?               @map("consignment_id") @db.VarChar(150)
+  trackingCode  String?               @map("tracking_code") @db.VarChar(150)
+  status        CourierShipmentStatus @default(PENDING)
 
-  shippingCharge          Decimal               @default(0) @map("shipping_charge") @db.Decimal(12, 2)
-  codAmount               Decimal               @default(0) @map("cod_amount") @db.Decimal(12, 2)
-  courierFee              Decimal               @default(0) @map("courier_fee") @db.Decimal(12, 2)
+  shippingCharge Decimal @default(0) @map("shipping_charge") @db.Decimal(12, 2)
+  codAmount      Decimal @default(0) @map("cod_amount") @db.Decimal(12, 2)
+  courierFee     Decimal @default(0) @map("courier_fee") @db.Decimal(12, 2)
 
-  recipientName           String?               @map("recipient_name") @db.VarChar(150)
-  recipientPhone          String?               @map("recipient_phone") @db.VarChar(30)
-  deliveryAddressSnapshot Json?                 @map("delivery_address_snapshot")
+  recipientName           String? @map("recipient_name") @db.VarChar(150)
+  recipientPhone          String? @map("recipient_phone") @db.VarChar(30)
+  deliveryAddressSnapshot Json?   @map("delivery_address_snapshot")
 
-  shippedAt               DateTime?             @map("shipped_at")
-  deliveredAt             DateTime?             @map("delivered_at")
-  cancelledAt             DateTime?             @map("cancelled_at")
+  shippedAt   DateTime? @map("shipped_at")
+  deliveredAt DateTime? @map("delivered_at")
+  cancelledAt DateTime? @map("cancelled_at")
 
-  createdBy               String?               @map("created_by") @db.Uuid
-  createdAt               DateTime              @default(now()) @map("created_at")
-  updatedAt               DateTime              @updatedAt @map("updated_at")
-  deletedAt               DateTime?             @map("deleted_at")
+  createdBy String?   @map("created_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
-  courier                 Courier?              @relation(fields: [courierId], references: [id], onDelete: SetNull)
-  deliveryZone            CourierDeliveryZone?  @relation(fields: [deliveryZoneId], references: [id], onDelete: SetNull)
+  courier      Courier?             @relation(fields: [courierId], references: [id], onDelete: SetNull)
+  deliveryZone CourierDeliveryZone? @relation(fields: [deliveryZoneId], references: [id], onDelete: SetNull)
 
-  items                   CourierShipmentItem[]
-  receivable              CourierReceivable?
-  settlementItems         CourierSettlementItem[]
+  items           CourierShipmentItem[]
+  receivable      CourierReceivable?
+  settlementItems CourierSettlementItem[]
 
   @@unique([businessId, shipmentNo])
   @@unique([consignmentId])
@@ -214,18 +214,18 @@ model CourierShipment {
 }
 
 model CourierShipmentItem {
-  id          String   @id @default(uuid()) @db.Uuid
-  shipmentId  String   @map("shipment_id") @db.Uuid
-  orderItemId String   @map("order_item_id") @db.Uuid
-  productId   String   @map("product_id") @db.Uuid
-  variantId   String?  @map("variant_id") @db.Uuid
+  id          String  @id @default(uuid()) @db.Uuid
+  shipmentId  String  @map("shipment_id") @db.Uuid
+  orderItemId String  @map("order_item_id") @db.Uuid
+  productId   String  @map("product_id") @db.Uuid
+  variantId   String? @map("variant_id") @db.Uuid
 
-  quantity    Decimal  @db.Decimal(14, 3)
+  quantity Decimal @db.Decimal(14, 3)
 
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  shipment    CourierShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  shipment CourierShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
 
   @@index([shipmentId])
   @@index([orderItemId])
@@ -235,27 +235,27 @@ model CourierShipmentItem {
 }
 
 model CourierReceivable {
-  id                     String                  @id @default(uuid()) @db.Uuid
-  businessId              String                  @map("business_id") @db.Uuid
-  courierId               String                  @map("courier_id") @db.Uuid
-  shipmentId              String                  @unique @map("shipment_id") @db.Uuid
-  orderId                 String                  @map("order_id") @db.Uuid
+  id         String @id @default(uuid()) @db.Uuid
+  businessId String @map("business_id") @db.Uuid
+  courierId  String @map("courier_id") @db.Uuid
+  shipmentId String @unique @map("shipment_id") @db.Uuid
+  orderId    String @map("order_id") @db.Uuid
 
-  codAmount               Decimal                 @default(0) @map("cod_amount") @db.Decimal(12, 2)
-  courierFee              Decimal                 @default(0) @map("courier_fee") @db.Decimal(12, 2)
-  netReceivable           Decimal                 @default(0) @map("net_receivable") @db.Decimal(12, 2)
+  codAmount     Decimal @default(0) @map("cod_amount") @db.Decimal(12, 2)
+  courierFee    Decimal @default(0) @map("courier_fee") @db.Decimal(12, 2)
+  netReceivable Decimal @default(0) @map("net_receivable") @db.Decimal(12, 2)
 
-  status                  CourierReceivableStatus @default(PENDING)
-  expectedSettlementDate  DateTime?               @map("expected_settlement_date")
-  settledAt               DateTime?               @map("settled_at")
+  status                 CourierReceivableStatus @default(PENDING)
+  expectedSettlementDate DateTime?               @map("expected_settlement_date")
+  settledAt              DateTime?               @map("settled_at")
 
-  createdAt               DateTime                @default(now()) @map("created_at")
-  updatedAt               DateTime                @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  courier                 Courier                 @relation(fields: [courierId], references: [id], onDelete: Restrict)
-  shipment                CourierShipment         @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  courier  Courier         @relation(fields: [courierId], references: [id], onDelete: Restrict)
+  shipment CourierShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
 
-  settlementItems         CourierSettlementItem[]
+  settlementItems CourierSettlementItem[]
 
   @@index([businessId])
   @@index([courierId])
@@ -266,28 +266,28 @@ model CourierReceivable {
 }
 
 model CourierSettlement {
-  id                    String                  @id @default(uuid()) @db.Uuid
-  businessId             String                  @map("business_id") @db.Uuid
-  courierId              String                  @map("courier_id") @db.Uuid
+  id         String @id @default(uuid()) @db.Uuid
+  businessId String @map("business_id") @db.Uuid
+  courierId  String @map("courier_id") @db.Uuid
 
-  settlementNo           String                  @map("settlement_no") @db.VarChar(100)
-  settlementDate         DateTime                @map("settlement_date")
+  settlementNo   String   @map("settlement_no") @db.VarChar(100)
+  settlementDate DateTime @map("settlement_date")
 
-  totalCodAmount         Decimal                 @default(0) @map("total_cod_amount") @db.Decimal(12, 2)
-  totalCourierFee        Decimal                 @default(0) @map("total_courier_fee") @db.Decimal(12, 2)
-  totalSettlementAmount  Decimal                 @default(0) @map("total_settlement_amount") @db.Decimal(12, 2)
+  totalCodAmount        Decimal @default(0) @map("total_cod_amount") @db.Decimal(12, 2)
+  totalCourierFee       Decimal @default(0) @map("total_courier_fee") @db.Decimal(12, 2)
+  totalSettlementAmount Decimal @default(0) @map("total_settlement_amount") @db.Decimal(12, 2)
 
-  status                 CourierSettlementStatus @default(DRAFT)
-  referenceNo            String?                 @map("reference_no") @db.VarChar(150)
-  note                   String?
+  status      CourierSettlementStatus @default(DRAFT)
+  referenceNo String?                 @map("reference_no") @db.VarChar(150)
+  note        String?
 
-  createdBy              String?                 @map("created_by") @db.Uuid
-  createdAt              DateTime                @default(now()) @map("created_at")
-  updatedAt              DateTime                @updatedAt @map("updated_at")
-  deletedAt              DateTime?               @map("deleted_at")
+  createdBy String?   @map("created_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
-  courier                Courier                 @relation(fields: [courierId], references: [id], onDelete: Restrict)
-  items                  CourierSettlementItem[]
+  courier Courier                 @relation(fields: [courierId], references: [id], onDelete: Restrict)
+  items   CourierSettlementItem[]
 
   @@unique([businessId, settlementNo])
   @@index([businessId])
@@ -298,20 +298,20 @@ model CourierSettlement {
 }
 
 model CourierSettlementItem {
-  id                String   @id @default(uuid()) @db.Uuid
-  settlementId       String   @map("settlement_id") @db.Uuid
-  receivableId       String   @map("receivable_id") @db.Uuid
-  shipmentId         String   @map("shipment_id") @db.Uuid
+  id           String @id @default(uuid()) @db.Uuid
+  settlementId String @map("settlement_id") @db.Uuid
+  receivableId String @map("receivable_id") @db.Uuid
+  shipmentId   String @map("shipment_id") @db.Uuid
 
-  codAmount          Decimal  @default(0) @map("cod_amount") @db.Decimal(12, 2)
-  courierFee         Decimal  @default(0) @map("courier_fee") @db.Decimal(12, 2)
-  settlementAmount   Decimal  @default(0) @map("settlement_amount") @db.Decimal(12, 2)
+  codAmount        Decimal @default(0) @map("cod_amount") @db.Decimal(12, 2)
+  courierFee       Decimal @default(0) @map("courier_fee") @db.Decimal(12, 2)
+  settlementAmount Decimal @default(0) @map("settlement_amount") @db.Decimal(12, 2)
 
-  createdAt          DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  settlement         CourierSettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
-  receivable         CourierReceivable @relation(fields: [receivableId], references: [id], onDelete: Restrict)
-  shipment           CourierShipment   @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
+  settlement CourierSettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  receivable CourierReceivable @relation(fields: [receivableId], references: [id], onDelete: Restrict)
+  shipment   CourierShipment   @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
 
   @@unique([receivableId])
   @@index([settlementId])

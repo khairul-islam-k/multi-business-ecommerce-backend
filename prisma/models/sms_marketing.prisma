@@ -64,7 +64,7 @@ enum SmsLogStatus {
 // ======================================================
 
 model SmsProvider {
-  id          String            @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
   name        String            @db.VarChar(150)
   code        String            @db.VarChar(100)
@@ -72,11 +72,11 @@ model SmsProvider {
   status      SmsProviderStatus @default(ACTIVE)
   sortOrder   Int               @default(0) @map("sort_order")
 
-  createdAt   DateTime          @default(now()) @map("created_at")
-  updatedAt   DateTime          @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  configs     SmsProviderConfig[]
-  logs        SmsLog[]
+  configs SmsProviderConfig[]
+  logs    SmsLog[]
 
   @@unique([code])
   @@index([status])
@@ -84,21 +84,21 @@ model SmsProvider {
 }
 
 model SmsProviderConfig {
-  id         String                  @id @default(uuid()) @db.Uuid
-  businessId String                  @map("business_id") @db.Uuid
-  providerId String                  @map("provider_id") @db.Uuid
+  id         String @id @default(uuid()) @db.Uuid
+  businessId String @map("business_id") @db.Uuid
+  providerId String @map("provider_id") @db.Uuid
 
   configData Json                    @map("config_data")
   mode       SmsProviderConfigMode   @default(SANDBOX)
   status     SmsProviderConfigStatus @default(ACTIVE)
 
-  createdBy  String?                 @map("created_by") @db.Uuid
-  updatedBy  String?                 @map("updated_by") @db.Uuid
-  createdAt  DateTime                @default(now()) @map("created_at")
-  updatedAt  DateTime                @updatedAt @map("updated_at")
-  deletedAt  DateTime?               @map("deleted_at")
+  createdBy String?   @map("created_by") @db.Uuid
+  updatedBy String?   @map("updated_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
-  provider   SmsProvider             @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  provider SmsProvider @relation(fields: [providerId], references: [id], onDelete: Restrict)
 
   @@unique([businessId, providerId, mode])
   @@index([businessId])
@@ -108,8 +108,8 @@ model SmsProviderConfig {
 }
 
 model SmsTemplate {
-  id           String            @id @default(uuid()) @db.Uuid
-  businessId   String            @map("business_id") @db.Uuid
+  id         String @id @default(uuid()) @db.Uuid
+  businessId String @map("business_id") @db.Uuid
 
   name         String            @db.VarChar(150)
   templateType SmsTemplateType   @map("template_type")
@@ -117,13 +117,13 @@ model SmsTemplate {
   variables    Json?
   status       SmsTemplateStatus @default(ACTIVE)
 
-  createdBy    String?           @map("created_by") @db.Uuid
-  updatedBy    String?           @map("updated_by") @db.Uuid
-  createdAt    DateTime          @default(now()) @map("created_at")
-  updatedAt    DateTime          @updatedAt @map("updated_at")
-  deletedAt    DateTime?         @map("deleted_at")
+  createdBy String?   @map("created_by") @db.Uuid
+  updatedBy String?   @map("updated_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
-  campaigns    SmsCampaign[]
+  campaigns SmsCampaign[]
 
   @@unique([businessId, name])
   @@index([businessId])
@@ -133,31 +133,31 @@ model SmsTemplate {
 }
 
 model SmsCampaign {
-  id              String            @id @default(uuid()) @db.Uuid
-  businessId      String            @map("business_id") @db.Uuid
-  templateId      String?           @map("template_id") @db.Uuid
+  id         String  @id @default(uuid()) @db.Uuid
+  businessId String  @map("business_id") @db.Uuid
+  templateId String? @map("template_id") @db.Uuid
 
-  name            String            @db.VarChar(150)
-  messageBody     String            @map("message_body")
-  campaignType    SmsCampaignType   @map("campaign_type")
-  status          SmsCampaignStatus @default(DRAFT)
+  name         String            @db.VarChar(150)
+  messageBody  String            @map("message_body")
+  campaignType SmsCampaignType   @map("campaign_type")
+  status       SmsCampaignStatus @default(DRAFT)
 
-  totalRecipients Int               @default(0) @map("total_recipients")
-  sentCount       Int               @default(0) @map("sent_count")
-  failedCount     Int               @default(0) @map("failed_count")
+  totalRecipients Int @default(0) @map("total_recipients")
+  sentCount       Int @default(0) @map("sent_count")
+  failedCount     Int @default(0) @map("failed_count")
 
-  scheduledAt     DateTime?         @map("scheduled_at")
-  startedAt       DateTime?         @map("started_at")
-  completedAt     DateTime?         @map("completed_at")
+  scheduledAt DateTime? @map("scheduled_at")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
 
-  createdBy       String?           @map("created_by") @db.Uuid
-  createdAt       DateTime          @default(now()) @map("created_at")
-  updatedAt       DateTime          @updatedAt @map("updated_at")
-  deletedAt       DateTime?         @map("deleted_at")
+  createdBy String?   @map("created_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
-  template        SmsTemplate?      @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  recipients      SmsCampaignRecipient[]
-  logs            SmsLog[]
+  template   SmsTemplate?           @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  recipients SmsCampaignRecipient[]
+  logs       SmsLog[]
 
   @@index([businessId])
   @@index([templateId])
@@ -168,23 +168,23 @@ model SmsCampaign {
 }
 
 model SmsCampaignRecipient {
-  id              String             @id @default(uuid()) @db.Uuid
-  campaignId      String             @map("campaign_id") @db.Uuid
-  customerId      String?            @map("customer_id") @db.Uuid
+  id         String  @id @default(uuid()) @db.Uuid
+  campaignId String  @map("campaign_id") @db.Uuid
+  customerId String? @map("customer_id") @db.Uuid
 
-  recipientName   String?            @map("recipient_name") @db.VarChar(150)
-  phone           String             @db.VarChar(30)
-  status          SmsRecipientStatus @default(PENDING)
+  recipientName String?            @map("recipient_name") @db.VarChar(150)
+  phone         String             @db.VarChar(30)
+  status        SmsRecipientStatus @default(PENDING)
 
-  sentAt          DateTime?          @map("sent_at")
-  failedAt        DateTime?          @map("failed_at")
-  failureReason   String?            @map("failure_reason")
+  sentAt        DateTime? @map("sent_at")
+  failedAt      DateTime? @map("failed_at")
+  failureReason String?   @map("failure_reason")
 
-  createdAt       DateTime           @default(now()) @map("created_at")
-  updatedAt       DateTime           @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  campaign        SmsCampaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  logs            SmsLog[]
+  campaign SmsCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  logs     SmsLog[]
 
   @@index([campaignId])
   @@index([customerId])
@@ -194,29 +194,29 @@ model SmsCampaignRecipient {
 }
 
 model SmsLog {
-  id                 String       @id @default(uuid()) @db.Uuid
-  businessId          String       @map("business_id") @db.Uuid
-  campaignId          String?      @map("campaign_id") @db.Uuid
-  recipientId         String?      @map("recipient_id") @db.Uuid
-  providerId          String?      @map("provider_id") @db.Uuid
+  id          String  @id @default(uuid()) @db.Uuid
+  businessId  String  @map("business_id") @db.Uuid
+  campaignId  String? @map("campaign_id") @db.Uuid
+  recipientId String? @map("recipient_id") @db.Uuid
+  providerId  String? @map("provider_id") @db.Uuid
 
-  phone              String       @db.VarChar(30)
-  messageBody        String       @map("message_body")
-  smsCount           Int          @default(1) @map("sms_count")
-  status             SmsLogStatus @default(PENDING)
+  phone       String       @db.VarChar(30)
+  messageBody String       @map("message_body")
+  smsCount    Int          @default(1) @map("sms_count")
+  status      SmsLogStatus @default(PENDING)
 
-  providerMessageId  String?      @map("provider_message_id") @db.VarChar(150)
-  providerResponse   Json?        @map("provider_response")
+  providerMessageId String? @map("provider_message_id") @db.VarChar(150)
+  providerResponse  Json?   @map("provider_response")
 
-  sentAt             DateTime?    @map("sent_at")
-  failedAt           DateTime?    @map("failed_at")
-  failureReason      String?      @map("failure_reason")
+  sentAt        DateTime? @map("sent_at")
+  failedAt      DateTime? @map("failed_at")
+  failureReason String?   @map("failure_reason")
 
-  createdAt          DateTime     @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  campaign           SmsCampaign?          @relation(fields: [campaignId], references: [id], onDelete: SetNull)
-  recipient          SmsCampaignRecipient? @relation(fields: [recipientId], references: [id], onDelete: SetNull)
-  provider           SmsProvider?          @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  campaign  SmsCampaign?          @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  recipient SmsCampaignRecipient? @relation(fields: [recipientId], references: [id], onDelete: SetNull)
+  provider  SmsProvider?          @relation(fields: [providerId], references: [id], onDelete: SetNull)
 
   @@index([businessId])
   @@index([campaignId])

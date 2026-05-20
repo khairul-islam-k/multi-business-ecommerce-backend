@@ -44,7 +44,7 @@ enum PaymentWebhookStatus {
 // ======================================================
 
 model PaymentGateway {
-  id          String               @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
   name        String               @db.VarChar(150)
   code        String               @db.VarChar(100)
@@ -52,12 +52,12 @@ model PaymentGateway {
   status      PaymentGatewayStatus @default(ACTIVE)
   sortOrder   Int                  @default(0) @map("sort_order")
 
-  createdAt   DateTime             @default(now()) @map("created_at")
-  updatedAt   DateTime             @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  configs     PaymentGatewayConfig[]
-  methods     PaymentMethod[]
-  webhooks    PaymentWebhookEvent[]
+  configs  PaymentGatewayConfig[]
+  methods  PaymentMethod[]
+  webhooks PaymentWebhookEvent[]
 
   @@unique([code])
   @@index([status])
@@ -65,21 +65,21 @@ model PaymentGateway {
 }
 
 model PaymentGatewayConfig {
-  id          String                     @id @default(uuid()) @db.Uuid
-  businessId  String                     @map("business_id") @db.Uuid
-  gatewayId   String                     @map("gateway_id") @db.Uuid
+  id         String @id @default(uuid()) @db.Uuid
+  businessId String @map("business_id") @db.Uuid
+  gatewayId  String @map("gateway_id") @db.Uuid
 
-  configData  Json                       @map("config_data")
-  mode        PaymentGatewayMode         @default(SANDBOX)
-  status      PaymentGatewayConfigStatus @default(ACTIVE)
+  configData Json                       @map("config_data")
+  mode       PaymentGatewayMode         @default(SANDBOX)
+  status     PaymentGatewayConfigStatus @default(ACTIVE)
 
-  createdBy   String?                    @map("created_by") @db.Uuid
-  updatedBy   String?                    @map("updated_by") @db.Uuid
-  createdAt   DateTime                   @default(now()) @map("created_at")
-  updatedAt   DateTime                   @updatedAt @map("updated_at")
-  deletedAt   DateTime?                  @map("deleted_at")
+  createdBy String?   @map("created_by") @db.Uuid
+  updatedBy String?   @map("updated_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
-  gateway     PaymentGateway             @relation(fields: [gatewayId], references: [id], onDelete: Restrict)
+  gateway PaymentGateway @relation(fields: [gatewayId], references: [id], onDelete: Restrict)
 
   @@unique([businessId, gatewayId, mode])
   @@index([businessId])
@@ -89,9 +89,9 @@ model PaymentGatewayConfig {
 }
 
 model PaymentMethod {
-  id          String              @id @default(uuid()) @db.Uuid
-  businessId  String              @map("business_id") @db.Uuid
-  gatewayId   String?             @map("gateway_id") @db.Uuid
+  id         String  @id @default(uuid()) @db.Uuid
+  businessId String  @map("business_id") @db.Uuid
+  gatewayId  String? @map("gateway_id") @db.Uuid
 
   name        String              @db.VarChar(150)
   code        String              @db.VarChar(100)
@@ -99,10 +99,10 @@ model PaymentMethod {
   status      PaymentMethodStatus @default(ACTIVE)
   sortOrder   Int                 @default(0) @map("sort_order")
 
-  createdAt   DateTime            @default(now()) @map("created_at")
-  updatedAt   DateTime            @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  gateway     PaymentGateway?     @relation(fields: [gatewayId], references: [id], onDelete: SetNull)
+  gateway PaymentGateway? @relation(fields: [gatewayId], references: [id], onDelete: SetNull)
 
   @@unique([businessId, code])
   @@index([businessId])
@@ -113,20 +113,20 @@ model PaymentMethod {
 }
 
 model PaymentWebhookEvent {
-  id             String               @id @default(uuid()) @db.Uuid
-  businessId      String               @map("business_id") @db.Uuid
-  gatewayId       String               @map("gateway_id") @db.Uuid
-  orderPaymentId  String?              @map("order_payment_id") @db.Uuid
+  id             String  @id @default(uuid()) @db.Uuid
+  businessId     String  @map("business_id") @db.Uuid
+  gatewayId      String  @map("gateway_id") @db.Uuid
+  orderPaymentId String? @map("order_payment_id") @db.Uuid
 
-  eventType       String               @map("event_type") @db.VarChar(100)
-  eventId         String?              @map("event_id") @db.VarChar(150)
-  payload         Json
-  status          PaymentWebhookStatus @default(PENDING)
+  eventType String               @map("event_type") @db.VarChar(100)
+  eventId   String?              @map("event_id") @db.VarChar(150)
+  payload   Json
+  status    PaymentWebhookStatus @default(PENDING)
 
-  processedAt     DateTime?            @map("processed_at")
-  createdAt       DateTime             @default(now()) @map("created_at")
+  processedAt DateTime? @map("processed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
 
-  gateway         PaymentGateway       @relation(fields: [gatewayId], references: [id], onDelete: Restrict)
+  gateway PaymentGateway @relation(fields: [gatewayId], references: [id], onDelete: Restrict)
 
   @@index([businessId])
   @@index([gatewayId])

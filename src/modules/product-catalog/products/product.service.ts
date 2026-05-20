@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import {
   CatalogProductStatus,
   Prisma,
@@ -227,6 +231,7 @@ export class ProductService {
     productId: string,
   ) {
     await this.lookup.assertProductExists(businessId, productId);
+    await this.assertProductCanBeDeleted(businessId, productId);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.product.update({
@@ -297,5 +302,43 @@ export class ProductService {
           })),
         }
       : undefined;
+  }
+
+  private async assertProductCanBeDeleted(
+    businessId: string,
+    productId: string,
+  ) {
+    const referenceCounts = await Promise.all([
+      this.prisma.inventoryStock.count({ where: { businessId, productId } }),
+      this.prisma.inventoryStockBatch.count({
+        where: { businessId, productId },
+      }),
+      this.prisma.inventoryStockMovement.count({
+        where: { businessId, productId },
+      }),
+      this.prisma.inventoryStockAdjustmentItem.count({ where: { productId } }),
+      this.prisma.inventoryStockTransferItem.count({ where: { productId } }),
+      this.prisma.orderCartItem.count({ where: { productId } }),
+      this.prisma.orderOrderItem.count({ where: { productId } }),
+      this.prisma.orderReturnItem.count({ where: { productId } }),
+      this.prisma.invoiceItem.count({ where: { productId } }),
+      this.prisma.supplierProductMap.count({
+        where: { businessId, productId },
+      }),
+      this.prisma.supplierPurchaseOrderItem.count({
+        where: { productId },
+      }),
+      this.prisma.supplierInvoiceItem.count({ where: { productId } }),
+      this.prisma.supplierPurchaseReturnItem.count({
+        where: { productId },
+      }),
+      this.prisma.courierShipmentItem.count({ where: { productId } }),
+    ]);
+
+    if (referenceCounts.some((count) => count > 0)) {
+      throw new BadRequestException(
+        "Product cannot be deleted while referenced by inventory, order, invoice, supplier, or courier records",
+      );
+    }
   }
 }

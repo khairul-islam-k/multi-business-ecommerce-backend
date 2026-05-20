@@ -21,35 +21,35 @@ enum InvoiceTemplateStatus {
 // ======================================================
 
 model Invoice {
-  id                     String        @id @default(uuid()) @db.Uuid
-  businessId              String        @map("business_id") @db.Uuid
-  orderId                 String?       @map("order_id") @db.Uuid
-  customerId              String?       @map("customer_id") @db.Uuid
+  id         String  @id @default(uuid()) @db.Uuid
+  businessId String  @map("business_id") @db.Uuid
+  orderId    String? @map("order_id") @db.Uuid
+  customerId String? @map("customer_id") @db.Uuid
 
-  invoiceNo               String        @map("invoice_no") @db.VarChar(100)
-  invoiceDate             DateTime      @map("invoice_date")
-  dueDate                 DateTime?     @map("due_date")
-  status                  InvoiceStatus @default(DRAFT)
+  invoiceNo   String        @map("invoice_no") @db.VarChar(100)
+  invoiceDate DateTime      @map("invoice_date")
+  dueDate     DateTime?     @map("due_date")
+  status      InvoiceStatus @default(DRAFT)
 
-  customerName            String?       @map("customer_name") @db.VarChar(150)
-  customerPhone           String?       @map("customer_phone") @db.VarChar(30)
-  customerEmail           String?       @map("customer_email") @db.VarChar(150)
-  billingAddressSnapshot  Json?         @map("billing_address_snapshot")
+  customerName           String? @map("customer_name") @db.VarChar(150)
+  customerPhone          String? @map("customer_phone") @db.VarChar(30)
+  customerEmail          String? @map("customer_email") @db.VarChar(150)
+  billingAddressSnapshot Json?   @map("billing_address_snapshot")
 
-  subtotal                Decimal       @default(0) @db.Decimal(12, 2)
-  discountTotal           Decimal       @default(0) @map("discount_total") @db.Decimal(12, 2)
-  taxTotal                Decimal       @default(0) @map("tax_total") @db.Decimal(12, 2)
-  shippingCharge          Decimal       @default(0) @map("shipping_charge") @db.Decimal(12, 2)
-  totalAmount             Decimal       @default(0) @map("total_amount") @db.Decimal(12, 2)
-  paidAmount              Decimal       @default(0) @map("paid_amount") @db.Decimal(12, 2)
+  subtotal       Decimal @default(0) @db.Decimal(12, 2)
+  discountTotal  Decimal @default(0) @map("discount_total") @db.Decimal(12, 2)
+  taxTotal       Decimal @default(0) @map("tax_total") @db.Decimal(12, 2)
+  shippingCharge Decimal @default(0) @map("shipping_charge") @db.Decimal(12, 2)
+  totalAmount    Decimal @default(0) @map("total_amount") @db.Decimal(12, 2)
+  paidAmount     Decimal @default(0) @map("paid_amount") @db.Decimal(12, 2)
 
-  note                    String?
-  createdBy               String?       @map("created_by") @db.Uuid
-  createdAt               DateTime      @default(now()) @map("created_at")
-  updatedAt               DateTime      @updatedAt @map("updated_at")
-  deletedAt               DateTime?     @map("deleted_at")
+  note      String?
+  createdBy String?   @map("created_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
-  items                   InvoiceItem[]
+  items InvoiceItem[]
 
   @@unique([businessId, invoiceNo])
   @@index([businessId])
@@ -62,22 +62,22 @@ model Invoice {
 }
 
 model InvoiceItem {
-  id              String   @id @default(uuid()) @db.Uuid
-  invoiceId       String   @map("invoice_id") @db.Uuid
-  orderItemId     String?  @map("order_item_id") @db.Uuid
-  productId       String   @map("product_id") @db.Uuid
-  variantId       String?  @map("variant_id") @db.Uuid
+  id          String  @id @default(uuid()) @db.Uuid
+  invoiceId   String  @map("invoice_id") @db.Uuid
+  orderItemId String? @map("order_item_id") @db.Uuid
+  productId   String  @map("product_id") @db.Uuid
+  variantId   String? @map("variant_id") @db.Uuid
 
-  quantity        Decimal  @db.Decimal(14, 3)
-  unitPrice       Decimal  @map("unit_price") @db.Decimal(12, 2)
-  discountAmount  Decimal  @default(0) @map("discount_amount") @db.Decimal(12, 2)
-  taxAmount       Decimal  @default(0) @map("tax_amount") @db.Decimal(12, 2)
-  lineTotal       Decimal  @map("line_total") @db.Decimal(12, 2)
+  quantity       Decimal @db.Decimal(14, 3)
+  unitPrice      Decimal @map("unit_price") @db.Decimal(12, 2)
+  discountAmount Decimal @default(0) @map("discount_amount") @db.Decimal(12, 2)
+  taxAmount      Decimal @default(0) @map("tax_amount") @db.Decimal(12, 2)
+  lineTotal      Decimal @map("line_total") @db.Decimal(12, 2)
 
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@index([invoiceId])
   @@index([orderItemId])
@@ -87,22 +87,22 @@ model InvoiceItem {
 }
 
 model InvoiceTemplate {
-  id                  String                @id @default(uuid()) @db.Uuid
-  businessId           String                @map("business_id") @db.Uuid
+  id         String @id @default(uuid()) @db.Uuid
+  businessId String @map("business_id") @db.Uuid
 
-  name                String                @db.VarChar(150)
-  logoUrl             String?               @map("logo_url")
-  headerText          String?               @map("header_text")
-  footerText          String?               @map("footer_text")
-  termsAndConditions  String?               @map("terms_and_conditions")
-  isDefault           Boolean               @default(false) @map("is_default")
-  status              InvoiceTemplateStatus @default(ACTIVE)
+  name               String                @db.VarChar(150)
+  logoUrl            String?               @map("logo_url")
+  headerText         String?               @map("header_text")
+  footerText         String?               @map("footer_text")
+  termsAndConditions String?               @map("terms_and_conditions")
+  isDefault          Boolean               @default(false) @map("is_default")
+  status             InvoiceTemplateStatus @default(ACTIVE)
 
-  createdBy           String?               @map("created_by") @db.Uuid
-  updatedBy           String?               @map("updated_by") @db.Uuid
-  createdAt           DateTime              @default(now()) @map("created_at")
-  updatedAt           DateTime              @updatedAt @map("updated_at")
-  deletedAt           DateTime?             @map("deleted_at")
+  createdBy String?   @map("created_by") @db.Uuid
+  updatedBy String?   @map("updated_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   @@index([businessId])
   @@index([isDefault])

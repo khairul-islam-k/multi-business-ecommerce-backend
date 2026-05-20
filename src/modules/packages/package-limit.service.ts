@@ -5,7 +5,6 @@ import {
   MediaAssetStatus,
   MediaFileType,
   PackageLimitKey,
-  PackageSubscriptionAddonStatus,
   Prisma,
   SystemUserStatus,
   SystemUserType,
@@ -22,6 +21,11 @@ type LimitUsage = {
   consumed: number;
   used: number;
   remaining: number;
+};
+
+type PlanSnapshotLimit = {
+  limitKey: PackageLimitKey;
+  limitValue: number;
 };
 
 @Injectable()
@@ -60,12 +64,8 @@ export class PackageLimitService {
       await this.subscriptions.assertTenantCanAccess(tenantId);
     const limitKeys = new Set<PackageLimitKey>();
 
-    for (const limit of subscription.package.limits) {
+    for (const limit of this.getPlanSnapshotLimits(subscription.planSnapshot)) {
       limitKeys.add(limit.limitKey);
-    }
-
-    for (const subscriptionAddon of subscription.addons) {
-      limitKeys.add(subscriptionAddon.addon.limitKey);
     }
 
     const items: LimitUsage[] = [];
@@ -115,24 +115,8 @@ export class PackageLimitService {
       where: {
         id: subscriptionId,
       },
-      include: {
-        package: {
-          include: {
-            limits: {
-              where: {
-                limitKey,
-              },
-            },
-          },
-        },
-        addons: {
-          where: {
-            status: PackageSubscriptionAddonStatus.ACTIVE,
-          },
-          include: {
-            addon: true,
-          },
-        },
+      select: {
+        planSnapshot: true,
       },
     });
 
@@ -140,25 +124,11 @@ export class PackageLimitService {
       return 0;
     }
 
-    const baseLimit =
-      subscription.package.limits.find((limit) => limit.limitKey === limitKey)
-        ?.limitValue ?? 0;
-
-    const addonLimit = subscription.addons.reduce(
-      (total, subscriptionAddon) => {
-        if (subscriptionAddon.addon.limitKey !== limitKey) {
-          return total;
-        }
-
-        return (
-          total +
-          subscriptionAddon.addon.limitValue * subscriptionAddon.quantity
-        );
-      },
-      0,
+    return (
+      this.getPlanSnapshotLimits(subscription.planSnapshot).find(
+        (limit) => limit.limitKey === limitKey,
+      )?.limitValue ?? 0
     );
-
-    return baseLimit + addonLimit;
   }
 
   private async getConsumedUsage(
@@ -234,5 +204,35 @@ export class PackageLimitService {
     }
 
     return Promise.resolve(0);
+  }
+
+  private getPlanSnapshotLimits(snapshot: Prisma.JsonValue) {
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+      return [];
+    }
+
+    const limits = snapshot.limits;
+
+    if (!Array.isArray(limits)) {
+      return [];
+    }
+
+    return limits.filter(this.isPlanSnapshotLimit);
+  }
+
+  private isPlanSnapshotLimit(value: unknown): value is PlanSnapshotLimit {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return false;
+    }
+
+    const candidate = value as Record<string, unknown>;
+
+    return (
+      typeof candidate.limitKey === "string" &&
+      Object.values(PackageLimitKey).includes(
+        candidate.limitKey as PackageLimitKey,
+      ) &&
+      typeof candidate.limitValue === "number"
+    );
   }
 }

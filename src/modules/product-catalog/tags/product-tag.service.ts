@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma, ProductSimpleStatus } from "@prisma/client";
 
 import { PrismaService } from "../../../prisma/prisma.service";
@@ -117,6 +121,8 @@ export class ProductTagService {
     tagId: string,
   ) {
     await this.findTagOrThrow(businessId, tagId);
+    await this.assertTagCanBeDeleted(tagId);
+
     await this.prisma.productTag.update({
       where: { id: tagId },
       data: {
@@ -134,5 +140,22 @@ export class ProductTagService {
       select: { id: true },
     });
     if (!tag) throw new NotFoundException("Tag not found");
+  }
+
+  private async assertTagCanBeDeleted(tagId: string) {
+    const productCount = await this.prisma.productTagMap.count({
+      where: {
+        tagId,
+        product: {
+          deletedAt: null,
+        },
+      },
+    });
+
+    if (productCount > 0) {
+      throw new BadRequestException(
+        "Tag cannot be deleted while assigned to active products",
+      );
+    }
   }
 }

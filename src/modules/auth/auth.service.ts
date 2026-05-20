@@ -8,6 +8,7 @@ import {
   ForbiddenException,
   Injectable,
   Logger,
+  NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
 import {
@@ -39,8 +40,6 @@ import { ResetForgotPasswordDto } from "./dto/reset-forgot-password.dto";
 import type { CurrentUserPayload } from "./decorators/current-user.decorator";
 import { PackageSubscriptionService } from "../packages/package-subscription.service";
 import { RequestEmailChangeOrVerificationDto } from "./dto/request-email-change-or-verification.dto";
-
-type SafeSystemUser = Omit<SystemUser, "passwordHash">;
 
 type AuthBusiness = {
   id: string;
@@ -101,7 +100,7 @@ export class AuthService {
     const passwordHash = await this.hashPassword(dto.password);
     const expiresAt = this.getOtpExpiresAt();
 
-    const result = await this.prisma.$transaction(async (tx) => {
+    const data = await this.prisma.$transaction(async (tx) => {
       const user = await tx.systemUser.create({
         data: {
           name: dto.name,
@@ -136,16 +135,25 @@ export class AuthService {
         )
         .then((res) => res.data);
 
+      const { passwordHash: _, ...safeUser } = user;
+
       return {
-        user: this.toSafeUser(user),
+        user: safeUser,
         selectedBusiness,
       };
     });
 
-    await this.mailService.sendEmailVerificationOtp(email, otp);
+    void this.mailService
+      .sendEmailVerificationOtp(email, otp)
+      .catch((error) => {
+        this.logger.error(
+          `Failed to send verification email to ${email}`,
+          error,
+        );
+      });
 
     return apiResponse(
-      result,
+      data,
       "Registration successful. A verification email has been sent to your email account.",
     );
   }
@@ -321,6 +329,9 @@ export class AuthService {
 
     const user = await this.prisma.systemUser.findUnique({
       where: { email },
+      include: {
+        profile: true,
+      },
     });
 
     if (!user) {
@@ -343,14 +354,8 @@ export class AuthService {
     }
 
     this.assertActiveUser(user);
-    // TODO: before removing this line completely, check if everything checks for it or not.
-    // await this.packageSubscriptions.assertTenantSubscriptionActive(user);
-    const activeSubscription =
-      await this.packageSubscriptions.findCurrentSubscription(
-        user.tenantId ?? user.id,
-      );
 
-    const safeUser = this.toSafeUser(user);
+    const { passwordHash, ...safeUser } = user;
 
     if (user.type === SystemUserType.ADMIN) {
       const tokens = await this.issueTokenPair({
@@ -363,12 +368,19 @@ export class AuthService {
         {
           ...tokens,
           selectedBusiness: null,
-          activeSubscription,
+          activeSubscription: null,
           user: safeUser,
         },
         "Authenticated.",
       );
     }
+
+    // TODO: before removing this line completely, check if everything checks for it or not.
+    // await this.packageSubscriptions.assertTenantSubscriptionActive(user);
+    const activeSubscription =
+      await this.packageSubscriptions.findCurrentSubscription(
+        user.tenantId ?? user.id,
+      );
 
     const businesses = await this.findAccessibleBusinesses(user.id);
 
@@ -457,7 +469,14 @@ export class AuthService {
       },
     });
 
-    await this.mailService.sendChangeEmailOtpEmail(newEmail, otp);
+    void this.mailService
+      .sendChangeEmailOtpEmail(newEmail, otp)
+      .catch((error) => {
+        this.logger.error(
+          `Failed to send verification email to ${newEmail}`,
+          error,
+        );
+      });
 
     return apiResponse(
       {
@@ -606,7 +625,14 @@ export class AuthService {
       },
     });
 
-    await this.mailService.sendForgotPasswordOtpEmail(email, otp);
+    void this.mailService
+      .sendForgotPasswordOtpEmail(email, otp)
+      .catch((error) => {
+        this.logger.error(
+          `Failed to send verification email to ${email}`,
+          error,
+        );
+      });
 
     return apiResponse(
       { success: true },
@@ -944,11 +970,13 @@ export class AuthService {
       });
     });
 
+    const { passwordHash, ...safeUser } = user;
+
     return apiResponse({
       accessToken,
       refreshToken: newRefreshToken,
       selectedBusiness,
-      user: this.toSafeUser(user),
+      user: safeUser,
     });
   }
 
@@ -994,10 +1022,28 @@ export class AuthService {
     });
   }
 
-  async getUser(user: CurrentUserPayload) {
+  async getUser(currentUserPayload: CurrentUserPayload) {
+    const user = await this.prisma.systemUser.findUnique({
+      where: {
+        id: currentUserPayload.id,
+      },
+      include: {
+        profile: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException("User with the given id does not exist.");
+    }
+
+    const { passwordHash, ...safeUser } = user;
+
     if (user.type === SystemUserType.ADMIN) {
       return apiResponse({
-        user,
+        user: safeUser,
+        activeSubscription: null,
+        selectedBusiness: null,
+        businesses: [],
       });
     }
 
@@ -1008,19 +1054,17 @@ export class AuthService {
         user.tenantId ?? user.id,
       );
 
-    const profile = await this.prisma.systemUserProfile.findFirst({
-      where: { userId: user.id },
-    });
-
     if (businesses.length === 0) {
       throw new ForbiddenException("You are not assigned to any business");
     }
 
     let selectedBusiness: AuthBusiness | null = null;
 
-    if (user.businessId !== null) {
+    if (currentUserPayload.businessId !== null) {
       selectedBusiness =
-        businesses.find((business) => business.id === user.businessId) ?? null;
+        businesses.find(
+          (business) => business.id === currentUserPayload.businessId,
+        ) ?? null;
 
       if (!selectedBusiness) {
         throw new ForbiddenException(
@@ -1030,8 +1074,7 @@ export class AuthService {
     }
 
     return apiResponse({
-      user,
-      profile,
+      user: safeUser,
       activeSubscription,
       selectedBusiness,
       businesses,
@@ -1347,11 +1390,6 @@ export class AuthService {
     if (user.status !== SystemUserStatus.ACTIVE) {
       throw new ForbiddenException("User account is not active");
     }
-  }
-
-  private toSafeUser(user: SystemUser): SafeSystemUser {
-    const { passwordHash, ...safeUser } = user;
-    return safeUser;
   }
 
   private normalizeEmail(email: string) {

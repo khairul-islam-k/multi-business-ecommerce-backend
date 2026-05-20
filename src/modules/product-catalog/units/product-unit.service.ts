@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma, ProductSimpleStatus } from "@prisma/client";
 
 import { PrismaService } from "../../../prisma/prisma.service";
@@ -117,6 +121,8 @@ export class ProductUnitService {
     unitId: string,
   ) {
     await this.findUnitOrThrow(businessId, unitId);
+    await this.assertUnitCanBeDeleted(businessId, unitId);
+
     await this.prisma.productUnit.update({
       where: { id: unitId },
       data: {
@@ -134,5 +140,17 @@ export class ProductUnitService {
       select: { id: true },
     });
     if (!unit) throw new NotFoundException("Unit not found");
+  }
+
+  private async assertUnitCanBeDeleted(businessId: string, unitId: string) {
+    const productCount = await this.prisma.product.count({
+      where: { businessId, unitId, deletedAt: null },
+    });
+
+    if (productCount > 0) {
+      throw new BadRequestException(
+        "Unit cannot be deleted while assigned to active products",
+      );
+    }
   }
 }

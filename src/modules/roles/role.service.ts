@@ -299,6 +299,19 @@ export class RoleService {
     await this.assertRoleBelongsToBusiness(businessId, roleId);
 
     await this.prisma.$transaction(async (tx) => {
+      const activeAssignmentCount = await tx.rbacUserRoleMap.count({
+        where: {
+          roleId,
+          status: UserRoleMapStatus.ACTIVE,
+        },
+      });
+
+      if (activeAssignmentCount > 0) {
+        throw new BadRequestException(
+          "Role cannot be deleted while assigned to active users",
+        );
+      }
+
       await tx.rbacRole.update({
         where: {
           id: roleId,
@@ -307,16 +320,6 @@ export class RoleService {
           status: CommonStatus.INACTIVE,
           deletedAt: new Date(),
           updatedById: currentUser.id,
-        },
-      });
-
-      await tx.rbacUserRoleMap.updateMany({
-        where: {
-          roleId,
-          status: UserRoleMapStatus.ACTIVE,
-        },
-        data: {
-          status: UserRoleMapStatus.REVOKED,
         },
       });
     });
@@ -586,6 +589,7 @@ export class RoleService {
       where: {
         businessId,
         name,
+        deletedAt: null,
 
         ...(ignoreRoleId && {
           id: {

@@ -25,24 +25,24 @@ enum MediaTagStatus {
 // ======================================================
 
 model MediaAsset {
-  id         String           @id @default(uuid()) @db.Uuid
-  businessId String           @map("business_id") @db.Uuid
-  uploadedBy String?          @map("uploaded_by") @db.Uuid
+  id         String  @id @default(uuid()) @db.Uuid
+  businessId String  @map("business_id") @db.Uuid
+  uploadedBy String? @map("uploaded_by") @db.Uuid
 
-  fileName   String           @map("file_name") @db.VarChar(255)
-  fileUrl    String           @map("file_url")
-  fileType   MediaFileType    @map("file_type")
-  mimeType   String?          @map("mime_type") @db.VarChar(100)
-  fileSize   Int?             @map("file_size")
-  altText    String?          @map("alt_text")
-  status     MediaAssetStatus @default(ACTIVE)
+  fileName String           @map("file_name") @db.VarChar(255)
+  fileUrl  String           @map("file_url")
+  fileType MediaFileType    @map("file_type")
+  mimeType String?          @map("mime_type") @db.VarChar(100)
+  fileSize Int?             @map("file_size")
+  altText  String?          @map("alt_text")
+  status   MediaAssetStatus @default(ACTIVE)
 
-  createdAt  DateTime         @default(now()) @map("created_at")
-  updatedAt  DateTime         @updatedAt @map("updated_at")
-  deletedAt  DateTime?        @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
-  tags       MediaAssetTag[]
-  business   Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  tags     MediaAssetTag[]
+  business Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   @@index([businessId])
   @@index([uploadedBy])
@@ -52,16 +52,16 @@ model MediaAsset {
 }
 
 model MediaTag {
-  id         String         @id @default(uuid()) @db.Uuid
-  businessId String         @map("business_id") @db.Uuid
+  id         String @id @default(uuid()) @db.Uuid
+  businessId String @map("business_id") @db.Uuid
 
-  name       String         @db.VarChar(100)
-  status     MediaTagStatus @default(ACTIVE)
+  name   String         @db.VarChar(100)
+  status MediaTagStatus @default(ACTIVE)
 
-  createdAt  DateTime       @default(now()) @map("created_at")
-  updatedAt  DateTime       @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  assets     MediaAssetTag[]
+  assets MediaAssetTag[]
 
   @@unique([businessId, name])
   @@index([businessId])
@@ -70,14 +70,14 @@ model MediaTag {
 }
 
 model MediaAssetTag {
-  id           String     @id @default(uuid()) @db.Uuid
-  mediaAssetId String     @map("media_asset_id") @db.Uuid
-  tagId        String     @map("tag_id") @db.Uuid
+  id           String @id @default(uuid()) @db.Uuid
+  mediaAssetId String @map("media_asset_id") @db.Uuid
+  tagId        String @map("tag_id") @db.Uuid
 
-  createdAt    DateTime   @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  mediaAsset   MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
-  tag          MediaTag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  mediaAsset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+  tag        MediaTag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@unique([mediaAssetId, tagId])
   @@index([mediaAssetId])

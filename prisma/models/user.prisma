@@ -3,27 +3,27 @@
 // =======================
 
 enum SystemUserType {
-    ADMIN
-    TENANT
-    EMPLOYEE
+  ADMIN
+  TENANT
+  EMPLOYEE
 }
 
 enum SystemUserStatus {
-    ACTIVE
-    INACTIVE
-    SUSPENDED
+  ACTIVE
+  INACTIVE
+  SUSPENDED
 }
 
 enum Gender {
-    MALE
-    FEMALE
-    OTHER
+  MALE
+  FEMALE
+  OTHER
 }
 
 enum OtpPurpose {
-    EMAIL_VERIFICATION
-    PASSWORD_RESET
-    EMAIL_CHANGE
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  EMAIL_CHANGE
 }
 
 // =======================
@@ -31,161 +31,161 @@ enum OtpPurpose {
 // =======================
 
 model SystemUser {
-    id              String           @id @default(uuid()) @db.Uuid
-    name            String           @db.VarChar(150)
-    email           String           @unique @db.VarChar(255)
-    phone           String?          @unique @db.VarChar(30)
-    passwordHash    String           @map("password_hash") @db.Text
-    type            SystemUserType  
-    status          SystemUserStatus @default(ACTIVE)
-    emailVerifiedAt DateTime?        @map("email_verified_at") @db.Timestamptz(6)
+  id              String           @id @default(uuid()) @db.Uuid
+  name            String           @db.VarChar(150)
+  email           String           @unique @db.VarChar(255)
+  phone           String?          @unique @db.VarChar(30)
+  passwordHash    String           @map("password_hash") @db.Text
+  type            SystemUserType
+  status          SystemUserStatus @default(ACTIVE)
+  emailVerifiedAt DateTime?        @map("email_verified_at") @db.Timestamptz(6)
 
-    tenantId String? @map("tenant_id") @db.Uuid
+  tenantId String? @map("tenant_id") @db.Uuid
 
-    createdById String? @map("created_by") @db.Uuid
-    updatedById String? @map("updated_by") @db.Uuid
-    deletedById String? @map("deleted_by") @db.Uuid
+  createdById String? @map("created_by") @db.Uuid
+  updatedById String? @map("updated_by") @db.Uuid
+  deletedById String? @map("deleted_by") @db.Uuid
 
-    createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-    updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-    deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-    tenant SystemUser? @relation("TenantUsers", fields: [tenantId], references: [id], onDelete: SetNull)
+  tenant SystemUser? @relation("TenantUsers", fields: [tenantId], references: [id], onDelete: SetNull)
 
-    createdBy SystemUser? @relation("SystemUserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-    updatedBy SystemUser? @relation("SystemUserUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
-    deletedBy SystemUser? @relation("SystemUserDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  createdBy SystemUser? @relation("SystemUserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy SystemUser? @relation("SystemUserUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  deletedBy SystemUser? @relation("SystemUserDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
-    tenantUsers SystemUser[] @relation("TenantUsers")
+  tenantUsers SystemUser[] @relation("TenantUsers")
 
-    usersCreated SystemUser[] @relation("SystemUserCreatedBy")
-    usersUpdated SystemUser[] @relation("SystemUserUpdatedBy")
-    usersDeleted SystemUser[] @relation("SystemUserDeletedBy")
+  usersCreated SystemUser[] @relation("SystemUserCreatedBy")
+  usersUpdated SystemUser[] @relation("SystemUserUpdatedBy")
+  usersDeleted SystemUser[] @relation("SystemUserDeletedBy")
 
-    profile            SystemUserProfile?
-    emailVerifications SystemEmailVerification[]
-    passwordResets     SystemPasswordReset[]
-    sessions           SystemSession[]
-    auditLogs          SystemAuditLog[]
+  profile            SystemUserProfile?
+  emailVerifications SystemEmailVerification[]
+  passwordResets     SystemPasswordReset[]
+  sessions           SystemSession[]
+  auditLogs          SystemAuditLog[]
 
-    ownedBusinesses   Business[] @relation("BusinessOwner")
-    createdBusinesses Business[] @relation("BusinessCreatedBy")
-    updatedBusinesses Business[] @relation("BusinessUpdatedBy")
-    businessMembers   BusinessMember[]
+  ownedBusinesses   Business[]       @relation("BusinessOwner")
+  createdBusinesses Business[]       @relation("BusinessCreatedBy")
+  updatedBusinesses Business[]       @relation("BusinessUpdatedBy")
+  businessMembers   BusinessMember[]
 
-    createdRoles RbacRole[] @relation("RbacRoleCreatedBy")
-    updatedRoles RbacRole[] @relation("RbacRoleUpdatedBy")
+  createdRoles RbacRole[] @relation("RbacRoleCreatedBy")
+  updatedRoles RbacRole[] @relation("RbacRoleUpdatedBy")
 
-    userRoleMaps     RbacUserRoleMap[] @relation("UserRoleMapUser")
-    assignedRoleMaps RbacUserRoleMap[] @relation("UserRoleMapAssignedBy")
+  userRoleMaps     RbacUserRoleMap[] @relation("UserRoleMapUser")
+  assignedRoleMaps RbacUserRoleMap[] @relation("UserRoleMapAssignedBy")
 
-    packageSubscriptions PackageSubscription[] @relation("TenantPackageSubscriptions")
-    packageMockPayments  PackageMockPayment[]  @relation("TenantPackageMockPayments")
+  packageSubscriptions PackageSubscription[] @relation("TenantPackageSubscriptions")
+  packageMockPayments  PackageMockPayment[]  @relation("TenantPackageMockPayments")
 
-    @@index([type])
-    @@index([status])
-    @@index([tenantId])
-    @@index([deletedAt])
-    @@map("system_users")
+  @@index([type])
+  @@index([status])
+  @@index([tenantId])
+  @@index([deletedAt])
+  @@map("system_users")
 }
 
 model SystemUserProfile {
-    id          String    @id @default(uuid()) @db.Uuid
-    userId      String    @unique @map("user_id") @db.Uuid
-    firstName   String?   @map("first_name") @db.VarChar(100)
-    lastName    String?   @map("last_name") @db.VarChar(100)
-    imageUrl    String?   @map("image_url") @db.Text
-    dateOfBirth DateTime? @map("date_of_birth") @db.Date
-    gender      Gender?
-    address     String?   @db.Text
-    city        String?   @db.VarChar(100)
-    country     String?   @db.VarChar(100)
-    bio         String?   @db.Text
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @unique @map("user_id") @db.Uuid
+  firstName   String?   @map("first_name") @db.VarChar(100)
+  lastName    String?   @map("last_name") @db.VarChar(100)
+  imageUrl    String?   @map("image_url") @db.Text
+  dateOfBirth DateTime? @map("date_of_birth") @db.Date
+  gender      Gender?
+  address     String?   @db.Text
+  city        String?   @db.VarChar(100)
+  country     String?   @db.VarChar(100)
+  bio         String?   @db.Text
 
-    createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-    updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-    deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-    user SystemUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user SystemUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-    @@index([deletedAt])
-    @@map("system_user_profiles")
+  @@index([deletedAt])
+  @@map("system_user_profiles")
 }
 
 model SystemEmailVerification {
-    id           String     @id @default(uuid()) @db.Uuid
-    userId       String     @map("user_id") @db.Uuid
-    otpHash      String     @map("otp_hash") @db.Text
-    purpose      OtpPurpose
-    attemptCount Int        @default(0) @map("attempt_count")
-    expiresAt    DateTime   @map("expires_at") @db.Timestamptz(6)
-    verifiedAt   DateTime?  @map("verified_at") @db.Timestamptz(6)
-    createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  id           String     @id @default(uuid()) @db.Uuid
+  userId       String     @map("user_id") @db.Uuid
+  otpHash      String     @map("otp_hash") @db.Text
+  purpose      OtpPurpose
+  attemptCount Int        @default(0) @map("attempt_count")
+  expiresAt    DateTime   @map("expires_at") @db.Timestamptz(6)
+  verifiedAt   DateTime?  @map("verified_at") @db.Timestamptz(6)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
 
-    user SystemUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user SystemUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-    @@index([userId])
-    @@index([purpose])
-    @@index([expiresAt])
-    @@map("system_email_verifications")
+  @@index([userId])
+  @@index([purpose])
+  @@index([expiresAt])
+  @@map("system_email_verifications")
 }
 
 model SystemPasswordReset {
-    id           String    @id @default(uuid()) @db.Uuid
-    userId       String    @map("user_id") @db.Uuid
-    otpHash      String    @map("otp_hash") @db.Text
-    attemptCount Int       @default(0) @map("attempt_count")
-    expiresAt    DateTime  @map("expires_at") @db.Timestamptz(6)
-    usedAt       DateTime? @map("used_at") @db.Timestamptz(6)
-    createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  otpHash      String    @map("otp_hash") @db.Text
+  attemptCount Int       @default(0) @map("attempt_count")
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt       DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
-    user SystemUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user SystemUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-    @@index([userId])
-    @@index([expiresAt])
-    @@map("system_password_resets")
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("system_password_resets")
 }
 
 model SystemSession {
-    id               String    @id @default(uuid()) @db.Uuid
-    userId           String    @map("user_id") @db.Uuid
-    businessId       String?   @map("business_id") @db.Uuid
-    refreshTokenHash String    @unique @map("refresh_token_hash") @db.Text
-    expiresAt        DateTime  @map("expires_at") @db.Timestamptz(6)
-    revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(6)
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  businessId       String?   @map("business_id") @db.Uuid
+  refreshTokenHash String    @unique @map("refresh_token_hash") @db.Text
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(6)
 
-    createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-    updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-    user SystemUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user SystemUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-    @@index([userId])
-    @@index([expiresAt])
-    @@index([revokedAt])
-    @@map("system_sessions")
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([revokedAt])
+  @@map("system_sessions")
 }
 
 model SystemAuditLog {
-    id         String   @id @default(uuid()) @db.Uuid
-    userId     String?  @map("user_id") @db.Uuid
-    businessId String?  @map("business_id") @db.Uuid
-    action     String   @db.VarChar(100)
-    feature    String   @db.VarChar(100)
-    entityName String   @map("entity_name") @db.VarChar(150)
-    entityId   String?  @map("entity_id") @db.VarChar(100)
-    oldData    Json?    @map("old_data")
-    newData    Json?    @map("new_data")
-    ipAddress  String?  @map("ip_address") @db.VarChar(100)
-    userAgent  String?  @map("user_agent") @db.Text
-    createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  businessId String?  @map("business_id") @db.Uuid
+  action     String   @db.VarChar(100)
+  feature    String   @db.VarChar(100)
+  entityName String   @map("entity_name") @db.VarChar(150)
+  entityId   String?  @map("entity_id") @db.VarChar(100)
+  oldData    Json?    @map("old_data")
+  newData    Json?    @map("new_data")
+  ipAddress  String?  @map("ip_address") @db.VarChar(100)
+  userAgent  String?  @map("user_agent") @db.Text
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-    user     SystemUser?       @relation(fields: [userId], references: [id], onDelete: SetNull)
-    business Business? @relation(fields: [businessId], references: [id], onDelete: SetNull)
+  user     SystemUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  business Business?   @relation(fields: [businessId], references: [id], onDelete: SetNull)
 
-    @@index([userId])
-    @@index([businessId])
-    @@index([feature])
-    @@index([entityName, entityId])
-    @@index([createdAt])
-    @@map("system_audit_logs")
+  @@index([userId])
+  @@index([businessId])
+  @@index([feature])
+  @@index([entityName, entityId])
+  @@index([createdAt])
+  @@map("system_audit_logs")
 }
