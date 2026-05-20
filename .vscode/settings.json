@@ -3,6 +3,7 @@
         "autoincrement",
         "Backorder",
         "Onecomm",
-        "Timestamptz"
+        "Timestamptz",
+        "Utsho"
     ]
 }

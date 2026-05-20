@@ -16,6 +16,8 @@ import { BusinessModule } from "./modules/business/business.module";
 import { EmployeeModule } from "./modules/employees/employee.module";
 import { PermissionModule } from "./modules/permissions/permission.module";
 import { ProductCatalogModule } from "./modules/product-catalog/product-catalog.module";
+import { InventoryModule } from "./modules/inventory/inventory.module";
+import { SupplierModule } from "./modules/suppliers/supplier.module";
 
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { RequestLoggerMiddleware } from "./common/middlewares/request-logger.middleware";
@@ -41,6 +43,8 @@ import { RequestContextMiddleware } from "./common/request-context/request-conte
     PermissionModule,
     EmployeeModule,
     ProductCatalogModule,
+    InventoryModule,
+    SupplierModule,
   ],
   controllers: [AppController],
   providers: [
