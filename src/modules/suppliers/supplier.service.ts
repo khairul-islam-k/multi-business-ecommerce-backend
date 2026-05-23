@@ -571,20 +571,6 @@ export class SupplierService {
           },
         });
 
-        await tx.inventoryStockBatch.create({
-          data: {
-            businessId,
-            warehouseId: purchaseOrder.warehouseId,
-            productId: orderItem.productId,
-            variantId: orderItem.variantId,
-            batchNo: this.normalizeName(receivedItem.batchNo),
-            quantityReceived,
-            quantityRemaining: quantityReceived,
-            unitCost: orderItem.unitCost,
-            expiryDate: receivedItem.expiryDate,
-          },
-        });
-
         await this.inventoryLookup.applyStockDelta(tx, {
           businessId,
           warehouseId: purchaseOrder.warehouseId,

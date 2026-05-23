@@ -51,27 +51,39 @@ export class ProductVariantService {
     await this.lookup.assertBarcodeAvailable(businessId, dto.barcode);
 
     try {
-      const variant = await this.prisma.productVariant.create({
-        data: {
-          businessId,
-          productId,
-          title: this.lookup.normalizeName(dto.title),
-          sku: this.lookup.normalizeNullableText(dto.sku),
-          barcode: this.lookup.normalizeNullableText(dto.barcode),
-          price: dto.price,
-          weight: dto.weight ?? null,
-          status: dto.status ?? ProductVariantStatus.ACTIVE,
-          createdBy: currentUser.id,
-          updatedBy: currentUser.id,
-          attributes: this.buildAttributeCreate(attributes),
-          images: this.buildImageCreate(
+      const variant = await this.prisma.$transaction(async (tx) => {
+        const createdVariant = await tx.productVariant.create({
+          data: {
             businessId,
             productId,
-            currentUser.id,
-            dto.images,
-          ),
-        },
-        include: VARIANT_INCLUDE,
+            title: this.lookup.normalizeName(dto.title),
+            sku: this.lookup.normalizeNullableText(dto.sku),
+            barcode: this.lookup.normalizeNullableText(dto.barcode),
+            price: dto.price,
+            weight: dto.weight ?? null,
+            status: dto.status ?? ProductVariantStatus.ACTIVE,
+            createdBy: currentUser.id,
+            updatedBy: currentUser.id,
+            attributes: this.buildAttributeCreate(attributes),
+            images: this.buildImageCreate(
+              businessId,
+              productId,
+              currentUser.id,
+              dto.images,
+            ),
+          },
+          include: VARIANT_INCLUDE,
+        });
+
+        await tx.inventoryStock.create({
+          data: {
+            businessId,
+            productId,
+            variantId: createdVariant.id,
+          },
+        });
+
+        return createdVariant;
       });
 
       return apiResponse(variant, "Product variant created successfully");
@@ -206,13 +218,19 @@ export class ProductVariantService {
     await this.lookup.assertVariantExists(businessId, productId, variantId);
     await this.assertVariantCanBeDeleted(businessId, variantId);
 
-    await this.prisma.productVariant.update({
-      where: { id: variantId },
-      data: {
-        status: ProductVariantStatus.INACTIVE,
-        deletedAt: new Date(),
-        updatedBy: currentUser.id,
-      },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.productVariant.update({
+        where: { id: variantId },
+        data: {
+          status: ProductVariantStatus.INACTIVE,
+          deletedAt: new Date(),
+          updatedBy: currentUser.id,
+        },
+      });
+
+      await tx.inventoryStock.deleteMany({
+        where: { businessId, variantId },
+      });
     });
 
     return apiResponse(null, "Product variant deleted successfully");
@@ -258,8 +276,14 @@ export class ProductVariantService {
     variantId: string,
   ) {
     const referenceCounts = await Promise.all([
-      this.prisma.inventoryStock.count({ where: { businessId, variantId } }),
-      this.prisma.inventoryStockBatch.count({
+      this.prisma.inventoryStock.count({
+        where: {
+          businessId,
+          variantId,
+          OR: [{ totalQuantity: { not: 0 } }, { quantityReserved: { not: 0 } }],
+        },
+      }),
+      this.prisma.inventoryWarehouseStock.count({
         where: { businessId, variantId },
       }),
       this.prisma.inventoryStockMovement.count({
@@ -282,6 +306,9 @@ export class ProductVariantService {
         where: { variantId },
       }),
       this.prisma.courierShipmentItem.count({ where: { variantId } }),
+      this.prisma.inventoryOrderAllocation.count({
+        where: { businessId, variantId },
+      }),
     ]);
 
     if (referenceCounts.some((count) => count > 0)) {

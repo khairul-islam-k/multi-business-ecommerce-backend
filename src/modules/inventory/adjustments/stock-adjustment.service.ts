@@ -51,7 +51,7 @@ export class StockAdjustmentService {
           item.variantId,
         );
 
-        const stock = await this.lookup.getStock(
+        const warehouseStock = await this.lookup.getWarehouseStock(
           businessId,
           dto.warehouseId,
           item.variantId,
@@ -60,7 +60,7 @@ export class StockAdjustmentService {
         return {
           productId: item.productId,
           variantId: item.variantId,
-          oldQuantity: stock?.totalQuantity ?? 0,
+          oldQuantity: warehouseStock?.totalQuantity ?? 0,
           adjustmentQty: item.adjustmentQty,
           reason: this.lookup.normalizeNullableText(item.reason),
         };
@@ -115,16 +115,15 @@ export class StockAdjustmentService {
         : {}),
     };
 
-    const [items, total] = await Promise.all([
-      this.prisma.inventoryStockAdjustment.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-        include: ADJUSTMENT_INCLUDE,
-      }),
-      this.prisma.inventoryStockAdjustment.count({ where }),
-    ]);
+    const items = await this.prisma.inventoryStockAdjustment.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      include: ADJUSTMENT_INCLUDE,
+    });
+
+    const total = await this.prisma.inventoryStockAdjustment.count({ where });
 
     return paginatedResponse(items, {
       page,
