@@ -191,11 +191,6 @@ export class PurchaseOrderItemDto {
 }
 
 export class CreatePurchaseOrderDto {
-  @ApiProperty({ example: "PO-0001" })
-  @IsString()
-  @MaxLength(100)
-  purchaseOrderNo!: string;
-
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsUUID()
   supplierId!: string;

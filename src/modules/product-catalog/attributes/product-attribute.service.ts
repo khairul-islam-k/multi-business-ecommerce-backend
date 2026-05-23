@@ -39,6 +39,7 @@ export class ProductAttributeService {
     dto: CreateProductAttributeDto,
   ) {
     await this.lookup.assertProductExists(businessId, productId);
+    await this.assertAttributeNameAvailable(businessId, productId, dto.name);
 
     const values = this.normalizeValues(dto.values);
 
@@ -95,6 +96,15 @@ export class ProductAttributeService {
     dto: UpdateProductAttributeDto,
   ) {
     await this.findAttributeOrThrow(businessId, productId, attributeId);
+
+    if (dto.name !== undefined) {
+      await this.assertAttributeNameAvailable(
+        businessId,
+        productId,
+        dto.name,
+        attributeId,
+      );
+    }
 
     try {
       const attribute = await this.prisma.productAttribute.update({
@@ -264,6 +274,30 @@ export class ProductAttributeService {
     }
 
     return value;
+  }
+
+  private async assertAttributeNameAvailable(
+    businessId: string,
+    productId: string,
+    name: string,
+    excludeAttributeId?: string,
+  ) {
+    const attribute = await this.prisma.productAttribute.findFirst({
+      where: {
+        businessId,
+        productId,
+        name: this.lookup.normalizeName(name),
+        deletedAt: null,
+        ...(excludeAttributeId ? { id: { not: excludeAttributeId } } : {}),
+      },
+      select: { id: true },
+    });
+
+    if (attribute) {
+      throw new BadRequestException(
+        "Product attribute name already exists for this product",
+      );
+    }
   }
 
   private normalizeValues(values: CreateProductAttributeValueDto[] = []) {

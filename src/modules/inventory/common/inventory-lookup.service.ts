@@ -12,7 +12,10 @@ import {
 } from "@prisma/client";
 
 import { PrismaService } from "../../../prisma/prisma.service";
+import { generateRandomCode } from "../../../common/utils/code-generator.util";
 import { ProductCatalogLookupService } from "../../product-catalog/common/product-catalog-lookup.service";
+
+const INVENTORY_CODE_RETRY_LIMIT = 5;
 
 @Injectable()
 export class InventoryLookupService {
@@ -100,6 +103,42 @@ export class InventoryLookupService {
         variantId: params.variantId,
       },
     });
+  }
+
+  async generateUniqueAdjustmentNo(businessId: string) {
+    for (let attempt = 0; attempt < INVENTORY_CODE_RETRY_LIMIT; attempt++) {
+      const adjustmentNo = generateRandomCode("ADJ");
+
+      const existingAdjustment =
+        await this.prisma.inventoryStockAdjustment.findFirst({
+          where: { businessId, adjustmentNo },
+          select: { id: true },
+        });
+
+      if (!existingAdjustment) {
+        return adjustmentNo;
+      }
+    }
+
+    throw new BadRequestException("Could not generate stock adjustment number");
+  }
+
+  async generateUniqueTransferNo(businessId: string) {
+    for (let attempt = 0; attempt < INVENTORY_CODE_RETRY_LIMIT; attempt++) {
+      const transferNo = generateRandomCode("TRF");
+
+      const existingTransfer =
+        await this.prisma.inventoryStockTransfer.findFirst({
+          where: { businessId, transferNo },
+          select: { id: true },
+        });
+
+      if (!existingTransfer) {
+        return transferNo;
+      }
+    }
+
+    throw new BadRequestException("Could not generate stock transfer number");
   }
 
   async applyStockDelta(

@@ -60,11 +60,13 @@ export class StockTransferService {
       ),
     ]);
 
+    const transferNo = await this.lookup.generateUniqueTransferNo(businessId);
+
     try {
       const transfer = await this.prisma.inventoryStockTransfer.create({
         data: {
           businessId,
-          transferNo: this.lookup.normalizeName(dto.transferNo),
+          transferNo,
           fromWarehouseId: dto.fromWarehouseId,
           toWarehouseId: dto.toWarehouseId,
           status: InventoryTransferStatus.DRAFT,

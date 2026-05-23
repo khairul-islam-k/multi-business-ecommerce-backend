@@ -47,8 +47,10 @@ export class ProductVariantService {
       dto.attributes,
     );
 
-    await this.lookup.assertSkuAvailable(businessId, dto.sku);
-    await this.lookup.assertBarcodeAvailable(businessId, dto.barcode);
+    const [sku, barcode] = await Promise.all([
+      this.lookup.generateUniqueVariantSku(businessId),
+      this.lookup.generateUniqueVariantBarcode(businessId),
+    ]);
 
     try {
       const variant = await this.prisma.$transaction(async (tx) => {
@@ -57,8 +59,8 @@ export class ProductVariantService {
             businessId,
             productId,
             title: this.lookup.normalizeName(dto.title),
-            sku: this.lookup.normalizeNullableText(dto.sku),
-            barcode: this.lookup.normalizeNullableText(dto.barcode),
+            sku,
+            barcode,
             price: dto.price,
             weight: dto.weight ?? null,
             status: dto.status ?? ProductVariantStatus.ACTIVE,
@@ -138,11 +140,6 @@ export class ProductVariantService {
           )
         : undefined;
 
-    await this.lookup.assertSkuAvailable(businessId, dto.sku, { variantId });
-    await this.lookup.assertBarcodeAvailable(businessId, dto.barcode, {
-      variantId,
-    });
-
     try {
       const variant = await this.prisma.$transaction(async (tx) => {
         if (attributes !== undefined) {
@@ -161,12 +158,6 @@ export class ProductVariantService {
           data: {
             ...(dto.title !== undefined && {
               title: this.lookup.normalizeName(dto.title),
-            }),
-            ...(dto.sku !== undefined && {
-              sku: this.lookup.normalizeNullableText(dto.sku),
-            }),
-            ...(dto.barcode !== undefined && {
-              barcode: this.lookup.normalizeNullableText(dto.barcode),
             }),
             ...(dto.price !== undefined && { price: dto.price }),
             ...(dto.weight !== undefined && { weight: dto.weight }),
@@ -190,10 +181,7 @@ export class ProductVariantService {
 
       return apiResponse(variant, "Product variant updated successfully");
     } catch (error) {
-      this.lookup.handleUniqueError(
-        error,
-        "Variant SKU, barcode, or attribute already exists",
-      );
+      this.lookup.handleUniqueError(error, "Variant attribute already exists");
     }
   }
 

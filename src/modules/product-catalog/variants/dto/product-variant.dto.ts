@@ -30,18 +30,6 @@ export class CreateProductVariantDto extends ProductImagesDto {
   @MaxLength(200)
   title!: string;
 
-  @ApiPropertyOptional({ example: "SKU-RED-XL" })
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  sku?: string;
-
-  @ApiPropertyOptional({ example: "0123456789012" })
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  barcode?: string;
-
   @ApiProperty({ example: 1200 })
   @Type(() => Number)
   @IsNumber()

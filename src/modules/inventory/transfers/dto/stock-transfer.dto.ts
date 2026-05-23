@@ -6,7 +6,6 @@ import {
   IsString,
   IsUUID,
   Max,
-  MaxLength,
   Min,
   ValidateNested,
 } from "class-validator";
@@ -29,11 +28,6 @@ export class StockTransferItemDto {
 }
 
 export class CreateStockTransferDto {
-  @ApiProperty({ example: "TRF-0001" })
-  @IsString()
-  @MaxLength(100)
-  transferNo!: string;
-
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsUUID()
   fromWarehouseId!: string;

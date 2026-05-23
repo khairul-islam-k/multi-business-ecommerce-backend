@@ -17,6 +17,7 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
+import { generateRandomCode } from "../../common/utils/code-generator.util";
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { InventoryLookupService } from "../inventory/common/inventory-lookup.service";
 import {
@@ -55,6 +56,8 @@ const ORDER_MANUAL_STATUSES: SupplierPurchaseOrderStatus[] = [
   SupplierPurchaseOrderStatus.ORDERED,
   SupplierPurchaseOrderStatus.CANCELLED,
 ];
+
+const SUPPLIER_CODE_RETRY_LIMIT = 5;
 
 @Injectable()
 export class SupplierService {
@@ -335,6 +338,8 @@ export class SupplierService {
     ]);
 
     const totals = this.calculateOrderTotals(dto.items, dto.shippingCost ?? 0);
+    const purchaseOrderNo =
+      await this.generateUniquePurchaseOrderNo(businessId);
 
     try {
       const purchaseOrder = await this.prisma.supplierPurchaseOrder.create({
@@ -342,7 +347,7 @@ export class SupplierService {
           businessId,
           supplierId: dto.supplierId,
           warehouseId: dto.warehouseId,
-          purchaseOrderNo: this.normalizeName(dto.purchaseOrderNo),
+          purchaseOrderNo,
           orderDate: dto.orderDate,
           expectedDeliveryDate: dto.expectedDeliveryDate,
           status: dto.status ?? SupplierPurchaseOrderStatus.DRAFT,
@@ -777,6 +782,27 @@ export class SupplierService {
       shippingCost,
       totalAmount: subtotal - discountTotal + taxTotal + shippingCost,
     };
+  }
+
+  private async generateUniquePurchaseOrderNo(businessId: string) {
+    for (let attempt = 0; attempt < SUPPLIER_CODE_RETRY_LIMIT; attempt++) {
+      const purchaseOrderNo = generateRandomCode("PO");
+
+      const existingPurchaseOrder =
+        await this.prisma.supplierPurchaseOrder.findFirst({
+          where: {
+            businessId,
+            purchaseOrderNo,
+          },
+          select: { id: true },
+        });
+
+      if (!existingPurchaseOrder) {
+        return purchaseOrderNo;
+      }
+    }
+
+    throw new BadRequestException("Could not generate purchase order number");
   }
 
   private calculateLineTotal(item: {

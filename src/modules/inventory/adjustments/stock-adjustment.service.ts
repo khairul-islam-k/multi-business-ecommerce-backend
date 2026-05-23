@@ -42,6 +42,8 @@ export class StockAdjustmentService {
   ) {
     this.assertItems(dto.items);
     await this.lookup.assertWarehouseExists(businessId, dto.warehouseId);
+    const adjustmentNo =
+      await this.lookup.generateUniqueAdjustmentNo(businessId);
 
     const items = await Promise.all(
       dto.items.map(async (item) => {
@@ -72,7 +74,7 @@ export class StockAdjustmentService {
         data: {
           businessId,
           warehouseId: dto.warehouseId,
-          adjustmentNo: this.lookup.normalizeName(dto.adjustmentNo),
+          adjustmentNo,
           adjustmentType: dto.adjustmentType,
           reason: this.lookup.normalizeNullableText(dto.reason),
           status: InventoryAdjustmentStatus.DRAFT,

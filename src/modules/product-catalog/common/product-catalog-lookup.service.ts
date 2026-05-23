@@ -7,10 +7,12 @@ import {
 import { Prisma, ProductSimpleStatus } from "@prisma/client";
 
 import { PrismaService } from "../../../prisma/prisma.service";
+import { generateRandomCode } from "../../../common/utils/code-generator.util";
 import { generateRandomSlug } from "../../../common/utils/slug-generator.util";
 
 const PRODUCT_SLUG_MAX_LENGTH = 220;
 const PRODUCT_SLUG_RETRY_LIMIT = 5;
+const PRODUCT_CODE_RETRY_LIMIT = 5;
 
 @Injectable()
 export class ProductCatalogLookupService {
@@ -303,6 +305,14 @@ export class ProductCatalogLookupService {
     throw new ConflictException("Could not generate a unique product slug");
   }
 
+  async generateUniqueVariantSku(businessId: string) {
+    return this.generateUniqueVariantCode(businessId, "SKU", "sku");
+  }
+
+  async generateUniqueVariantBarcode(businessId: string) {
+    return this.generateUniqueVariantCode(businessId, "BAR", "barcode");
+  }
+
   normalizeName(value: string) {
     return value.trim();
   }
@@ -374,6 +384,31 @@ export class ProductCatalogLookupService {
     if (!unit) {
       throw new BadRequestException("Unit is invalid");
     }
+  }
+
+  private async generateUniqueVariantCode(
+    businessId: string,
+    prefix: string,
+    field: "sku" | "barcode",
+  ) {
+    for (let attempt = 0; attempt < PRODUCT_CODE_RETRY_LIMIT; attempt++) {
+      const code = generateRandomCode(prefix);
+
+      const existingVariant = await this.prisma.productVariant.findFirst({
+        where: {
+          businessId,
+          [field]: code,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+
+      if (!existingVariant) {
+        return code;
+      }
+    }
+
+    throw new ConflictException(`Could not generate a unique variant ${field}`);
   }
 
   private async assertCategoryParentDoesNotCreateCycle(

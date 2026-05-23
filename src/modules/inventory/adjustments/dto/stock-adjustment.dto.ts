@@ -7,7 +7,6 @@ import {
   IsString,
   IsUUID,
   Max,
-  MaxLength,
   Min,
   ValidateNested,
 } from "class-validator";
@@ -36,11 +35,6 @@ export class StockAdjustmentItemDto {
 }
 
 export class CreateStockAdjustmentDto {
-  @ApiProperty({ example: "ADJ-0001" })
-  @IsString()
-  @MaxLength(100)
-  adjustmentNo!: string;
-
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsUUID()
   warehouseId!: string;
