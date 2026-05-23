@@ -18,6 +18,8 @@ import { PermissionModule } from "./modules/permissions/permission.module";
 import { ProductCatalogModule } from "./modules/product-catalog/product-catalog.module";
 import { InventoryModule } from "./modules/inventory/inventory.module";
 import { SupplierModule } from "./modules/suppliers/supplier.module";
+import { OrderModule } from "./modules/orders/order.module";
+import { PosModule } from "./modules/pos/pos.module";
 
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { RequestLoggerMiddleware } from "./common/middlewares/request-logger.middleware";
@@ -45,6 +47,8 @@ import { RequestContextMiddleware } from "./common/request-context/request-conte
     ProductCatalogModule,
     InventoryModule,
     SupplierModule,
+    OrderModule,
+    PosModule,
   ],
   controllers: [AppController],
   providers: [

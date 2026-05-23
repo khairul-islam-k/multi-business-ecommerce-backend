@@ -95,9 +95,10 @@ model FinanceAccount {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  transactions FinanceAccountTransaction[]
-  expenses     FinanceExpense[]
-  journalLines FinanceJournalEntryLine[]
+  transactions  FinanceAccountTransaction[]
+  expenses      FinanceExpense[]
+  journalLines  FinanceJournalEntryLine[]
+  orderPayments OrderPayment[]
 
   @@unique([businessId, name])
   @@index([businessId])

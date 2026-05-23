@@ -203,6 +203,69 @@ export class PackageLimitService {
       });
     }
 
+    if (limitKey === PackageLimitKey.MAX_CATEGORIES) {
+      return this.prisma.productCategory.count({
+        where: {
+          deletedAt: null,
+          business: activeBusinessWhere,
+        },
+      });
+    }
+
+    if (limitKey === PackageLimitKey.MAX_BRANDS) {
+      return this.prisma.productBrand.count({
+        where: {
+          deletedAt: null,
+          business: activeBusinessWhere,
+        },
+      });
+    }
+
+    if (limitKey === PackageLimitKey.MAX_UNITS) {
+      return this.prisma.productUnit.count({
+        where: {
+          deletedAt: null,
+          business: activeBusinessWhere,
+        },
+      });
+    }
+
+    if (limitKey === PackageLimitKey.MAX_TAGS) {
+      return this.prisma.productTag.count({
+        where: {
+          deletedAt: null,
+          business: activeBusinessWhere,
+        },
+      });
+    }
+
+    if (limitKey === PackageLimitKey.MAX_PRODUCTS) {
+      return this.prisma.product.count({
+        where: {
+          deletedAt: null,
+          business: activeBusinessWhere,
+        },
+      });
+    }
+
+    if (limitKey === PackageLimitKey.MAX_VARIANTS) {
+      return this.prisma.productVariant.count({
+        where: {
+          deletedAt: null,
+          business: activeBusinessWhere,
+        },
+      });
+    }
+
+    if (limitKey === PackageLimitKey.MAX_ATTRIBUTES) {
+      return this.prisma.productAttribute.count({
+        where: {
+          deletedAt: null,
+          business: activeBusinessWhere,
+        },
+      });
+    }
+
     return Promise.resolve(0);
   }
 
