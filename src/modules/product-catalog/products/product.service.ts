@@ -273,6 +273,10 @@ export class ProductService {
           data: { deletedAt: new Date(), updatedBy: currentUser.id },
         });
       }
+
+      await tx.inventoryStock.deleteMany({
+        where: { businessId, productId },
+      });
     });
 
     return apiResponse(null, "Product deleted successfully");
@@ -309,8 +313,14 @@ export class ProductService {
     productId: string,
   ) {
     const referenceCounts = await Promise.all([
-      this.prisma.inventoryStock.count({ where: { businessId, productId } }),
-      this.prisma.inventoryStockBatch.count({
+      this.prisma.inventoryStock.count({
+        where: {
+          businessId,
+          productId,
+          OR: [{ totalQuantity: { not: 0 } }, { quantityReserved: { not: 0 } }],
+        },
+      }),
+      this.prisma.inventoryWarehouseStock.count({
         where: { businessId, productId },
       }),
       this.prisma.inventoryStockMovement.count({
@@ -333,6 +343,9 @@ export class ProductService {
         where: { productId },
       }),
       this.prisma.courierShipmentItem.count({ where: { productId } }),
+      this.prisma.inventoryOrderAllocation.count({
+        where: { businessId, productId },
+      }),
     ]);
 
     if (referenceCounts.some((count) => count > 0)) {

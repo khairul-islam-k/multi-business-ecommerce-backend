@@ -309,17 +309,6 @@ export class ReceivePurchaseOrderItemDto {
   @IsNumber()
   @Min(0.001)
   quantityReceived!: number;
-
-  @ApiProperty({ example: "BATCH-0001" })
-  @IsString()
-  @MaxLength(100)
-  batchNo!: string;
-
-  @ApiPropertyOptional({ example: "2027-05-20T00:00:00.000Z" })
-  @IsOptional()
-  @Type(() => Date)
-  @IsDate()
-  expiryDate?: Date;
 }
 
 export class ReceivePurchaseOrderDto {

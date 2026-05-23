@@ -53,6 +53,12 @@ enum InventoryTransferStatus {
   CANCELLED
 }
 
+enum InventoryOrderAllocationStatus {
+  RESERVED
+  FULFILLED
+  RELEASED
+}
+
 // ======================================================
 // Models
 // ======================================================
@@ -72,10 +78,10 @@ model Warehouse {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  stocks      InventoryStock[]
-  batches     InventoryStockBatch[]
+  stocks      InventoryWarehouseStock[]
   movements   InventoryStockMovement[]
   adjustments InventoryStockAdjustment[]
+  allocations InventoryOrderAllocation[]
 
   transfersFrom InventoryStockTransfer[] @relation("TransferFromWarehouse")
   transfersTo   InventoryStockTransfer[] @relation("TransferToWarehouse")
@@ -88,11 +94,10 @@ model Warehouse {
 }
 
 model InventoryStock {
-  id          String @id @default(uuid()) @db.Uuid
-  businessId  String @map("business_id") @db.Uuid
-  warehouseId String @map("warehouse_id") @db.Uuid
-  productId   String @map("product_id") @db.Uuid
-  variantId   String @map("variant_id") @db.Uuid
+  id         String @id @default(uuid()) @db.Uuid
+  businessId String @map("business_id") @db.Uuid
+  productId  String @map("product_id") @db.Uuid
+  variantId  String @map("variant_id") @db.Uuid
 
   totalQuantity    Decimal @default(0) @map("total_quantity") @db.Decimal(14, 3)
   quantityReserved Decimal @default(0) @map("quantity_reserved") @db.Decimal(14, 3)
@@ -101,48 +106,48 @@ model InventoryStock {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  warehouseStocks InventoryWarehouseStock[]
+  movements       InventoryStockMovement[]
+  allocations     InventoryOrderAllocation[]
 
-  @@unique([businessId, warehouseId, variantId])
+  @@unique([businessId, variantId])
   @@index([businessId])
-  @@index([warehouseId])
   @@index([productId])
   @@index([variantId])
   @@map("inventory_stocks")
 }
 
-model InventoryStockBatch {
+model InventoryWarehouseStock {
   id          String @id @default(uuid()) @db.Uuid
   businessId  String @map("business_id") @db.Uuid
+  stockId     String @map("stock_id") @db.Uuid
   warehouseId String @map("warehouse_id") @db.Uuid
   productId   String @map("product_id") @db.Uuid
   variantId   String @map("variant_id") @db.Uuid
 
-  batchNo           String  @map("batch_no") @db.VarChar(100)
-  quantityReceived  Decimal @default(0) @map("quantity_received") @db.Decimal(14, 3)
-  quantityRemaining Decimal @default(0) @map("quantity_remaining") @db.Decimal(14, 3)
-  unitCost          Decimal @default(0) @map("unit_cost") @db.Decimal(12, 2)
-
-  receivedAt DateTime  @default(now()) @map("received_at")
-  expiryDate DateTime? @map("expiry_date")
+  totalQuantity    Decimal @default(0) @map("total_quantity") @db.Decimal(14, 3)
+  quantityReserved Decimal @default(0) @map("quantity_reserved") @db.Decimal(14, 3)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  stock     InventoryStock @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  warehouse Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
 
+  @@unique([businessId, warehouseId, stockId])
+  @@unique([businessId, warehouseId, variantId])
   @@index([businessId])
+  @@index([stockId])
   @@index([warehouseId])
   @@index([productId])
   @@index([variantId])
-  @@index([batchNo])
-  @@index([expiryDate])
-  @@map("inventory_stock_batches")
+  @@map("inventory_warehouse_stocks")
 }
 
 model InventoryStockMovement {
   id          String @id @default(uuid()) @db.Uuid
   businessId  String @map("business_id") @db.Uuid
+  stockId     String @map("stock_id") @db.Uuid
   warehouseId String @map("warehouse_id") @db.Uuid
   productId   String @map("product_id") @db.Uuid
   variantId   String @map("variant_id") @db.Uuid
@@ -157,9 +162,11 @@ model InventoryStockMovement {
   createdBy String?  @map("created_by") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at")
 
-  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  stock     InventoryStock @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  warehouse Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
 
   @@index([businessId])
+  @@index([stockId])
   @@index([warehouseId])
   @@index([productId])
   @@index([variantId])
@@ -167,6 +174,39 @@ model InventoryStockMovement {
   @@index([referenceType, referenceId])
   @@index([createdAt])
   @@map("inventory_stock_movements")
+}
+
+model InventoryOrderAllocation {
+  id          String @id @default(uuid()) @db.Uuid
+  businessId  String @map("business_id") @db.Uuid
+  orderId     String @map("order_id") @db.Uuid
+  orderItemId String @map("order_item_id") @db.Uuid
+  stockId     String @map("stock_id") @db.Uuid
+  warehouseId String @map("warehouse_id") @db.Uuid
+  productId   String @map("product_id") @db.Uuid
+  variantId   String @map("variant_id") @db.Uuid
+
+  quantity Decimal                        @db.Decimal(14, 3)
+  status   InventoryOrderAllocationStatus @default(RESERVED)
+
+  createdBy   String?   @map("created_by") @db.Uuid
+  fulfilledAt DateTime? @map("fulfilled_at")
+  releasedAt  DateTime? @map("released_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  stock     InventoryStock @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  warehouse Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([orderId])
+  @@index([orderItemId])
+  @@index([stockId])
+  @@index([warehouseId])
+  @@index([productId])
+  @@index([variantId])
+  @@index([status])
+  @@map("inventory_order_allocations")
 }
 
 model InventoryStockAdjustment {

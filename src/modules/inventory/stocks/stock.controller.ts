@@ -18,7 +18,13 @@ import { BusinessGuard } from "../../business/guards/business.guard";
 import { SubscriptionGuard } from "../../packages/guards/subscription.guard";
 import { RequirePermission } from "../../permissions/decorators/require-permission.decorator";
 import { PermissionGuard } from "../../permissions/guards/permission.guard";
-import { QueryStockDto, UpdateStockAlertDto } from "./dto/stock.dto";
+import {
+  FulfillOrderAllocationDto,
+  QueryStockDto,
+  ReleaseOrderAllocationDto,
+  ReserveOrderStockDto,
+  UpdateStockAlertDto,
+} from "./dto/stock.dto";
 import { StockService } from "./stock.service";
 
 @ApiTags("Stocks")
@@ -56,6 +62,39 @@ export class StockController {
     @Param("stockId", ParseUUIDPipe) stockId: string,
   ) {
     return this.stocks.findOne(businessId, stockId);
+  }
+
+  @RequirePermission(RbacFeature.INVENTORY_MANAGEMENT, PermissionAction.UPDATE)
+  @Patch("orders/reserve")
+  @ApiOperation({ summary: "Reserve stock for order item" })
+  reserveForOrder(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Body() dto: ReserveOrderStockDto,
+  ) {
+    return this.stocks.reserveForOrder(user, businessId, dto);
+  }
+
+  @RequirePermission(RbacFeature.INVENTORY_MANAGEMENT, PermissionAction.UPDATE)
+  @Patch("orders/release")
+  @ApiOperation({ summary: "Release order stock reservation" })
+  releaseOrderAllocation(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Body() dto: ReleaseOrderAllocationDto,
+  ) {
+    return this.stocks.releaseOrderAllocation(user, businessId, dto);
+  }
+
+  @RequirePermission(RbacFeature.INVENTORY_MANAGEMENT, PermissionAction.UPDATE)
+  @Patch("orders/fulfill")
+  @ApiOperation({ summary: "Fulfill order stock allocation" })
+  fulfillOrderAllocation(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Body() dto: FulfillOrderAllocationDto,
+  ) {
+    return this.stocks.fulfillOrderAllocation(user, businessId, dto);
   }
 
   @RequirePermission(RbacFeature.INVENTORY_MANAGEMENT, PermissionAction.UPDATE)

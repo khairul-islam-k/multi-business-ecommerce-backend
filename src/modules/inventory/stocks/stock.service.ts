@@ -7,15 +7,28 @@ import {
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { QueryStockDto, UpdateStockAlertDto } from "./dto/stock.dto";
+import { InventoryLookupService } from "../common/inventory-lookup.service";
+import {
+  FulfillOrderAllocationDto,
+  QueryStockDto,
+  ReleaseOrderAllocationDto,
+  ReserveOrderStockDto,
+  UpdateStockAlertDto,
+} from "./dto/stock.dto";
 
 const STOCK_INCLUDE = {
-  warehouse: true,
+  warehouseStocks: {
+    include: { warehouse: true },
+    orderBy: { updatedAt: "desc" },
+  },
 } satisfies Prisma.InventoryStockInclude;
 
 @Injectable()
 export class StockService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly lookup: InventoryLookupService,
+  ) {}
 
   async findAll(businessId: string, query: QueryStockDto) {
     const page = query.page ?? 1;
@@ -24,15 +37,25 @@ export class StockService {
 
     const where: Prisma.InventoryStockWhereInput = {
       businessId,
-      ...(query.warehouseId ? { warehouseId: query.warehouseId } : {}),
       ...(query.productId ? { productId: query.productId } : {}),
       ...(query.variantId ? { variantId: query.variantId } : {}),
+      ...(query.warehouseId
+        ? {
+            warehouseStocks: {
+              some: { warehouseId: query.warehouseId },
+            },
+          }
+        : {}),
       ...(query.search
         ? {
             OR: [
               {
-                warehouse: {
-                  name: { contains: query.search, mode: "insensitive" },
+                warehouseStocks: {
+                  some: {
+                    warehouse: {
+                      name: { contains: query.search, mode: "insensitive" },
+                    },
+                  },
                 },
               },
             ],
@@ -107,7 +130,7 @@ export class StockService {
         skip,
         take: limit,
         orderBy: { createdAt: "desc" },
-        include: { warehouse: true },
+        include: { stock: true, warehouse: true },
       }),
       this.prisma.inventoryStockMovement.count({ where }),
     ]);
@@ -120,6 +143,61 @@ export class StockService {
     });
   }
 
+  async reserveForOrder(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    dto: ReserveOrderStockDto,
+  ) {
+    await this.assertOrderItemMatchesRequest(businessId, dto);
+
+    const allocation = await this.prisma.$transaction((tx) =>
+      this.lookup.reserveForOrder(tx, {
+        businessId,
+        orderId: dto.orderId,
+        orderItemId: dto.orderItemId,
+        productId: dto.productId,
+        variantId: dto.variantId,
+        quantity: dto.quantity,
+        warehouseId: dto.warehouseId,
+        createdBy: currentUser.id,
+      }),
+    );
+
+    return apiResponse(allocation, "Order stock reserved successfully");
+  }
+
+  async releaseOrderAllocation(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    dto: ReleaseOrderAllocationDto,
+  ) {
+    const allocation = await this.prisma.$transaction((tx) =>
+      this.lookup.releaseOrderReservation(
+        tx,
+        { businessId, allocationId: dto.allocationId },
+        currentUser.id,
+      ),
+    );
+
+    return apiResponse(allocation, "Order stock reservation released");
+  }
+
+  async fulfillOrderAllocation(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    dto: FulfillOrderAllocationDto,
+  ) {
+    const allocation = await this.prisma.$transaction((tx) =>
+      this.lookup.fulfillOrderAllocation(
+        tx,
+        { businessId, allocationId: dto.allocationId },
+        currentUser.id,
+      ),
+    );
+
+    return apiResponse(allocation, "Order stock allocation fulfilled");
+  }
+
   private async findStockOrThrow(businessId: string, stockId: string) {
     const stock = await this.prisma.inventoryStock.findFirst({
       where: { id: stockId, businessId },
@@ -128,6 +206,29 @@ export class StockService {
 
     if (!stock) {
       throw new NotFoundException("Stock not found");
+    }
+  }
+
+  private async assertOrderItemMatchesRequest(
+    businessId: string,
+    dto: ReserveOrderStockDto,
+  ) {
+    const orderItem = await this.prisma.orderOrderItem.findFirst({
+      where: {
+        id: dto.orderItemId,
+        orderId: dto.orderId,
+        productId: dto.productId,
+        variantId: dto.variantId,
+        order: {
+          businessId,
+          deletedAt: null,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!orderItem) {
+      throw new NotFoundException("Order item not found");
     }
   }
 }

@@ -22,7 +22,6 @@ const WAREHOUSE_INCLUDE = {
   _count: {
     select: {
       stocks: true,
-      batches: true,
       movements: true,
     },
   },
@@ -181,7 +180,7 @@ export class WarehouseService {
     warehouseId: string,
   ) {
     const referenceCounts = await Promise.all([
-      this.prisma.inventoryStock.count({
+      this.prisma.inventoryWarehouseStock.count({
         where: { businessId, warehouseId },
       }),
       this.prisma.inventoryStockMovement.count({
