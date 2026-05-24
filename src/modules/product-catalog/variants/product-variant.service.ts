@@ -16,6 +16,9 @@ import {
 } from "./dto/product-variant.dto";
 
 const VARIANT_INCLUDE = {
+  product: {
+    select: { name: true },
+  },
   attributes: {
     include: {
       attribute: true,
