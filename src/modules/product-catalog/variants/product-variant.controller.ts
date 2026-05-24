@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
@@ -24,6 +25,7 @@ import type { CurrentUserPayload } from "../../auth/decorators/current-user.deco
 import { ProductVariantService } from "./product-variant.service";
 import {
   CreateProductVariantDto,
+  QueryProductVariantDto,
   UpdateProductVariantAttributesDto,
   UpdateProductVariantDto,
 } from "./dto/product-variant.dto";
@@ -68,8 +70,9 @@ export class ProductVariantController {
   findAll(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("productId", ParseUUIDPipe) productId: string,
+    @Query() query: QueryProductVariantDto,
   ) {
-    return this.variants.findAll(businessId, productId);
+    return this.variants.findAll(businessId, productId, query);
   }
 
   @RequirePermission(

@@ -66,3 +66,10 @@ export class UpdateProductVariantAttributesDto {
 export class UpdateProductVariantDto extends PartialType(
   CreateProductVariantDto,
 ) {}
+
+export class QueryProductVariantDto {
+  @ApiPropertyOptional({ example: "red" })
+  @IsOptional()
+  @IsString()
+  search?: string;
+}

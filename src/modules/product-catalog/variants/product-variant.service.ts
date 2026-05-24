@@ -12,6 +12,7 @@ import { ProductCatalogLookupService } from "../common/product-catalog-lookup.se
 import {
   CreateProductVariantDto,
   ProductVariantAttributeInputDto,
+  QueryProductVariantDto,
   UpdateProductVariantDto,
 } from "./dto/product-variant.dto";
 
@@ -100,11 +101,49 @@ export class ProductVariantService {
     }
   }
 
-  async findAll(businessId: string, productId: string) {
+  async findAll(
+    businessId: string,
+    productId: string,
+    query: QueryProductVariantDto,
+  ) {
     await this.lookup.assertProductExists(businessId, productId);
 
+    const search = query.search?.trim();
+    const where: Prisma.ProductVariantWhereInput = {
+      businessId,
+      productId,
+      deletedAt: null,
+      ...(search
+        ? {
+            OR: [
+              { title: { contains: search, mode: "insensitive" } },
+              {
+                attributes: {
+                  some: {
+                    attribute: {
+                      name: { contains: search, mode: "insensitive" },
+                      deletedAt: null,
+                    },
+                  },
+                },
+              },
+              {
+                attributes: {
+                  some: {
+                    attributeValue: {
+                      value: { contains: search, mode: "insensitive" },
+                      deletedAt: null,
+                    },
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+
     const variants = await this.prisma.productVariant.findMany({
-      where: { businessId, productId, deletedAt: null },
+      where,
       include: VARIANT_INCLUDE,
       orderBy: { createdAt: "desc" },
     });
