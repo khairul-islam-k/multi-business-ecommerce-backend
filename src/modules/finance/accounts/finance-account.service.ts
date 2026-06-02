@@ -18,6 +18,7 @@ import {
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { FinanceLedgerService } from "../common/finance-ledger.service";
 import {
+  AddFinanceAccountMoneyDto,
   CreateFinanceAccountDto,
   QueryFinanceAccountDto,
   QueryFinanceTransactionDto,
@@ -176,9 +177,6 @@ export class FinanceAccountService {
           }),
           ...(dto.status !== undefined && { status: dto.status }),
           updatedBy: currentUser.id,
-          ...(dto.currentBalance !== undefined && {
-            currentBalance:   dto.currentBalance
-          })
         },
         include: ACCOUNT_INCLUDE,
       });
@@ -187,6 +185,33 @@ export class FinanceAccountService {
     } catch (error) {
       this.handlePrismaError(error);
     }
+  }
+
+  async addMoney(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    accountId: string,
+    dto: AddFinanceAccountMoneyDto,
+  ) {
+    await this.assertAccountExists(businessId, accountId);
+
+    const account = await this.prisma.$transaction(async (tx) => {
+      await this.ledger.creditAccount(tx, {
+        businessId,
+        accountId,
+        amount: dto.amount,
+        referenceType: FinanceSourceType.MANUAL,
+        note: dto.note,
+        createdBy: currentUser.id,
+      });
+
+      return tx.financeAccount.findFirst({
+        where: { id: accountId, businessId },
+        include: ACCOUNT_INCLUDE,
+      });
+    });
+
+    return apiResponse(account, "Money added to finance account");
   }
 
   async remove(

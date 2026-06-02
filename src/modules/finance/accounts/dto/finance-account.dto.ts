@@ -48,13 +48,19 @@ export class CreateFinanceAccountDto {
 
 export class UpdateFinanceAccountDto extends PartialType(
   CreateFinanceAccountDto,
-) {
-  @ApiPropertyOptional({ example: 0})
- @IsOptional()
- @Type(() => Number)
- @IsNumber()
- @Min(0)
-  currentBalance?: number;
+) {}
+
+export class AddFinanceAccountMoneyDto {
+  @ApiProperty({ example: 5000 })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  amount!: number;
+
+  @ApiPropertyOptional({ example: "Owner cash deposit" })
+  @IsOptional()
+  @IsString()
+  note?: string;
 }
 
 export class QueryFinanceAccountDto {

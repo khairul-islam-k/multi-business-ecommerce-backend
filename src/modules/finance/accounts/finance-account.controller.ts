@@ -21,6 +21,7 @@ import { SubscriptionGuard } from "../../packages/guards/subscription.guard";
 import { RequirePermission } from "../../permissions/decorators/require-permission.decorator";
 import { PermissionGuard } from "../../permissions/guards/permission.guard";
 import {
+  AddFinanceAccountMoneyDto,
   CreateFinanceAccountDto,
   QueryFinanceAccountDto,
   QueryFinanceTransactionDto,
@@ -75,6 +76,18 @@ export class FinanceAccountController {
     @Query() query: QueryFinanceTransactionDto,
   ) {
     return this.accounts.findTransactions(businessId, accountId, query);
+  }
+
+  @RequirePermission(RbacFeature.FINANCE_MANAGEMENT, PermissionAction.UPDATE)
+  @Post(":accountId/add-money")
+  @ApiOperation({ summary: "Add money to finance account" })
+  addMoney(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("accountId", ParseUUIDPipe) accountId: string,
+    @Body() dto: AddFinanceAccountMoneyDto,
+  ) {
+    return this.accounts.addMoney(user, businessId, accountId, dto);
   }
 
   @RequirePermission(RbacFeature.FINANCE_MANAGEMENT, PermissionAction.UPDATE)

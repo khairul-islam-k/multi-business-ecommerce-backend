@@ -10,6 +10,8 @@ import { ExpenseCategoryController } from "./expenses/expense-category.controlle
 import { ExpenseCategoryService } from "./expenses/expense-category.service";
 import { ExpenseController } from "./expenses/expense.controller";
 import { ExpenseService } from "./expenses/expense.service";
+import { FinancePayableController } from "./payables/finance-payable.controller";
+import { FinancePayableService } from "./payables/finance-payable.service";
 import { FinanceReceivableController } from "./receivables/finance-receivable.controller";
 import { FinanceReceivableService } from "./receivables/finance-receivable.service";
 import { FinanceTaxController } from "./taxes/finance-tax.controller";
@@ -23,6 +25,7 @@ import { FinanceTaxService } from "./taxes/finance-tax.service";
     ExpenseCategoryController,
     ExpenseController,
     FinanceReceivableController,
+    FinancePayableController,
   ],
   providers: [
     FinanceLedgerService,
@@ -31,6 +34,7 @@ import { FinanceTaxService } from "./taxes/finance-tax.service";
     ExpenseCategoryService,
     ExpenseService,
     FinanceReceivableService,
+    FinancePayableService,
   ],
   exports: [FinanceLedgerService],
 })

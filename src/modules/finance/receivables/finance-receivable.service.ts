@@ -119,11 +119,24 @@ export class FinanceReceivableService {
       throw new BadRequestException("Finance receivable is already received");
     }
 
+    const receiveAmount =
+      dto.amount !== undefined ? new Prisma.Decimal(dto.amount) : dueAmount;
+
+    if (receiveAmount.lessThanOrEqualTo(0)) {
+      throw new BadRequestException("Receive amount must be greater than 0");
+    }
+
+    if (receiveAmount.greaterThan(dueAmount)) {
+      throw new BadRequestException(
+        "Receive amount cannot exceed receivable due amount",
+      );
+    }
+
     const updatedReceivable = await this.prisma.$transaction(async (tx) => {
       await this.ledger.creditAccount(tx, {
         businessId,
         accountId: dto.financeAccountId,
-        amount: dueAmount,
+        amount: receiveAmount,
         referenceType: receivable.sourceType ?? FinanceSourceType.MANUAL,
         referenceId: receivable.sourceId ?? undefined,
         note: dto.note,
@@ -131,14 +144,19 @@ export class FinanceReceivableService {
       });
 
       const receivedAmount = new Prisma.Decimal(receivable.receivedAmount).plus(
-        dueAmount,
+        receiveAmount,
       );
+      const status = receivedAmount.greaterThanOrEqualTo(
+        receivable.totalAmount,
+      )
+        ? FinanceReceivableStatus.RECEIVED
+        : FinanceReceivableStatus.PARTIALLY_RECEIVED;
 
       return tx.financeReceivable.update({
         where: { id: receivable.id },
         data: {
           receivedAmount,
-          status: FinanceReceivableStatus.RECEIVED,
+          status,
           note: this.normalizeNullableText(dto.note) ?? receivable.note,
         },
       });

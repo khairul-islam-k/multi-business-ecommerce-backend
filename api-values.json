@@ -1,0 +1,16 @@
+{
+    "businessId": "2d7c407b-b46f-472f-8375-21e9d40a3460",
+    "productId": "3e5e8f66-1a1b-41a3-ac2d-95cb2b5ce7cd",
+    "variantId": "ccdff44a-44ae-43b4-928f-f567fa458139",
+    "categoryId": "99325f07-d866-4ed7-a39c-360259d377da",
+    "brandId": "316cd780-17b2-4b1d-a1ef-74b446660bb6",
+    "unitId": "0c384e06-4617-4e05-800a-75dff8c3d557",
+    "attributeId": "e3e184f4-45d7-4810-ae61-ecca48e9f051",
+    "attributeValue": "4dfe2929-3007-4885-902d-ea896363dc3e",
+    "warehouseId": "0794ab3f-3826-408c-8114-f40d3f6b0661",
+    "accountId": "85ce6811-3139-45c7-b88c-9c2d51de10b8",
+    "taxId": "3780e25c-352f-4dd0-a432-d75bd05494f0",
+    "supplierId": "309a7664-f3d8-42e5-9f12-b3f89454212f",
+    "purchaseRequestId": "5cfcd915-8f62-4137-84bf-8181529b0dc9",
+    "purchaseItemId": "8ef33f09-afbc-4405-9577-987a935e66cd"
+}

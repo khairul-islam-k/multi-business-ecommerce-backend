@@ -21,12 +21,6 @@ export class PosPaymentDto {
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsUUID()
   financeAccountId!: string;
-
-  @ApiPropertyOptional({ example: "TXN123" })
-  @IsOptional()
-  @IsString()
-  @MaxLength(150)
-  transactionReference?: string;
 }
 
 export class CreatePosSaleDto {

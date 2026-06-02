@@ -24,7 +24,6 @@ import {
   CreatePurchaseOrderDto,
   CreateSupplierPurchaseReturnDto,
   CreateSupplierDto,
-  PaySupplierInvoiceDto,
   QueryPurchaseOrderDto,
   QuerySupplierPurchaseReturnDto,
   QuerySupplierInvoiceDto,
@@ -83,23 +82,6 @@ export class SupplierController {
     @Param("supplierInvoiceId", ParseUUIDPipe) supplierInvoiceId: string,
   ) {
     return this.suppliers.findSupplierInvoice(businessId, supplierInvoiceId);
-  }
-
-  @RequirePermission(RbacFeature.SUPPLIER_MANAGEMENT, PermissionAction.UPDATE)
-  @Post("supplier-invoices/:supplierInvoiceId/pay")
-  @ApiOperation({ summary: "Pay supplier invoice" })
-  paySupplierInvoice(
-    @CurrentUser() user: CurrentUserPayload,
-    @Param("businessId", ParseUUIDPipe) businessId: string,
-    @Param("supplierInvoiceId", ParseUUIDPipe) supplierInvoiceId: string,
-    @Body() dto: PaySupplierInvoiceDto,
-  ) {
-    return this.suppliers.paySupplierInvoice(
-      user,
-      businessId,
-      supplierInvoiceId,
-      dto,
-    );
   }
 
   @RequirePermission(RbacFeature.SUPPLIER_MANAGEMENT, PermissionAction.READ)

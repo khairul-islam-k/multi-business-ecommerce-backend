@@ -355,6 +355,223 @@ export class InventoryLookupService {
     return allocation;
   }
 
+  async reserveStock(
+    tx: Prisma.TransactionClient,
+    params: {
+      businessId: string;
+      warehouseId: string;
+      productId: string;
+      variantId: string;
+      quantity: Prisma.Decimal.Value;
+      referenceType: InventoryReferenceType;
+      referenceId: string;
+      note?: string | null;
+      createdBy?: string;
+    },
+  ) {
+    const quantity = new Prisma.Decimal(params.quantity);
+
+    if (quantity.lessThanOrEqualTo(0)) {
+      throw new BadRequestException("Reservation quantity is required");
+    }
+
+    const stock = await tx.inventoryStock.findUnique({
+      where: {
+        businessId_variantId: {
+          businessId: params.businessId,
+          variantId: params.variantId,
+        },
+      },
+    });
+
+    if (!stock) {
+      throw new BadRequestException("Stock is not available for this variant");
+    }
+
+    const warehouseStock = await this.findManualWarehouseStock(tx, {
+      businessId: params.businessId,
+      warehouseId: params.warehouseId,
+      variantId: params.variantId,
+      quantity,
+    });
+
+    await tx.inventoryStock.update({
+      where: { id: stock.id },
+      data: {
+        quantityReserved: new Prisma.Decimal(stock.quantityReserved).plus(
+          quantity,
+        ),
+      },
+    });
+
+    await tx.inventoryWarehouseStock.update({
+      where: { id: warehouseStock.id },
+      data: {
+        quantityReserved: new Prisma.Decimal(
+          warehouseStock.quantityReserved,
+        ).plus(quantity),
+      },
+    });
+
+    await tx.inventoryStockMovement.create({
+      data: {
+        businessId: params.businessId,
+        stockId: stock.id,
+        warehouseId: warehouseStock.warehouseId,
+        productId: params.productId,
+        variantId: params.variantId,
+        movementType: InventoryMovementType.RESERVED,
+        quantity,
+        referenceType: params.referenceType,
+        referenceId: params.referenceId,
+        note: this.normalizeNullableText(params.note),
+        createdBy: params.createdBy,
+      },
+    });
+
+    return stock;
+  }
+
+  async releaseStockReservation(
+    tx: Prisma.TransactionClient,
+    params: {
+      businessId: string;
+      warehouseId: string;
+      productId: string;
+      variantId: string;
+      quantity: Prisma.Decimal.Value;
+      referenceType: InventoryReferenceType;
+      referenceId: string;
+      note?: string | null;
+      createdBy?: string;
+    },
+  ) {
+    const quantity = new Prisma.Decimal(params.quantity);
+
+    if (quantity.lessThanOrEqualTo(0)) {
+      throw new BadRequestException("Reservation quantity is required");
+    }
+
+    const { stock, warehouseStock } = await this.getReservedStockPair(tx, {
+      businessId: params.businessId,
+      warehouseId: params.warehouseId,
+      variantId: params.variantId,
+      quantity,
+    });
+
+    await tx.inventoryStock.update({
+      where: { id: stock.id },
+      data: {
+        quantityReserved: new Prisma.Decimal(stock.quantityReserved).minus(
+          quantity,
+        ),
+      },
+    });
+
+    await tx.inventoryWarehouseStock.update({
+      where: { id: warehouseStock.id },
+      data: {
+        quantityReserved: new Prisma.Decimal(
+          warehouseStock.quantityReserved,
+        ).minus(quantity),
+      },
+    });
+
+    await tx.inventoryStockMovement.create({
+      data: {
+        businessId: params.businessId,
+        stockId: stock.id,
+        warehouseId: warehouseStock.warehouseId,
+        productId: params.productId,
+        variantId: params.variantId,
+        movementType: InventoryMovementType.RESERVATION_RELEASED,
+        quantity,
+        referenceType: params.referenceType,
+        referenceId: params.referenceId,
+        note: this.normalizeNullableText(params.note),
+        createdBy: params.createdBy,
+      },
+    });
+
+    return stock;
+  }
+
+  async deductReservedStock(
+    tx: Prisma.TransactionClient,
+    params: {
+      businessId: string;
+      warehouseId: string;
+      productId: string;
+      variantId: string;
+      quantity: Prisma.Decimal.Value;
+      movementType: InventoryMovementType;
+      referenceType: InventoryReferenceType;
+      referenceId: string;
+      note?: string | null;
+      createdBy?: string;
+    },
+  ) {
+    const quantity = new Prisma.Decimal(params.quantity);
+
+    if (quantity.lessThanOrEqualTo(0)) {
+      throw new BadRequestException("Stock movement quantity is required");
+    }
+
+    const { stock, warehouseStock } = await this.getReservedStockPair(tx, {
+      businessId: params.businessId,
+      warehouseId: params.warehouseId,
+      variantId: params.variantId,
+      quantity,
+    });
+
+    if (
+      new Prisma.Decimal(stock.totalQuantity).lessThan(quantity) ||
+      new Prisma.Decimal(warehouseStock.totalQuantity).lessThan(quantity)
+    ) {
+      throw new BadRequestException("Reserved stock is insufficient");
+    }
+
+    const updatedStock = await tx.inventoryStock.update({
+      where: { id: stock.id },
+      data: {
+        totalQuantity: new Prisma.Decimal(stock.totalQuantity).minus(quantity),
+        quantityReserved: new Prisma.Decimal(stock.quantityReserved).minus(
+          quantity,
+        ),
+      },
+    });
+
+    await tx.inventoryWarehouseStock.update({
+      where: { id: warehouseStock.id },
+      data: {
+        totalQuantity: new Prisma.Decimal(
+          warehouseStock.totalQuantity,
+        ).minus(quantity),
+        quantityReserved: new Prisma.Decimal(
+          warehouseStock.quantityReserved,
+        ).minus(quantity),
+      },
+    });
+
+    await tx.inventoryStockMovement.create({
+      data: {
+        businessId: params.businessId,
+        stockId: stock.id,
+        warehouseId: warehouseStock.warehouseId,
+        productId: params.productId,
+        variantId: params.variantId,
+        movementType: params.movementType,
+        quantity,
+        referenceType: params.referenceType,
+        referenceId: params.referenceId,
+        note: this.normalizeNullableText(params.note),
+        createdBy: params.createdBy,
+      },
+    });
+
+    return updatedStock;
+  }
+
   async releaseOrderReservation(
     tx: Prisma.TransactionClient,
     params: {
@@ -588,6 +805,54 @@ export class InventoryLookupService {
     }
 
     return warehouseStock;
+  }
+
+  private async getReservedStockPair(
+    tx: Prisma.TransactionClient,
+    params: {
+      businessId: string;
+      warehouseId: string;
+      variantId: string;
+      quantity: Prisma.Decimal;
+    },
+  ) {
+    const stock = await tx.inventoryStock.findUnique({
+      where: {
+        businessId_variantId: {
+          businessId: params.businessId,
+          variantId: params.variantId,
+        },
+      },
+    });
+
+    if (!stock) {
+      throw new BadRequestException("Stock is not available for this variant");
+    }
+
+    const warehouseStock = await tx.inventoryWarehouseStock.findUnique({
+      where: {
+        businessId_warehouseId_variantId: {
+          businessId: params.businessId,
+          warehouseId: params.warehouseId,
+          variantId: params.variantId,
+        },
+      },
+    });
+
+    if (!warehouseStock) {
+      throw new NotFoundException("Warehouse stock not found");
+    }
+
+    if (
+      new Prisma.Decimal(stock.quantityReserved).lessThan(params.quantity) ||
+      new Prisma.Decimal(warehouseStock.quantityReserved).lessThan(
+        params.quantity,
+      )
+    ) {
+      throw new BadRequestException("Reserved stock is insufficient");
+    }
+
+    return { stock, warehouseStock };
   }
 
   private async findAutoWarehouseStock(

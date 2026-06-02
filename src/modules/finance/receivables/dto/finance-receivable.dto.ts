@@ -1,6 +1,7 @@
 import { Type } from "class-transformer";
 import {
   IsEnum,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -53,6 +54,13 @@ export class ReceiveFinanceReceivableDto {
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsUUID()
   financeAccountId!: string;
+
+  @ApiPropertyOptional({ example: 500 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  amount?: number;
 
   @ApiPropertyOptional({ example: "Received supplier return refund" })
   @IsOptional()

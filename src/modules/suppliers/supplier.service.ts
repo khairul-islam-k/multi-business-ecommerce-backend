@@ -29,7 +29,6 @@ import {
   CreatePurchaseOrderDto,
   CreateSupplierPurchaseReturnDto,
   CreateSupplierDto,
-  PaySupplierInvoiceDto,
   QueryPurchaseOrderDto,
   QuerySupplierPurchaseReturnDto,
   QuerySupplierInvoiceDto,
@@ -722,88 +721,6 @@ export class SupplierService {
     return apiResponse(invoice);
   }
 
-  async paySupplierInvoice(
-    currentUser: CurrentUserPayload,
-    businessId: string,
-    supplierInvoiceId: string,
-    dto: PaySupplierInvoiceDto,
-  ) {
-    const invoice = await this.prisma.supplierInvoice.findFirst({
-      where: { id: supplierInvoiceId, businessId, deletedAt: null },
-      include: { payments: true },
-    });
-
-    if (!invoice) {
-      throw new NotFoundException("Supplier invoice not found");
-    }
-
-    if (invoice.status === SupplierInvoiceStatus.CANCELLED) {
-      throw new BadRequestException(
-        "Cancelled supplier invoice cannot be paid",
-      );
-    }
-
-    const paidAmount = invoice.payments.reduce(
-      (total, payment) => total.plus(payment.amount),
-      new Prisma.Decimal(0),
-    );
-    const dueAmount = new Prisma.Decimal(invoice.totalAmount).minus(paidAmount);
-
-    if (dueAmount.lessThanOrEqualTo(0)) {
-      throw new BadRequestException("Supplier invoice is already paid");
-    }
-
-    const updatedInvoice = await this.prisma.$transaction(async (tx) => {
-      const payment = await tx.supplierPayment.create({
-        data: {
-          businessId,
-          supplierId: invoice.supplierId,
-          supplierInvoiceId: invoice.id,
-          paymentNo:
-            await this.finance.generateUniqueSupplierPaymentNo(businessId),
-          amount: dueAmount,
-          paymentDate: new Date(),
-          paymentMethod: dto.paymentMethod,
-          referenceNo: this.normalizeNullableText(dto.referenceNo),
-          note: this.normalizeNullableText(dto.note),
-          createdBy: currentUser.id,
-        },
-      });
-
-      await this.finance.debitAccount(tx, {
-        businessId,
-        accountId: dto.financeAccountId,
-        amount: dueAmount,
-        referenceType: FinanceSourceType.SUPPLIER_PAYMENT,
-        referenceId: payment.id,
-        note: dto.note,
-        createdBy: currentUser.id,
-      });
-
-      const nextPaidAmount = paidAmount.plus(dueAmount);
-      const status = nextPaidAmount.greaterThanOrEqualTo(invoice.totalAmount)
-        ? SupplierInvoiceStatus.PAID
-        : SupplierInvoiceStatus.PARTIALLY_PAID;
-
-      await this.finance.syncSupplierInvoicePayablePayment(tx, {
-        businessId,
-        supplierInvoiceId: invoice.id,
-        paidAmount: nextPaidAmount,
-      });
-
-      return tx.supplierInvoice.update({
-        where: { id: invoice.id },
-        data: {
-          paidAmount: nextPaidAmount,
-          status,
-        },
-        include: SUPPLIER_INVOICE_INCLUDE,
-      });
-    });
-
-    return apiResponse(updatedInvoice, "Supplier invoice paid successfully");
-  }
-
   async createPurchaseReturn(
     currentUser: CurrentUserPayload,
     businessId: string,
@@ -824,7 +741,9 @@ export class SupplierService {
         invoices: {
           where: {
             deletedAt: null,
-            status: SupplierInvoiceStatus.PAID,
+            status: {
+              not: SupplierInvoiceStatus.CANCELLED,
+            },
           },
           orderBy: { createdAt: "desc" },
         },
@@ -832,14 +751,14 @@ export class SupplierService {
     });
 
     if (!purchaseOrder) {
-      throw new NotFoundException("Paid received purchase order not found");
+      throw new NotFoundException("Received purchase order not found");
     }
 
     const supplierInvoice = purchaseOrder.invoices[0];
 
     if (!supplierInvoice) {
       throw new BadRequestException(
-        "Purchase order must be received and paid before return",
+        "Purchase order must be received before return",
       );
     }
 
@@ -883,6 +802,20 @@ export class SupplierService {
           },
         },
       });
+
+      for (const item of items) {
+        await this.inventoryLookup.reserveStock(tx, {
+          businessId,
+          warehouseId: purchaseOrder.warehouseId,
+          productId: item.productId,
+          variantId: item.variantId,
+          quantity: item.quantity,
+          referenceType: InventoryReferenceType.PURCHASE_RETURN,
+          referenceId: createdReturn.id,
+          note: dto.reason,
+          createdBy: currentUser.id,
+        });
+      }
 
       await this.finance.createSupplierReturnReceivable(tx, {
         businessId,
@@ -981,12 +914,12 @@ export class SupplierService {
 
     const completedReturn = await this.prisma.$transaction(async (tx) => {
       for (const item of purchaseReturn.items) {
-        await this.inventoryLookup.applyStockDelta(tx, {
+        await this.inventoryLookup.deductReservedStock(tx, {
           businessId,
           warehouseId: purchaseReturn.warehouseId,
           productId: item.productId,
           variantId: item.variantId,
-          quantityDelta: new Prisma.Decimal(item.quantity).negated(),
+          quantity: item.quantity,
           movementType: InventoryMovementType.PURCHASE_RETURN_OUT,
           referenceType: InventoryReferenceType.PURCHASE_RETURN,
           referenceId: purchaseReturn.id,
@@ -1017,7 +950,7 @@ export class SupplierService {
         businessId,
         status: SupplierPurchaseReturnStatus.PENDING,
       },
-      select: { id: true },
+      include: { items: true },
     });
 
     if (!purchaseReturn) {
@@ -1025,6 +958,19 @@ export class SupplierService {
     }
 
     const cancelledReturn = await this.prisma.$transaction(async (tx) => {
+      for (const item of purchaseReturn.items) {
+        await this.inventoryLookup.releaseStockReservation(tx, {
+          businessId,
+          warehouseId: purchaseReturn.warehouseId,
+          productId: item.productId,
+          variantId: item.variantId,
+          quantity: item.quantity,
+          referenceType: InventoryReferenceType.PURCHASE_RETURN,
+          referenceId: purchaseReturn.id,
+          note: purchaseReturn.reason,
+        });
+      }
+
       await tx.financeReceivable.updateMany({
         where: {
           businessId,

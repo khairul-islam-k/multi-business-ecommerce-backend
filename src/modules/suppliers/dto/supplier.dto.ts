@@ -16,7 +16,6 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 import {
   SupplierProductMapStatus,
   SupplierInvoiceStatus,
-  SupplierPaymentMethod,
   SupplierPurchaseOrderStatus,
   SupplierPurchaseReturnStatus,
   SupplierStatus,
@@ -296,27 +295,6 @@ export class QueryPurchaseOrderDto {
 
 export class ReceivePurchaseOrderDto {
   @ApiPropertyOptional({ example: "Received at dock A" })
-  @IsOptional()
-  @IsString()
-  note?: string;
-}
-
-export class PaySupplierInvoiceDto {
-  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
-  @IsUUID()
-  financeAccountId!: string;
-
-  @ApiProperty({ enum: SupplierPaymentMethod })
-  @IsEnum(SupplierPaymentMethod)
-  paymentMethod!: SupplierPaymentMethod;
-
-  @ApiPropertyOptional({ example: "BANK-TXN-1001" })
-  @IsOptional()
-  @IsString()
-  @MaxLength(150)
-  referenceNo?: string;
-
-  @ApiPropertyOptional({ example: "Paid in full" })
   @IsOptional()
   @IsString()
   note?: string;

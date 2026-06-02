@@ -484,6 +484,14 @@ Core helper:
 - Increments warehouse reserved quantity.
 - Creates a `RESERVED` stock movement.
 
+`reserveStock`:
+
+- Used by supplier purchase return requests.
+- Requires enough available stock in the selected warehouse.
+- Increments aggregate reserved quantity.
+- Increments warehouse reserved quantity.
+- Creates a `RESERVED` stock movement with reference type `PURCHASE_RETURN`.
+
 Warehouse selection:
 
 - If `warehouseId` is supplied, that warehouse must exist and have enough available stock.
@@ -507,6 +515,19 @@ Warehouse selection:
 - Marks the allocation `FULFILLED`.
 - Creates a `SALE_OUT` movement.
 
+`releaseStockReservation`:
+
+- Used when a pending supplier purchase return is cancelled.
+- Decrements aggregate and warehouse reserved quantity.
+- Creates a `RESERVATION_RELEASED` stock movement.
+
+`deductReservedStock`:
+
+- Used when a supplier purchase return is completed.
+- Decrements aggregate and warehouse total quantity.
+- Decrements aggregate and warehouse reserved quantity.
+- Creates a stock movement such as `PURCHASE_RETURN_OUT`.
+
 ## 14. Suppliers And Purchasing
 
 Supplier data lives in:
@@ -521,7 +542,7 @@ Supplier data lives in:
 - `SupplierPurchaseReturn`
 - `SupplierPurchaseReturnItem`
 
-The supplier service covers suppliers, supplier-product mapping, purchase orders, full purchase receiving, supplier invoices, supplier invoice payments, and supplier purchase returns.
+The supplier service covers suppliers, supplier-product mapping, purchase orders, full purchase receiving, supplier invoices, and supplier purchase returns. It creates payables as a result of receiving purchase orders, but it does not own paying those payables.
 
 Supplier product mapping:
 
@@ -556,28 +577,27 @@ Purchase order receiving:
 6. `FinanceLedgerService.createSupplierInvoicePayable` creates a finance payable for the supplier invoice.
 7. Purchase order status becomes `RECEIVED`.
 
-Supplier invoice payment:
+Supplier invoice payable:
 
-1. Supplier invoice must exist and not be cancelled.
-2. Payment amount is not supplied by the client.
-3. Backend calculates the exact due amount.
-4. A `SupplierPayment` row is created.
-5. The selected finance account is debited.
-6. The supplier invoice `paidAmount` and status are updated.
-7. The related `FinancePayable` is updated to `PAID` or `PARTIALLY_PAID`.
+1. Receiving a purchase order creates a supplier invoice.
+2. Receiving a purchase order also creates a `FinancePayable`.
+3. Supplier module exposes supplier invoice read endpoints.
+4. Supplier invoice payment is handled by the finance payable API, not by supplier routes.
 
 Supplier purchase returns:
 
-1. A return can only be created after the PO is received and its supplier invoice is paid.
+1. A return can be created after the PO is received.
 2. Returns are new immutable requests; they do not edit the original PO or supplier invoice.
-3. Return items must come from the original PO and cannot exceed the remaining returnable received quantity.
-4. Return totals reuse the PO item cost, proportional discount, and PO tax rate.
-5. Creating a return creates a `SupplierPurchaseReturn` in `PENDING` status.
-6. Creating a return also creates a `FinanceReceivable` with `partyType = SUPPLIER` and `sourceType = SUPPLIER_RETURN`.
-7. Completing the return moves stock out with movement type `PURCHASE_RETURN_OUT`.
-8. Cancelling a pending return cancels the related pending supplier-return receivable.
+3. The supplier invoice may be unpaid, partially paid, or paid.
+4. Return items must come from the original PO and cannot exceed the remaining returnable received quantity.
+5. Return totals reuse the PO item cost, proportional discount, and PO tax rate.
+6. Creating a return creates a `SupplierPurchaseReturn` in `PENDING` status.
+7. Creating a return also creates a `FinanceReceivable` with `partyType = SUPPLIER` and `sourceType = SUPPLIER_RETURN`.
+8. Creating a return reserves the return quantity in the PO warehouse, making it unavailable for sale while the return is pending.
+9. Completing the return deducts the reserved stock and creates movement type `PURCHASE_RETURN_OUT`.
+10. Cancelling a pending return releases the stock reservation and cancels the related pending supplier-return receivable.
 
-Only draft purchase orders can be deleted. Received purchase orders cannot be edited; supplier returns are the adjustment path after receiving and paying.
+Only draft purchase orders can be deleted. Received purchase orders cannot be edited; supplier returns are the adjustment path after receiving.
 
 ## 15. Orders
 
@@ -730,7 +750,7 @@ Finance models:
 - `FinanceJournalEntry`
 - `FinanceJournalEntryLine`
 
-Finance is an active Nest module imported by `AppModule`. It exposes controllers for accounts, taxes, expense categories, expenses, and receivables. It also exports `FinanceLedgerService`, which other modules use to move account balances and synchronize receivable/payable state.
+Finance is an active Nest module imported by `AppModule`. It exposes controllers for accounts, taxes, expense categories, expenses, receivables, and payables. It also exports `FinanceLedgerService`, which other modules use to move account balances and create/synchronize receivable/payable state.
 
 Finance account behavior:
 
@@ -738,6 +758,8 @@ Finance account behavior:
 - Opening balance is recorded by crediting the account through the ledger.
 - Opening balance cannot be edited afterward.
 - Account transactions are created by ledger debit/credit operations.
+- Current balance cannot be edited directly.
+- Manual account funding uses `POST /finance/businesses/:businessId/accounts/:accountId/add-money`, which credits the account through the ledger and creates a transaction log.
 - A finance account cannot be deleted while it has a positive balance.
 
 Tax behavior:
@@ -763,13 +785,22 @@ Receivable behavior:
 - Supplier purchase returns create supplier receivables.
 - The finance receivable API can list and receive receivables.
 - Direct receiving is blocked for order receivables and courier receivables because those have module-specific flows.
-- Supplier return receivables can be received through finance; the backend credits the selected account for the exact remaining amount.
+- Supplier return receivables can be received through finance.
+- Receivable receive accepts an optional amount.
+- If amount is omitted, backend receives the exact remaining due amount.
+- If amount is supplied, it must be greater than zero and cannot exceed the receivable due amount.
+- Receivable status moves through `PARTIALLY_RECEIVED` to `RECEIVED`.
 
 Payable behavior:
 
 - Receiving a purchase order creates a supplier invoice payable.
-- Paying a supplier invoice debits the selected finance account.
-- Supplier invoice payment synchronizes the related `FinancePayable` status.
+- The finance payable API can list and pay payables.
+- Payable payment accepts an optional amount.
+- If amount is omitted, backend pays the exact remaining due amount.
+- If amount is supplied, it must be greater than zero and cannot exceed the payable due amount.
+- Paying a payable debits the selected finance account.
+- Payable status moves through `PARTIALLY_PAID` to `PAID`.
+- Paying a supplier invoice payable also creates a `SupplierPayment` row and updates the related `SupplierInvoice`.
 
 Journal entry models exist in the schema, but there is not yet a standalone journal-entry controller.
 
@@ -886,6 +917,7 @@ Main route groups:
 - `finance/businesses/:businessId/expense-categories`
 - `finance/businesses/:businessId/expenses`
 - `finance/businesses/:businessId/receivables`
+- `finance/businesses/:businessId/payables`
 - `orders/businesses/:businessId/orders`
 - `pos/businesses/:businessId/sales`
 
@@ -924,7 +956,7 @@ A realistic setup flow:
 17. Tenant receives purchase orders in full.
 18. Inventory aggregate and warehouse stock increase.
 19. Supplier invoice and finance payable are created.
-20. Tenant pays supplier invoice from a finance account.
+20. Tenant pays the supplier invoice payable from finance.
 21. Tenant creates order or POS sale.
 
 Normal order path:
@@ -964,7 +996,9 @@ Purchase order created with tax
   -> inventory increases
   -> supplier invoice created
   -> finance payable created
-  -> supplier invoice paid for exact due amount
+  -> finance payable paid in one or more payments
+  -> supplier payment row created
+  -> supplier invoice paid amount/status updated
   -> finance account debited
   -> finance payable marked paid
 ```
@@ -972,12 +1006,13 @@ Purchase order created with tax
 Supplier return path:
 
 ```text
-Paid received PO selected
+Received PO selected
   -> supplier purchase return request created
+  -> return quantity reserved in stock
   -> finance receivable created against supplier
   -> return completed
-  -> inventory moves out
-  -> supplier refund received through finance receivable
+  -> reserved inventory moves out
+  -> supplier refund received through finance receivable in one or more receipts
   -> finance account credited
 ```
 
@@ -1008,13 +1043,14 @@ The code uses Prisma transactions for flows that must stay consistent:
 - stock reservation/release/fulfillment updates multiple stock tables plus movement/allocation rows
 - purchase order receiving updates purchase items, stock, movements, supplier product map, and purchase order status
 - purchase order receiving also creates supplier invoice and finance payable
-- supplier invoice payment creates supplier payment, debits finance account, and updates payable state
-- supplier return creation creates return items and supplier receivable
-- supplier return completion moves stock out
+- payable payment creates supplier payment when payable source is supplier invoice, debits finance account, and updates payable/invoice state
+- supplier return creation creates return items, reserves stock, and creates supplier receivable
+- supplier return completion deducts reserved stock
+- supplier return cancellation releases reserved stock and cancels the pending receivable
 - order creation creates order, items, allocations, invoice, optional payment, optional courier shipment, and payment/receivable state
 - order delivery/cancellation updates order, allocations, invoice/courier/receivable state, and logs
 - expense payment debits finance account and marks the expense paid
-- receivable receiving credits finance account and marks the receivable received
+- receivable receiving credits finance account and updates receivable state
 - employee creation/removal touches users, memberships, profiles, and role maps
 - role permission replacement deletes and recreates permissions atomically
 
@@ -1067,9 +1103,10 @@ Some useful details to keep in mind when returning to the code:
 - `src/main.ts` serves uploaded files from the configured upload root.
 - `PrismaService` logs query operation/table/duration in debug logs, while skipping transaction begin/commit/rollback logs.
 - `SubscriptionGuard` currently returns true if there is no user or the user is admin. In normal protected routes, `JwtAuthGuard` runs before it, so no-user cases should already be blocked.
-- `FinanceModule` is active and exposes accounts, taxes, expenses, and receivables.
+- `FinanceModule` is active and exposes accounts, taxes, expenses, receivables, and payables.
 - `OrderService` writes invoice, finance, and courier records as part of order flow.
-- `SupplierService` writes supplier invoice, payable, supplier payment, supplier return, and supplier-return receivable records as part of purchasing flow.
+- `SupplierService` writes supplier invoice, payable, supplier return, and supplier-return receivable records as part of purchasing flow.
+- Supplier invoice payment is handled through finance payables, not supplier routes.
 - Purchase orders are not partially receivable. Receiving is all-or-nothing for the whole PO.
 - Supplier returns are the post-receive/post-pay adjustment path and create new receivables instead of editing the PO.
 - Order/POS payment amount is backend-controlled. Clients choose payment method/account, not amount.
