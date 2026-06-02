@@ -5,9 +5,8 @@ import {
 } from "@nestjs/common";
 import {
   CourierShipmentStatus,
-  FinanceAccountStatus,
+  FinanceReceivableStatus,
   FinanceSourceType,
-  FinanceTransactionType,
   InvoiceStatus,
   OrderPaymentMethod,
   OrderPaymentStatus,
@@ -26,6 +25,7 @@ import {
 import { generateRandomCode } from "../../common/utils/code-generator.util";
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { InventoryLookupService } from "../inventory/common/inventory-lookup.service";
+import { FinanceLedgerService } from "../finance/common/finance-ledger.service";
 import {
   AddOrderPaymentDto,
   CreateOrderDto,
@@ -46,6 +46,7 @@ const CODE_RETRY_LIMIT = 5;
 
 type OrderItemWithPrice = OrderItemInputDto & {
   unitPrice: Prisma.Decimal;
+  taxAmount: Prisma.Decimal;
   lineTotal: Prisma.Decimal;
 };
 
@@ -54,6 +55,7 @@ export class OrderService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly inventory: InventoryLookupService,
+    private readonly finance: FinanceLedgerService,
   ) {}
 
   async create(
@@ -82,6 +84,7 @@ export class OrderService {
       customerName: dto.customerName,
       customerPhone: dto.customerPhone,
       warehouseId: dto.warehouseId,
+      taxId: dto.taxId,
       items: dto.items,
       payment: dto.payment,
       orderType: OrderType.POS,
@@ -178,10 +181,15 @@ export class OrderService {
     }
 
     const updatedOrder = await this.prisma.$transaction(async (tx) => {
+      const dueAmount = new Prisma.Decimal(order.totalAmount).minus(
+        order.paidAmount,
+      );
+
       await this.createPayment(tx, {
         businessId,
         orderId,
         payment: dto,
+        amount: dueAmount,
         currentUserId: currentUser.id,
       });
 
@@ -383,6 +391,17 @@ export class OrderService {
         },
       });
 
+      await tx.financeReceivable.updateMany({
+        where: {
+          businessId,
+          sourceType: FinanceSourceType.ORDER,
+          sourceId: orderId,
+        },
+        data: {
+          status: FinanceReceivableStatus.CANCELLED,
+        },
+      });
+
       await tx.orderStatusLog.create({
         data: {
           orderId,
@@ -413,15 +432,20 @@ export class OrderService {
     this.assertItems(params.items);
     this.assertPaymentInput(params.payment, params.isCod);
 
+    if (params.isCod && !params.courier) {
+      throw new BadRequestException("COD order requires courier shipment");
+    }
+
     if (params.customerId) {
       await this.assertCustomerExists(businessId, params.customerId);
     }
 
-    const [orderNo, invoiceNo] = await Promise.all([
+    const [orderNo, invoiceNo, tax] = await Promise.all([
       this.generateUniqueOrderNo(businessId),
       this.generateUniqueInvoiceNo(businessId),
+      this.finance.assertActiveTax(this.prisma, businessId, params.taxId),
     ]);
-    const items = await this.buildItems(businessId, params.items);
+    const items = await this.buildItems(businessId, params.items, tax.rate);
     const totals = this.calculateTotals(items, params.shippingCharge ?? 0);
 
     const order = await this.prisma.$transaction(async (tx) => {
@@ -430,6 +454,7 @@ export class OrderService {
           businessId,
           customerId: params.customerId,
           warehouseId: params.warehouseId,
+          taxId: tax.id,
           orderNo,
           orderType: params.orderType,
           orderSource: params.orderSource,
@@ -446,6 +471,7 @@ export class OrderService {
           subtotal: totals.subtotal,
           discountTotal: totals.discountTotal,
           taxTotal: totals.taxTotal,
+          taxRate: tax.rate,
           shippingCharge: totals.shippingCharge,
           totalAmount: totals.totalAmount,
           note: this.normalizeNullableText(params.note),
@@ -472,7 +498,7 @@ export class OrderService {
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             discountAmount: item.discountAmount ?? 0,
-            taxAmount: item.taxAmount ?? 0,
+            taxAmount: item.taxAmount,
             lineTotal: item.lineTotal,
           },
         });
@@ -504,6 +530,8 @@ export class OrderService {
         order: createdOrder,
         items: createdItems,
         invoiceNo,
+        taxId: tax.id,
+        taxRate: tax.rate,
         currentUserId: currentUser.id,
       });
 
@@ -512,6 +540,7 @@ export class OrderService {
           businessId,
           orderId: createdOrder.id,
           payment: params.payment,
+          amount: createdOrder.totalAmount,
           currentUserId: currentUser.id,
         });
       }
@@ -539,6 +568,7 @@ export class OrderService {
       businessId: string;
       orderId: string;
       payment: OrderPaymentInputDto;
+      amount: Prisma.Decimal.Value;
       currentUserId: string;
     },
   ) {
@@ -552,33 +582,18 @@ export class OrderService {
       throw new BadRequestException("Finance account is required for payment");
     }
 
-    const account = await tx.financeAccount.findFirst({
-      where: {
-        id: params.payment.financeAccountId,
-        businessId: params.businessId,
-        deletedAt: null,
-        status: FinanceAccountStatus.ACTIVE,
-      },
-    });
+    const paymentNo = await this.generateUniquePaymentNo(params.businessId);
+    const amount = new Prisma.Decimal(params.amount);
 
-    if (!account) {
-      throw new NotFoundException("Finance account not found");
+    if (amount.lessThanOrEqualTo(0)) {
+      throw new BadRequestException("Order has no payable amount remaining");
     }
-
-    const [paymentNo, transactionNo] = await Promise.all([
-      this.generateUniquePaymentNo(params.businessId),
-      this.generateUniqueTransactionNo(params.businessId),
-    ]);
-    const amount = new Prisma.Decimal(params.payment.amount);
-    const balanceAfter = new Prisma.Decimal(account.currentBalance).plus(
-      amount,
-    );
 
     await tx.orderPayment.create({
       data: {
         businessId: params.businessId,
         orderId: params.orderId,
-        financeAccountId: account.id,
+        financeAccountId: params.payment.financeAccountId,
         paymentNo,
         amount,
         paymentMethod: params.payment.paymentMethod,
@@ -591,24 +606,13 @@ export class OrderService {
       },
     });
 
-    await tx.financeAccountTransaction.create({
-      data: {
-        businessId: params.businessId,
-        accountId: account.id,
-        transactionNo,
-        transactionType: FinanceTransactionType.CREDIT,
-        amount,
-        balanceBefore: account.currentBalance,
-        balanceAfter,
-        referenceType: FinanceSourceType.ORDER,
-        referenceId: params.orderId,
-        createdBy: params.currentUserId,
-      },
-    });
-
-    await tx.financeAccount.update({
-      where: { id: account.id },
-      data: { currentBalance: balanceAfter },
+    await this.finance.creditAccount(tx, {
+      businessId: params.businessId,
+      accountId: params.payment.financeAccountId,
+      amount,
+      referenceType: FinanceSourceType.ORDER,
+      referenceId: params.orderId,
+      createdBy: params.currentUserId,
     });
   }
 
@@ -650,6 +654,28 @@ export class OrderService {
       },
     });
 
+    const codShipment = await tx.courierShipment.findFirst({
+      where: {
+        businessId,
+        orderId,
+        deletedAt: null,
+        codAmount: {
+          gt: 0,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!codShipment) {
+      await this.finance.syncOrderReceivable(tx, {
+        businessId,
+        orderId,
+        customerId: order.customerId,
+        totalAmount: order.totalAmount,
+        receivedAmount: paidAmount,
+      });
+    }
+
     return tx.orderOrder.update({
       where: { id: orderId },
       data: {
@@ -690,6 +716,8 @@ export class OrderService {
         lineTotal: Prisma.Decimal;
       }[];
       invoiceNo: string;
+      taxId: string;
+      taxRate: Prisma.Decimal;
       currentUserId: string;
     },
   ) {
@@ -698,6 +726,7 @@ export class OrderService {
         businessId: params.businessId,
         orderId: params.order.id,
         customerId: params.order.customerId,
+        taxId: params.taxId,
         invoiceNo: params.invoiceNo,
         invoiceDate: new Date(),
         status: InvoiceStatus.ISSUED,
@@ -710,6 +739,7 @@ export class OrderService {
         subtotal: params.order.subtotal,
         discountTotal: params.order.discountTotal,
         taxTotal: params.order.taxTotal,
+        taxRate: params.taxRate,
         shippingCharge: params.order.shippingCharge,
         totalAmount: params.order.totalAmount,
         paidAmount: params.order.paidAmount,
@@ -794,8 +824,13 @@ export class OrderService {
     });
   }
 
-  private async buildItems(businessId: string, items: OrderItemInputDto[]) {
+  private async buildItems(
+    businessId: string,
+    items: OrderItemInputDto[],
+    taxRate: Prisma.Decimal.Value,
+  ) {
     const builtItems: OrderItemWithPrice[] = [];
+    const rate = new Prisma.Decimal(taxRate);
 
     for (const item of items) {
       const variant = await this.prisma.productVariant.findFirst({
@@ -815,11 +850,10 @@ export class OrderService {
 
       const quantity = new Prisma.Decimal(item.quantity);
       const discountAmount = new Prisma.Decimal(item.discountAmount ?? 0);
-      const taxAmount = new Prisma.Decimal(item.taxAmount ?? 0);
-      const lineTotal = quantity
-        .mul(variant.price)
-        .minus(discountAmount)
-        .plus(taxAmount);
+      const lineSubtotal = quantity.mul(variant.price);
+      const taxableAmount = lineSubtotal.minus(discountAmount);
+      const taxAmount = taxableAmount.mul(rate).div(100).toDecimalPlaces(2);
+      const lineTotal = taxableAmount.plus(taxAmount);
 
       if (lineTotal.lessThan(0)) {
         throw new BadRequestException(
@@ -830,6 +864,7 @@ export class OrderService {
       builtItems.push({
         ...item,
         unitPrice: variant.price,
+        taxAmount,
         lineTotal,
       });
     }
@@ -848,7 +883,7 @@ export class OrderService {
       new Prisma.Decimal(0),
     );
     const taxTotal = items.reduce(
-      (total, item) => total.plus(item.taxAmount ?? 0),
+      (total, item) => total.plus(item.taxAmount),
       new Prisma.Decimal(0),
     );
     const shipping = new Prisma.Decimal(shippingCharge);
@@ -901,16 +936,12 @@ export class OrderService {
     payment: OrderPaymentInputDto | undefined,
     isCod?: boolean,
   ) {
-    if (isCod && payment?.paymentMethod === OrderPaymentMethod.COD) {
-      throw new BadRequestException("COD should not be recorded as a payment");
-    }
-
-    if (isCod && payment && new Prisma.Decimal(payment.amount).greaterThan(0)) {
-      throw new BadRequestException("COD order cannot include upfront payment");
+    if (isCod && payment) {
+      throw new BadRequestException("COD order cannot include direct payment");
     }
 
     if (payment?.paymentMethod === OrderPaymentMethod.COD) {
-      throw new BadRequestException("COD should be selected using isCod");
+      throw new BadRequestException("COD should not be recorded as a payment");
     }
   }
 
@@ -945,15 +976,6 @@ export class OrderService {
     return this.generateUniqueCode(businessId, "SHP", (code) =>
       this.prisma.courierShipment.findFirst({
         where: { businessId, shipmentNo: code },
-        select: { id: true },
-      }),
-    );
-  }
-
-  private async generateUniqueTransactionNo(businessId: string) {
-    return this.generateUniqueCode(businessId, "TXN", (code) =>
-      this.prisma.financeAccountTransaction.findFirst({
-        where: { businessId, transactionNo: code },
         select: { id: true },
       }),
     );

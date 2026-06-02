@@ -2,12 +2,10 @@ import { Type } from "class-transformer";
 import {
   IsArray,
   IsEnum,
-  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
-  Min,
   ValidateNested,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
@@ -19,12 +17,6 @@ export class PosPaymentDto {
   @ApiProperty({ enum: OrderPaymentMethod, example: OrderPaymentMethod.CASH })
   @IsEnum(OrderPaymentMethod)
   paymentMethod!: OrderPaymentMethod;
-
-  @ApiProperty({ example: 1200 })
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0.001)
-  amount!: number;
 
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsUUID()
@@ -42,6 +34,10 @@ export class CreatePosSaleDto {
   @IsOptional()
   @IsUUID()
   warehouseId?: string;
+
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsUUID()
+  taxId!: string;
 
   @ApiPropertyOptional({ example: "Walk-in Customer" })
   @IsOptional()

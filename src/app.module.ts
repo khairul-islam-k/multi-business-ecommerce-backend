@@ -20,6 +20,7 @@ import { InventoryModule } from "./modules/inventory/inventory.module";
 import { SupplierModule } from "./modules/suppliers/supplier.module";
 import { OrderModule } from "./modules/orders/order.module";
 import { PosModule } from "./modules/pos/pos.module";
+import { FinanceModule } from "./modules/finance/finance.module";
 
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { RequestLoggerMiddleware } from "./common/middlewares/request-logger.middleware";
@@ -46,6 +47,7 @@ import { RequestContextMiddleware } from "./common/request-context/request-conte
     EmployeeModule,
     ProductCatalogModule,
     InventoryModule,
+    FinanceModule,
     SupplierModule,
     OrderModule,
     PosModule,

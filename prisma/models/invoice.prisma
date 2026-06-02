@@ -25,6 +25,7 @@ model Invoice {
   businessId String  @map("business_id") @db.Uuid
   orderId    String? @map("order_id") @db.Uuid
   customerId String? @map("customer_id") @db.Uuid
+  taxId      String? @map("tax_id") @db.Uuid
 
   invoiceNo   String        @map("invoice_no") @db.VarChar(100)
   invoiceDate DateTime      @map("invoice_date")
@@ -39,6 +40,7 @@ model Invoice {
   subtotal       Decimal @default(0) @db.Decimal(12, 2)
   discountTotal  Decimal @default(0) @map("discount_total") @db.Decimal(12, 2)
   taxTotal       Decimal @default(0) @map("tax_total") @db.Decimal(12, 2)
+  taxRate        Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
   shippingCharge Decimal @default(0) @map("shipping_charge") @db.Decimal(12, 2)
   totalAmount    Decimal @default(0) @map("total_amount") @db.Decimal(12, 2)
   paidAmount     Decimal @default(0) @map("paid_amount") @db.Decimal(12, 2)
@@ -49,12 +51,14 @@ model Invoice {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
+  tax   FinanceTax?   @relation(fields: [taxId], references: [id], onDelete: Restrict)
   items InvoiceItem[]
 
   @@unique([businessId, invoiceNo])
   @@index([businessId])
   @@index([orderId])
   @@index([customerId])
+  @@index([taxId])
   @@index([status])
   @@index([invoiceDate])
   @@index([dueDate])

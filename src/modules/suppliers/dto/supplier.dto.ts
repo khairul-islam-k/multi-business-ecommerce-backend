@@ -15,7 +15,10 @@ import {
 import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 import {
   SupplierProductMapStatus,
+  SupplierInvoiceStatus,
+  SupplierPaymentMethod,
   SupplierPurchaseOrderStatus,
+  SupplierPurchaseReturnStatus,
   SupplierStatus,
 } from "@prisma/client";
 
@@ -181,13 +184,6 @@ export class PurchaseOrderItemDto {
   @IsNumber()
   @Min(0)
   discountAmount?: number;
-
-  @ApiPropertyOptional({ example: 0 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  taxAmount?: number;
 }
 
 export class CreatePurchaseOrderDto {
@@ -198,6 +194,10 @@ export class CreatePurchaseOrderDto {
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsUUID()
   warehouseId!: string;
+
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsUUID()
+  taxId!: string;
 
   @ApiProperty({ example: "2026-05-20T00:00:00.000Z" })
   @Type(() => Date)
@@ -294,27 +294,135 @@ export class QueryPurchaseOrderDto {
   status?: SupplierPurchaseOrderStatus;
 }
 
-export class ReceivePurchaseOrderItemDto {
-  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
-  @IsUUID()
-  purchaseOrderItemId!: string;
-
-  @ApiProperty({ example: 5 })
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0.001)
-  quantityReceived!: number;
-}
-
 export class ReceivePurchaseOrderDto {
-  @ApiProperty({ type: [ReceivePurchaseOrderItemDto] })
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ReceivePurchaseOrderItemDto)
-  items!: ReceivePurchaseOrderItemDto[];
-
   @ApiPropertyOptional({ example: "Received at dock A" })
   @IsOptional()
   @IsString()
   note?: string;
+}
+
+export class PaySupplierInvoiceDto {
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsUUID()
+  financeAccountId!: string;
+
+  @ApiProperty({ enum: SupplierPaymentMethod })
+  @IsEnum(SupplierPaymentMethod)
+  paymentMethod!: SupplierPaymentMethod;
+
+  @ApiPropertyOptional({ example: "BANK-TXN-1001" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  referenceNo?: string;
+
+  @ApiPropertyOptional({ example: "Paid in full" })
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
+export class QuerySupplierInvoiceDto {
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  page?: number = 1;
+
+  @ApiPropertyOptional({ example: 10 })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  @Max(100)
+  limit?: number = 10;
+
+  @ApiPropertyOptional({ example: "SIN" })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  supplierId?: string;
+
+  @ApiPropertyOptional({ enum: SupplierInvoiceStatus })
+  @IsOptional()
+  @IsEnum(SupplierInvoiceStatus)
+  status?: SupplierInvoiceStatus;
+}
+
+export class SupplierPurchaseReturnItemDto {
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsUUID()
+  productId!: string;
+
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsUUID()
+  variantId!: string;
+
+  @ApiProperty({ example: 2 })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.001)
+  quantity!: number;
+
+  @ApiPropertyOptional({ example: "Damaged item" })
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
+export class CreateSupplierPurchaseReturnDto {
+  @ApiPropertyOptional({ example: "2026-06-02T00:00:00.000Z" })
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  returnDate?: Date;
+
+  @ApiPropertyOptional({ example: "Supplier agreed to take these back" })
+  @IsOptional()
+  @IsString()
+  reason?: string;
+
+  @ApiProperty({ type: [SupplierPurchaseReturnItemDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SupplierPurchaseReturnItemDto)
+  items!: SupplierPurchaseReturnItemDto[];
+}
+
+export class QuerySupplierPurchaseReturnDto {
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  page?: number = 1;
+
+  @ApiPropertyOptional({ example: 10 })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  @Max(100)
+  limit?: number = 10;
+
+  @ApiPropertyOptional({ example: "RET" })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  supplierId?: string;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  purchaseOrderId?: string;
+
+  @ApiPropertyOptional({ enum: SupplierPurchaseReturnStatus })
+  @IsOptional()
+  @IsEnum(SupplierPurchaseReturnStatus)
+  status?: SupplierPurchaseReturnStatus;
 }

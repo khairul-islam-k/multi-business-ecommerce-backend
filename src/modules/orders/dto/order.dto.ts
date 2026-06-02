@@ -42,25 +42,12 @@ export class OrderItemInputDto {
   @IsNumber()
   @Min(0)
   discountAmount?: number;
-
-  @ApiPropertyOptional({ example: 0 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  taxAmount?: number;
 }
 
 export class OrderPaymentInputDto {
   @ApiProperty({ enum: OrderPaymentMethod })
   @IsEnum(OrderPaymentMethod)
   paymentMethod!: OrderPaymentMethod;
-
-  @ApiProperty({ example: 1200 })
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0.001)
-  amount!: number;
 
   @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsOptional()
@@ -119,6 +106,10 @@ export class CreateOrderDto {
   @IsOptional()
   @IsUUID()
   warehouseId?: string;
+
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsUUID()
+  taxId!: string;
 
   @ApiPropertyOptional({ enum: OrderType, example: OrderType.ADMIN })
   @IsOptional()

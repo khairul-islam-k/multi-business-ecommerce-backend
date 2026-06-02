@@ -22,8 +22,12 @@ import { RequirePermission } from "../permissions/decorators/require-permission.
 import { PermissionGuard } from "../permissions/guards/permission.guard";
 import {
   CreatePurchaseOrderDto,
+  CreateSupplierPurchaseReturnDto,
   CreateSupplierDto,
+  PaySupplierInvoiceDto,
   QueryPurchaseOrderDto,
+  QuerySupplierPurchaseReturnDto,
+  QuerySupplierInvoiceDto,
   QuerySupplierDto,
   ReceivePurchaseOrderDto,
   SupplierProductMapDto,
@@ -62,6 +66,88 @@ export class SupplierController {
   }
 
   @RequirePermission(RbacFeature.SUPPLIER_MANAGEMENT, PermissionAction.READ)
+  @Get("supplier-invoices")
+  @ApiOperation({ summary: "Get supplier invoices" })
+  findSupplierInvoices(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Query() query: QuerySupplierInvoiceDto,
+  ) {
+    return this.suppliers.findSupplierInvoices(businessId, query);
+  }
+
+  @RequirePermission(RbacFeature.SUPPLIER_MANAGEMENT, PermissionAction.READ)
+  @Get("supplier-invoices/:supplierInvoiceId")
+  @ApiOperation({ summary: "Get supplier invoice" })
+  findSupplierInvoice(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("supplierInvoiceId", ParseUUIDPipe) supplierInvoiceId: string,
+  ) {
+    return this.suppliers.findSupplierInvoice(businessId, supplierInvoiceId);
+  }
+
+  @RequirePermission(RbacFeature.SUPPLIER_MANAGEMENT, PermissionAction.UPDATE)
+  @Post("supplier-invoices/:supplierInvoiceId/pay")
+  @ApiOperation({ summary: "Pay supplier invoice" })
+  paySupplierInvoice(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("supplierInvoiceId", ParseUUIDPipe) supplierInvoiceId: string,
+    @Body() dto: PaySupplierInvoiceDto,
+  ) {
+    return this.suppliers.paySupplierInvoice(
+      user,
+      businessId,
+      supplierInvoiceId,
+      dto,
+    );
+  }
+
+  @RequirePermission(RbacFeature.SUPPLIER_MANAGEMENT, PermissionAction.READ)
+  @Get("purchase-returns")
+  @ApiOperation({ summary: "Get supplier purchase returns" })
+  findPurchaseReturns(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Query() query: QuerySupplierPurchaseReturnDto,
+  ) {
+    return this.suppliers.findPurchaseReturns(businessId, query);
+  }
+
+  @RequirePermission(RbacFeature.SUPPLIER_MANAGEMENT, PermissionAction.READ)
+  @Get("purchase-returns/:purchaseReturnId")
+  @ApiOperation({ summary: "Get supplier purchase return" })
+  findPurchaseReturn(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("purchaseReturnId", ParseUUIDPipe) purchaseReturnId: string,
+  ) {
+    return this.suppliers.findPurchaseReturn(businessId, purchaseReturnId);
+  }
+
+  @RequirePermission(RbacFeature.SUPPLIER_MANAGEMENT, PermissionAction.UPDATE)
+  @Patch("purchase-returns/:purchaseReturnId/complete")
+  @ApiOperation({ summary: "Complete supplier purchase return" })
+  completePurchaseReturn(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("purchaseReturnId", ParseUUIDPipe) purchaseReturnId: string,
+  ) {
+    return this.suppliers.completePurchaseReturn(
+      user,
+      businessId,
+      purchaseReturnId,
+    );
+  }
+
+  @RequirePermission(RbacFeature.SUPPLIER_MANAGEMENT, PermissionAction.UPDATE)
+  @Patch("purchase-returns/:purchaseReturnId/cancel")
+  @ApiOperation({ summary: "Cancel supplier purchase return" })
+  cancelPurchaseReturn(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("purchaseReturnId", ParseUUIDPipe) purchaseReturnId: string,
+  ) {
+    return this.suppliers.cancelPurchaseReturn(businessId, purchaseReturnId);
+  }
+
+  @RequirePermission(RbacFeature.SUPPLIER_MANAGEMENT, PermissionAction.READ)
   @Get("purchase-orders")
   @ApiOperation({ summary: "Get supplier purchase orders" })
   findPurchaseOrders(
@@ -80,6 +166,23 @@ export class SupplierController {
     @Body() dto: CreatePurchaseOrderDto,
   ) {
     return this.suppliers.createPurchaseOrder(user, businessId, dto);
+  }
+
+  @RequirePermission(RbacFeature.SUPPLIER_MANAGEMENT, PermissionAction.CREATE)
+  @Post("purchase-orders/:purchaseOrderId/returns")
+  @ApiOperation({ summary: "Create supplier purchase return request" })
+  createPurchaseReturn(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("purchaseOrderId", ParseUUIDPipe) purchaseOrderId: string,
+    @Body() dto: CreateSupplierPurchaseReturnDto,
+  ) {
+    return this.suppliers.createPurchaseReturn(
+      user,
+      businessId,
+      purchaseOrderId,
+      dto,
+    );
   }
 
   @RequirePermission(RbacFeature.SUPPLIER_MANAGEMENT, PermissionAction.READ)

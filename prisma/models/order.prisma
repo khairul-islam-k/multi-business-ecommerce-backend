@@ -201,6 +201,7 @@ model OrderOrder {
   businessId  String  @map("business_id") @db.Uuid
   customerId  String? @map("customer_id") @db.Uuid
   warehouseId String? @map("warehouse_id") @db.Uuid
+  taxId       String  @map("tax_id") @db.Uuid
 
   orderNo       String             @map("order_no") @db.VarChar(100)
   orderType     OrderType          @map("order_type")
@@ -216,6 +217,7 @@ model OrderOrder {
   subtotal       Decimal @default(0) @db.Decimal(12, 2)
   discountTotal  Decimal @default(0) @map("discount_total") @db.Decimal(12, 2)
   taxTotal       Decimal @default(0) @map("tax_total") @db.Decimal(12, 2)
+  taxRate        Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
   shippingCharge Decimal @default(0) @map("shipping_charge") @db.Decimal(12, 2)
   totalAmount    Decimal @default(0) @map("total_amount") @db.Decimal(12, 2)
   paidAmount     Decimal @default(0) @map("paid_amount") @db.Decimal(12, 2)
@@ -227,6 +229,7 @@ model OrderOrder {
   deletedAt DateTime? @map("deleted_at")
 
   customer OrderCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  tax      FinanceTax     @relation(fields: [taxId], references: [id], onDelete: Restrict)
 
   items      OrderOrderItem[]
   statusLogs OrderStatusLog[]
@@ -239,6 +242,7 @@ model OrderOrder {
   @@index([businessId])
   @@index([customerId])
   @@index([warehouseId])
+  @@index([taxId])
   @@index([status])
   @@index([paymentStatus])
   @@index([createdAt])

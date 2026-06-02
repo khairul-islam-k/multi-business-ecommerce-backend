@@ -15,7 +15,6 @@ enum SupplierProductMapStatus {
 enum SupplierPurchaseOrderStatus {
   DRAFT
   ORDERED
-  PARTIALLY_RECEIVED
   RECEIVED
   CANCELLED
 }
@@ -112,6 +111,7 @@ model SupplierPurchaseOrder {
   businessId  String @map("business_id") @db.Uuid
   supplierId  String @map("supplier_id") @db.Uuid
   warehouseId String @map("warehouse_id") @db.Uuid
+  taxId       String @map("tax_id") @db.Uuid
 
   purchaseOrderNo      String                      @map("purchase_order_no") @db.VarChar(100)
   orderDate            DateTime                    @map("order_date")
@@ -121,6 +121,7 @@ model SupplierPurchaseOrder {
   subtotal      Decimal @default(0) @db.Decimal(12, 2)
   discountTotal Decimal @default(0) @map("discount_total") @db.Decimal(12, 2)
   taxTotal      Decimal @default(0) @map("tax_total") @db.Decimal(12, 2)
+  taxRate       Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
   shippingCost  Decimal @default(0) @map("shipping_cost") @db.Decimal(12, 2)
   totalAmount   Decimal @default(0) @map("total_amount") @db.Decimal(12, 2)
 
@@ -134,6 +135,7 @@ model SupplierPurchaseOrder {
   deletedAt DateTime? @map("deleted_at")
 
   supplier Supplier                    @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  tax      FinanceTax                  @relation(fields: [taxId], references: [id], onDelete: Restrict)
   items    SupplierPurchaseOrderItem[]
   invoices SupplierInvoice[]
   returns  SupplierPurchaseReturn[]
@@ -142,6 +144,7 @@ model SupplierPurchaseOrder {
   @@index([businessId])
   @@index([supplierId])
   @@index([warehouseId])
+  @@index([taxId])
   @@index([status])
   @@index([orderDate])
   @@map("supplier_purchase_orders")
@@ -176,6 +179,7 @@ model SupplierInvoice {
   businessId      String  @map("business_id") @db.Uuid
   supplierId      String  @map("supplier_id") @db.Uuid
   purchaseOrderId String? @map("purchase_order_id") @db.Uuid
+  taxId           String? @map("tax_id") @db.Uuid
 
   invoiceNo   String                @map("invoice_no") @db.VarChar(100)
   invoiceDate DateTime              @map("invoice_date")
@@ -185,6 +189,7 @@ model SupplierInvoice {
   subtotal      Decimal @default(0) @db.Decimal(12, 2)
   discountTotal Decimal @default(0) @map("discount_total") @db.Decimal(12, 2)
   taxTotal      Decimal @default(0) @map("tax_total") @db.Decimal(12, 2)
+  taxRate       Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
   shippingCost  Decimal @default(0) @map("shipping_cost") @db.Decimal(12, 2)
   totalAmount   Decimal @default(0) @map("total_amount") @db.Decimal(12, 2)
   paidAmount    Decimal @default(0) @map("paid_amount") @db.Decimal(12, 2)
@@ -198,6 +203,7 @@ model SupplierInvoice {
 
   supplier      Supplier               @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   purchaseOrder SupplierPurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  tax           FinanceTax?            @relation(fields: [taxId], references: [id], onDelete: Restrict)
 
   items    SupplierInvoiceItem[]
   payments SupplierPayment[]
@@ -207,6 +213,7 @@ model SupplierInvoice {
   @@index([businessId])
   @@index([supplierId])
   @@index([purchaseOrderId])
+  @@index([taxId])
   @@index([status])
   @@index([invoiceDate])
   @@index([dueDate])
@@ -272,12 +279,17 @@ model SupplierPurchaseReturn {
   purchaseOrderId   String? @map("purchase_order_id") @db.Uuid
   supplierInvoiceId String? @map("supplier_invoice_id") @db.Uuid
   warehouseId       String  @map("warehouse_id") @db.Uuid
+  taxId             String? @map("tax_id") @db.Uuid
 
-  returnNo    String                       @map("return_no") @db.VarChar(100)
-  returnDate  DateTime                     @map("return_date")
-  status      SupplierPurchaseReturnStatus @default(DRAFT)
-  reason      String?
-  totalAmount Decimal                      @default(0) @map("total_amount") @db.Decimal(12, 2)
+  returnNo      String                       @map("return_no") @db.VarChar(100)
+  returnDate    DateTime                     @map("return_date")
+  status        SupplierPurchaseReturnStatus @default(DRAFT)
+  reason        String?
+  subtotal      Decimal                      @default(0) @db.Decimal(12, 2)
+  discountTotal Decimal                      @default(0) @map("discount_total") @db.Decimal(12, 2)
+  taxTotal      Decimal                      @default(0) @map("tax_total") @db.Decimal(12, 2)
+  taxRate       Decimal                      @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  totalAmount   Decimal                      @default(0) @map("total_amount") @db.Decimal(12, 2)
 
   createdBy String?  @map("created_by") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at")
@@ -286,6 +298,7 @@ model SupplierPurchaseReturn {
   supplier        Supplier               @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   purchaseOrder   SupplierPurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
   supplierInvoice SupplierInvoice?       @relation(fields: [supplierInvoiceId], references: [id], onDelete: SetNull)
+  tax             FinanceTax?            @relation(fields: [taxId], references: [id], onDelete: Restrict)
 
   items SupplierPurchaseReturnItem[]
 
@@ -295,6 +308,7 @@ model SupplierPurchaseReturn {
   @@index([purchaseOrderId])
   @@index([supplierInvoiceId])
   @@index([warehouseId])
+  @@index([taxId])
   @@index([status])
   @@index([returnDate])
   @@map("supplier_purchase_returns")
@@ -306,10 +320,12 @@ model SupplierPurchaseReturnItem {
   productId        String @map("product_id") @db.Uuid
   variantId        String @map("variant_id") @db.Uuid
 
-  quantity  Decimal @db.Decimal(14, 3)
-  unitCost  Decimal @map("unit_cost") @db.Decimal(12, 2)
-  lineTotal Decimal @map("line_total") @db.Decimal(12, 2)
-  reason    String?
+  quantity       Decimal @db.Decimal(14, 3)
+  unitCost       Decimal @map("unit_cost") @db.Decimal(12, 2)
+  discountAmount Decimal @default(0) @map("discount_amount") @db.Decimal(12, 2)
+  taxAmount      Decimal @default(0) @map("tax_amount") @db.Decimal(12, 2)
+  lineTotal      Decimal @map("line_total") @db.Decimal(12, 2)
+  reason         String?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
