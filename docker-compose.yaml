@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: onecomm_postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=onecomm_user
+      - POSTGRES_PASSWORD=onecomm_password
+      - POSTGRES_DB=onecomm_db
+
+    ports:
+      - "7777:7777"
+
+    volumes:
+      - onecomm_postgres_data:/var/lib/postgres
+
+volumes:
+  onecomm_postgres_data:
