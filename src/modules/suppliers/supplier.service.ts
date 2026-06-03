@@ -380,7 +380,7 @@ export class SupplierService {
           warehouseId: dto.warehouseId,
           taxId: tax.id,
           purchaseOrderNo,
-          orderDate: dto.orderDate,
+          orderDate: new Date(),
           expectedDeliveryDate: dto.expectedDeliveryDate,
           status: dto.status ?? SupplierPurchaseOrderStatus.DRAFT,
           subtotal: totals.subtotal,

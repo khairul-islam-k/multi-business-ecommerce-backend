@@ -198,11 +198,6 @@ export class CreatePurchaseOrderDto {
   @IsUUID()
   taxId!: string;
 
-  @ApiProperty({ example: "2026-05-20T00:00:00.000Z" })
-  @Type(() => Date)
-  @IsDate()
-  orderDate!: Date;
-
   @ApiPropertyOptional({ example: "2026-05-25T00:00:00.000Z" })
   @IsOptional()
   @Type(() => Date)
