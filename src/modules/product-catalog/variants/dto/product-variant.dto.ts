@@ -30,11 +30,12 @@ export class CreateProductVariantDto extends ProductImagesDto {
   @MaxLength(200)
   title!: string;
 
-  @ApiProperty({ example: 1200 })
+  @ApiPropertyOptional({ example: 1250 })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
-  price!: number;
+  priceOverride?: number;
 
   @ApiPropertyOptional({ example: 0.5 })
   @IsOptional()

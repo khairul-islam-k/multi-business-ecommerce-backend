@@ -18,7 +18,7 @@ import {
 
 const VARIANT_INCLUDE = {
   product: {
-    select: { name: true },
+    select: { name: true, price: true },
   },
   attributes: {
     include: {
@@ -65,7 +65,7 @@ export class ProductVariantService {
             title: this.lookup.normalizeName(dto.title),
             sku,
             barcode,
-            price: dto.price,
+            priceOverride: dto.priceOverride ?? null,
             weight: dto.weight ?? null,
             status: dto.status ?? ProductVariantStatus.ACTIVE,
             createdBy: currentUser.id,
@@ -86,8 +86,11 @@ export class ProductVariantService {
             businessId,
             productId,
             variantId: createdVariant.id,
+            stockItemKey: this.buildStockItemKey(productId, createdVariant.id),
           },
         });
+
+        await this.zeroProductLevelStock(tx, businessId, productId);
 
         return createdVariant;
       });
@@ -201,7 +204,9 @@ export class ProductVariantService {
             ...(dto.title !== undefined && {
               title: this.lookup.normalizeName(dto.title),
             }),
-            ...(dto.price !== undefined && { price: dto.price }),
+            ...(dto.priceOverride !== undefined && {
+              priceOverride: dto.priceOverride,
+            }),
             ...(dto.weight !== undefined && { weight: dto.weight }),
             ...(dto.status !== undefined && { status: dto.status }),
             updatedBy: currentUser.id,
@@ -346,5 +351,57 @@ export class ProductVariantService {
         "Product variant cannot be deleted while referenced by inventory, order, invoice, supplier, or courier records",
       );
     }
+  }
+
+  private buildStockItemKey(productId: string, variantId?: string | null) {
+    return variantId ?? `product:${productId}`;
+  }
+
+  private async zeroProductLevelStock(
+    tx: Prisma.TransactionClient,
+    businessId: string,
+    productId: string,
+  ) {
+    const stockItemKey = this.buildStockItemKey(productId, null);
+    const productStock = await tx.inventoryStock.findUnique({
+      where: {
+        businessId_stockItemKey: {
+          businessId,
+          stockItemKey,
+        },
+      },
+    });
+
+    if (!productStock) {
+      await tx.inventoryStock.create({
+        data: {
+          businessId,
+          productId,
+          variantId: null,
+          stockItemKey,
+        },
+      });
+      return;
+    }
+
+    await tx.inventoryStock.update({
+      where: { id: productStock.id },
+      data: {
+        totalQuantity: 0,
+        quantityReserved: 0,
+      },
+    });
+
+    await tx.inventoryWarehouseStock.updateMany({
+      where: {
+        businessId,
+        productId,
+        variantId: null,
+      },
+      data: {
+        totalQuantity: 0,
+        quantityReserved: 0,
+      },
+    });
   }
 }

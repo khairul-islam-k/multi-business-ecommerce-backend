@@ -7,7 +7,7 @@ import { BusinessModule } from "../business/business.module";
 import { PackageModule } from "../packages/package.module";
 
 @Module({
-  imports: [forwardRef(() => BusinessModule), PackageModule],
+  imports: [forwardRef(() => BusinessModule), forwardRef(() => PackageModule)],
   controllers: [PermissionController],
   providers: [PermissionService, PermissionGuard],
   exports: [PermissionService, PermissionGuard],

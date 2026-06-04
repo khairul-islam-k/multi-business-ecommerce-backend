@@ -40,6 +40,7 @@ enum PackageSubscriptionStatus {
   TRIALING
   ACTIVE
   PAST_DUE
+  SUPERSEDED
   CANCELLED
   EXPIRED
 }
@@ -53,6 +54,13 @@ enum PackagePaymentStatus {
 
 enum PackagePaymentType {
   PLAN_CHANGE
+  CREDIT_ONLY_PLAN_CHANGE
+}
+
+enum PackageCreditEntryType {
+  DOWNGRADE_CREDIT
+  CREDIT_APPLIED
+  ADMIN_ADJUSTMENT
 }
 
 // =======================
@@ -143,12 +151,35 @@ model PackageSubscription {
   tenant        SystemUser            @relation("TenantPackageSubscriptions", fields: [tenantId], references: [id], onDelete: Cascade)
   usageCounters PackageUsageCounter[]
   mockPayments  PackageMockPayment[]
+  creditEntries PackageTenantCreditLedger[]
 
   @@index([tenantId])
   @@index([packageId])
   @@index([status])
   @@index([currentPeriodEnd])
   @@map("package_subscriptions")
+}
+
+model PackageTenantCreditLedger {
+  id             String                 @id @default(uuid()) @db.Uuid
+  tenantId       String                 @map("tenant_id") @db.Uuid
+  subscriptionId String?                @map("subscription_id") @db.Uuid
+  paymentId      String?                @map("payment_id") @db.Uuid
+  type           PackageCreditEntryType
+  amount         Decimal                @db.Decimal(12, 2)
+  currencyCode   String                 @default("BDT") @map("currency_code") @db.VarChar(10)
+  note           String?
+  metadata       Json?
+  createdAt      DateTime               @default(now()) @map("created_at")
+
+  tenant       SystemUser            @relation("TenantPackageCreditEntries", fields: [tenantId], references: [id], onDelete: Cascade)
+  subscription PackageSubscription?  @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  payment      PackageMockPayment?   @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([subscriptionId])
+  @@index([paymentId])
+  @@map("package_tenant_credit_ledger")
 }
 
 model PackageUsageCounter {
@@ -187,6 +218,7 @@ model PackageMockPayment {
   tenant       SystemUser           @relation("TenantPackageMockPayments", fields: [tenantId], references: [id], onDelete: Cascade)
   subscription PackageSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
   plan         PackagePlan?         @relation(fields: [planId], references: [id], onDelete: SetNull)
+  creditEntries PackageTenantCreditLedger[]
 
   @@index([tenantId])
   @@index([subscriptionId])

@@ -52,10 +52,10 @@ export class StockTransferService {
       this.lookup.assertWarehouseExists(businessId, dto.fromWarehouseId),
       this.lookup.assertWarehouseExists(businessId, dto.toWarehouseId),
       ...dto.items.map((item) =>
-        this.lookup.assertVariantForStock(
+        this.lookup.assertStockItem(
           businessId,
           item.productId,
-          item.variantId,
+          item.variantId ?? null,
         ),
       ),
     ]);
@@ -75,7 +75,7 @@ export class StockTransferService {
           items: {
             create: dto.items.map((item) => ({
               productId: item.productId,
-              variantId: item.variantId,
+              variantId: item.variantId ?? null,
               requestedQuantity: item.requestedQuantity,
             })),
           },
@@ -280,18 +280,22 @@ export class StockTransferService {
     return transfer;
   }
 
-  private assertItems(items: { variantId: string }[]) {
+  private assertItems(items: { productId: string; variantId?: string | null }[]) {
     if (items.length === 0) {
       throw new BadRequestException(
         "At least one stock transfer item is required",
       );
     }
 
-    const variantIds = new Set(items.map((item) => item.variantId));
+    const itemKeys = new Set(
+      items.map((item) =>
+        this.lookup.buildStockItemKey(item.productId, item.variantId),
+      ),
+    );
 
-    if (variantIds.size !== items.length) {
+    if (itemKeys.size !== items.length) {
       throw new BadRequestException(
-        "Stock transfer cannot contain duplicate variants",
+        "Stock transfer cannot contain duplicate items",
       );
     }
   }

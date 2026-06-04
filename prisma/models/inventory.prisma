@@ -97,7 +97,8 @@ model InventoryStock {
   id         String @id @default(uuid()) @db.Uuid
   businessId String @map("business_id") @db.Uuid
   productId  String @map("product_id") @db.Uuid
-  variantId  String @map("variant_id") @db.Uuid
+  variantId  String? @map("variant_id") @db.Uuid
+  stockItemKey String @map("stock_item_key") @db.VarChar(80)
 
   totalQuantity    Decimal @default(0) @map("total_quantity") @db.Decimal(14, 3)
   quantityReserved Decimal @default(0) @map("quantity_reserved") @db.Decimal(14, 3)
@@ -110,7 +111,7 @@ model InventoryStock {
   movements       InventoryStockMovement[]
   allocations     InventoryOrderAllocation[]
 
-  @@unique([businessId, variantId])
+  @@unique([businessId, stockItemKey])
   @@index([businessId])
   @@index([productId])
   @@index([variantId])
@@ -123,7 +124,8 @@ model InventoryWarehouseStock {
   stockId     String @map("stock_id") @db.Uuid
   warehouseId String @map("warehouse_id") @db.Uuid
   productId   String @map("product_id") @db.Uuid
-  variantId   String @map("variant_id") @db.Uuid
+  variantId   String? @map("variant_id") @db.Uuid
+  stockItemKey String @map("stock_item_key") @db.VarChar(80)
 
   totalQuantity    Decimal @default(0) @map("total_quantity") @db.Decimal(14, 3)
   quantityReserved Decimal @default(0) @map("quantity_reserved") @db.Decimal(14, 3)
@@ -134,8 +136,8 @@ model InventoryWarehouseStock {
   stock     InventoryStock @relation(fields: [stockId], references: [id], onDelete: Cascade)
   warehouse Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
 
-  @@unique([businessId, warehouseId, stockId])
-  @@unique([businessId, warehouseId, variantId])
+  @@unique([businessId, warehouseId, stockId], map: "inventory_wh_stock_by_stock_unique")
+  @@unique([businessId, warehouseId, stockItemKey], map: "inventory_wh_stock_by_item_unique")
   @@index([businessId])
   @@index([stockId])
   @@index([warehouseId])
@@ -150,7 +152,8 @@ model InventoryStockMovement {
   stockId     String @map("stock_id") @db.Uuid
   warehouseId String @map("warehouse_id") @db.Uuid
   productId   String @map("product_id") @db.Uuid
-  variantId   String @map("variant_id") @db.Uuid
+  variantId   String? @map("variant_id") @db.Uuid
+  stockItemKey String @map("stock_item_key") @db.VarChar(80)
 
   movementType InventoryMovementType @map("movement_type")
   quantity     Decimal               @db.Decimal(14, 3)
@@ -170,6 +173,7 @@ model InventoryStockMovement {
   @@index([warehouseId])
   @@index([productId])
   @@index([variantId])
+  @@index([stockItemKey])
   @@index([movementType])
   @@index([referenceType, referenceId])
   @@index([createdAt])
@@ -184,7 +188,8 @@ model InventoryOrderAllocation {
   stockId     String @map("stock_id") @db.Uuid
   warehouseId String @map("warehouse_id") @db.Uuid
   productId   String @map("product_id") @db.Uuid
-  variantId   String @map("variant_id") @db.Uuid
+  variantId   String? @map("variant_id") @db.Uuid
+  stockItemKey String @map("stock_item_key") @db.VarChar(80)
 
   quantity Decimal                        @db.Decimal(14, 3)
   status   InventoryOrderAllocationStatus @default(RESERVED)
@@ -205,6 +210,7 @@ model InventoryOrderAllocation {
   @@index([warehouseId])
   @@index([productId])
   @@index([variantId])
+  @@index([stockItemKey])
   @@index([status])
   @@map("inventory_order_allocations")
 }
@@ -242,7 +248,7 @@ model InventoryStockAdjustmentItem {
   id           String @id @default(uuid()) @db.Uuid
   adjustmentId String @map("adjustment_id") @db.Uuid
   productId    String @map("product_id") @db.Uuid
-  variantId    String @map("variant_id") @db.Uuid
+  variantId    String? @map("variant_id") @db.Uuid
 
   oldQuantity   Decimal @map("old_quantity") @db.Decimal(14, 3)
   adjustmentQty Decimal @map("adjustment_qty") @db.Decimal(14, 3)
@@ -297,7 +303,7 @@ model InventoryStockTransferItem {
   id         String @id @default(uuid()) @db.Uuid
   transferId String @map("transfer_id") @db.Uuid
   productId  String @map("product_id") @db.Uuid
-  variantId  String @map("variant_id") @db.Uuid
+  variantId  String? @map("variant_id") @db.Uuid
 
   requestedQuantity   Decimal @default(0) @map("requested_quantity") @db.Decimal(14, 3)
   transferredQuantity Decimal @default(0) @map("transferred_quantity") @db.Decimal(14, 3)

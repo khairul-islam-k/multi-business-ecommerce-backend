@@ -235,8 +235,12 @@ export class SupplierService {
     dto: SupplierProductMapDto,
   ) {
     await this.assertSupplierExists(businessId, supplierId, true);
-    await this.inventoryLookup.assertVariantForStock(
+    await this.inventoryLookup.assertStockItem(
       businessId,
+      dto.productId,
+      dto.variantId ?? null,
+    );
+    const itemKey = this.inventoryLookup.buildStockItemKey(
       dto.productId,
       dto.variantId,
     );
@@ -247,7 +251,8 @@ export class SupplierService {
           businessId,
           supplierId,
           productId: dto.productId,
-          variantId: dto.variantId,
+          variantId: dto.variantId ?? null,
+          itemKey,
           supplierSku: this.normalizeNullableText(dto.supplierSku),
           lastPurchasePrice: dto.lastPurchasePrice,
           minOrderQuantity: dto.minOrderQuantity,
@@ -285,10 +290,18 @@ export class SupplierService {
       productMapId,
     );
 
-    await this.inventoryLookup.assertVariantForStock(
+    const nextProductId = dto.productId ?? existingMap.productId;
+    const nextVariantId =
+      dto.variantId !== undefined ? dto.variantId : existingMap.variantId;
+    const itemKey = this.inventoryLookup.buildStockItemKey(
+      nextProductId,
+      nextVariantId,
+    );
+
+    await this.inventoryLookup.assertStockItem(
       businessId,
-      dto.productId ?? existingMap.productId,
-      dto.variantId ?? existingMap.variantId,
+      nextProductId,
+      nextVariantId,
     );
 
     try {
@@ -296,7 +309,13 @@ export class SupplierService {
         where: { id: productMapId },
         data: {
           ...(dto.productId !== undefined && { productId: dto.productId }),
-          ...(dto.variantId !== undefined && { variantId: dto.variantId }),
+          ...(dto.productId !== undefined || dto.variantId !== undefined
+            ? {
+                productId: nextProductId,
+                variantId: nextVariantId ?? null,
+                itemKey,
+              }
+            : {}),
           ...(dto.supplierSku !== undefined && {
             supplierSku: this.normalizeNullableText(dto.supplierSku),
           }),
@@ -351,10 +370,10 @@ export class SupplierService {
       this.assertSupplierExists(businessId, dto.supplierId, true),
       this.inventoryLookup.assertWarehouseExists(businessId, dto.warehouseId),
       ...dto.items.map((item) =>
-        this.inventoryLookup.assertVariantForStock(
+        this.inventoryLookup.assertStockItem(
           businessId,
           item.productId,
-          item.variantId,
+          item.variantId ?? null,
         ),
       ),
     ]);
@@ -394,7 +413,7 @@ export class SupplierService {
           items: {
             create: dto.items.map((item) => ({
               productId: item.productId,
-              variantId: item.variantId,
+              variantId: item.variantId ?? null,
               quantityOrdered: item.quantityOrdered,
               unitCost: item.unitCost,
               discountAmount: item.discountAmount ?? 0,
@@ -572,10 +591,13 @@ export class SupplierService {
 
         await tx.supplierProductMap.upsert({
           where: {
-            businessId_supplierId_variantId: {
+            businessId_supplierId_itemKey: {
               businessId,
               supplierId: purchaseOrder.supplierId,
-              variantId: orderItem.variantId,
+              itemKey: this.inventoryLookup.buildStockItemKey(
+                orderItem.productId,
+                orderItem.variantId,
+              ),
             },
           },
           update: {
@@ -587,6 +609,10 @@ export class SupplierService {
             supplierId: purchaseOrder.supplierId,
             productId: orderItem.productId,
             variantId: orderItem.variantId,
+            itemKey: this.inventoryLookup.buildStockItemKey(
+              orderItem.productId,
+              orderItem.variantId,
+            ),
             lastPurchasePrice: orderItem.unitCost,
             status: SupplierProductMapStatus.ACTIVE,
           },
@@ -1073,18 +1099,22 @@ export class SupplierService {
     return purchaseOrder;
   }
 
-  private assertItems(items: { variantId: string }[]) {
+  private assertItems(items: { productId: string; variantId?: string | null }[]) {
     if (items.length === 0) {
       throw new BadRequestException(
         "At least one purchase order item is required",
       );
     }
 
-    const variantIds = new Set(items.map((item) => item.variantId));
+    const itemKeys = new Set(
+      items.map((item) =>
+        this.inventoryLookup.buildStockItemKey(item.productId, item.variantId),
+      ),
+    );
 
-    if (variantIds.size !== items.length) {
+    if (itemKeys.size !== items.length) {
       throw new BadRequestException(
-        "Purchase order cannot contain duplicate variants",
+        "Purchase order cannot contain duplicate items",
       );
     }
   }
@@ -1092,7 +1122,7 @@ export class SupplierService {
   private assertReturnItems(
     items: {
       productId: string;
-      variantId: string;
+      variantId?: string | null;
     }[],
   ) {
     if (items.length === 0) {
@@ -1101,11 +1131,15 @@ export class SupplierService {
       );
     }
 
-    const variantIds = new Set(items.map((item) => item.variantId));
+    const itemKeys = new Set(
+      items.map((item) =>
+        this.inventoryLookup.buildStockItemKey(item.productId, item.variantId),
+      ),
+    );
 
-    if (variantIds.size !== items.length) {
+    if (itemKeys.size !== items.length) {
       throw new BadRequestException(
-        "Purchase return cannot contain duplicate variants",
+        "Purchase return cannot contain duplicate items",
       );
     }
   }
@@ -1203,13 +1237,16 @@ export class SupplierService {
     }>,
     requestedItems: {
       productId: string;
-      variantId: string;
+      variantId?: string | null;
       quantity: number;
       reason?: string;
     }[],
   ) {
     const purchaseOrderItemMap = new Map(
-      purchaseOrder.items.map((item) => [item.variantId, item]),
+      purchaseOrder.items.map((item) => [
+        this.inventoryLookup.buildStockItemKey(item.productId, item.variantId),
+        item,
+      ]),
     );
     const existingReturnItems =
       await this.prisma.supplierPurchaseReturnItem.findMany({
@@ -1223,26 +1260,30 @@ export class SupplierService {
           },
         },
         select: {
+          productId: true,
           variantId: true,
           quantity: true,
         },
       });
-    const returnedQuantityByVariant = new Map<string, Prisma.Decimal>();
+    const returnedQuantityByItem = new Map<string, Prisma.Decimal>();
 
     for (const item of existingReturnItems) {
-      const current =
-        returnedQuantityByVariant.get(item.variantId) ?? new Prisma.Decimal(0);
-
-      returnedQuantityByVariant.set(
+      const itemKey = this.inventoryLookup.buildStockItemKey(
+        item.productId,
         item.variantId,
-        current.plus(item.quantity),
       );
+      const current =
+        returnedQuantityByItem.get(itemKey) ?? new Prisma.Decimal(0);
+
+      returnedQuantityByItem.set(itemKey, current.plus(item.quantity));
     }
 
     return requestedItems.map((requestedItem) => {
-      const purchaseOrderItem = purchaseOrderItemMap.get(
+      const itemKey = this.inventoryLookup.buildStockItemKey(
+        requestedItem.productId,
         requestedItem.variantId,
       );
+      const purchaseOrderItem = purchaseOrderItemMap.get(itemKey);
 
       if (
         !purchaseOrderItem ||
@@ -1255,8 +1296,7 @@ export class SupplierService {
 
       const quantity = new Prisma.Decimal(requestedItem.quantity);
       const alreadyReturned =
-        returnedQuantityByVariant.get(requestedItem.variantId) ??
-        new Prisma.Decimal(0);
+        returnedQuantityByItem.get(itemKey) ?? new Prisma.Decimal(0);
       const remainingReturnable = new Prisma.Decimal(
         purchaseOrderItem.quantityReceived,
       ).minus(alreadyReturned);
@@ -1283,7 +1323,7 @@ export class SupplierService {
 
       return {
         productId: requestedItem.productId,
-        variantId: requestedItem.variantId,
+        variantId: requestedItem.variantId ?? null,
         quantity,
         unitCost: purchaseOrderItem.unitCost,
         discountAmount,

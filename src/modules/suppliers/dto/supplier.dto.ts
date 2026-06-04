@@ -115,9 +115,10 @@ export class SupplierProductMapDto {
   @IsUUID()
   productId!: string;
 
-  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
   @IsUUID()
-  variantId!: string;
+  variantId?: string;
 
   @ApiPropertyOptional({ example: "SUP-SKU-01" })
   @IsOptional()
@@ -161,9 +162,10 @@ export class PurchaseOrderItemDto {
   @IsUUID()
   productId!: string;
 
-  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
   @IsUUID()
-  variantId!: string;
+  variantId?: string;
 
   @ApiProperty({ example: 10 })
   @Type(() => Number)
@@ -330,9 +332,10 @@ export class SupplierPurchaseReturnItemDto {
   @IsUUID()
   productId!: string;
 
-  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
   @IsUUID()
-  variantId!: string;
+  variantId?: string;
 
   @ApiProperty({ example: 2 })
   @Type(() => Number)

@@ -218,7 +218,7 @@ model CourierShipmentItem {
   shipmentId  String @map("shipment_id") @db.Uuid
   orderItemId String @map("order_item_id") @db.Uuid
   productId   String @map("product_id") @db.Uuid
-  variantId   String @map("variant_id") @db.Uuid
+  variantId   String? @map("variant_id") @db.Uuid
 
   quantity Decimal @db.Decimal(14, 3)
 

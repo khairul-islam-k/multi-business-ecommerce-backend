@@ -218,7 +218,6 @@ export class FinancePayableService {
         amount: params.paymentAmount,
         paymentDate: new Date(),
         paymentMethod: params.dto.paymentMethod,
-        referenceNo: this.normalizeNullableText(params.dto.referenceNo),
         note: this.normalizeNullableText(params.dto.note),
         createdBy: params.currentUserId,
       },

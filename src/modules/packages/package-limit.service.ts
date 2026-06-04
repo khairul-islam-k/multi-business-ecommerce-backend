@@ -77,6 +77,29 @@ export class PackageLimitService {
     return items.sort((a, b) => a.limitKey.localeCompare(b.limitKey));
   }
 
+  async assertUsageFitsLimits(
+    tenantId: string,
+    limits: PlanSnapshotLimit[],
+  ) {
+    const violations: string[] = [];
+
+    for (const limit of limits) {
+      const liveUsed = await this.getLiveUsage(tenantId, limit.limitKey);
+
+      if (liveUsed > limit.limitValue) {
+        violations.push(
+          `${limit.limitKey}: allowed ${limit.limitValue}, currently used ${liveUsed}`,
+        );
+      }
+    }
+
+    if (violations.length > 0) {
+      throw new ForbiddenException(
+        `Current usage exceeds target package limits. ${violations.join("; ")}`,
+      );
+    }
+  }
+
   private async getUsageForLimit(tenantId: string, limitKey: PackageLimitKey) {
     const subscription =
       await this.subscriptions.assertTenantCanAccess(tenantId);

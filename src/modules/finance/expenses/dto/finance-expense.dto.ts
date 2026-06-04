@@ -45,12 +45,12 @@ export class QueryExpenseCategoryDto {
   @Min(1)
   page?: number = 1;
 
-  @ApiPropertyOptional({ example: 20 })
+  @ApiPropertyOptional({ example: 10 })
   @IsOptional()
   @Type(() => Number)
   @Min(1)
   @Max(100)
-  limit?: number = 20;
+  limit?: number = 10;
 
   @ApiPropertyOptional({ example: "rent" })
   @IsOptional()
@@ -87,12 +87,6 @@ export class CreateExpenseDto {
   @Type(() => Date)
   @IsDate()
   expenseDate!: Date;
-
-  @ApiPropertyOptional({ example: "BILL-1001" })
-  @IsOptional()
-  @IsString()
-  @MaxLength(150)
-  referenceNo?: string;
 
   @ApiPropertyOptional({ example: "Paid to local vendor" })
   @IsOptional()

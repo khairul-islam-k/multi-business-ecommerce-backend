@@ -69,8 +69,12 @@ export type PackagePlanSnapshot = {
 export type PlanChangeCharge = {
   targetPlanId: string;
   targetPlanPrice: number;
-  currentUnusedBalance: number;
+  usedCurrentPlanValue: number;
+  unusedCurrentBalance: number;
+  existingCreditBalance: number;
+  creditApplied: number;
   amountDue: number;
+  creditToAdd: number;
   currencyCode: string;
   currentSubscriptionId: string | null;
   currentPlanId: string | null;
@@ -254,7 +258,7 @@ export class PackageSubscriptionService {
         },
       },
       data: {
-        status: PackageSubscriptionStatus.CANCELLED,
+        status: PackageSubscriptionStatus.SUPERSEDED,
         endedAt: now,
         endReason: "Changed package plan",
       },
@@ -277,25 +281,6 @@ export class PackageSubscriptionService {
     });
   }
 
-  async cancelCurrentSubscription(tenantId: string, reason?: string) {
-    const subscription = await this.findCurrentSubscription(tenantId);
-
-    if (!subscription) {
-      throw new NotFoundException("Active subscription not found");
-    }
-
-    return this.prisma.packageSubscription.update({
-      where: {
-        id: subscription.id,
-      },
-      data: {
-        status: PackageSubscriptionStatus.CANCELLED,
-        endedAt: new Date(),
-        endReason: reason?.trim() || "Cancelled by tenant",
-      },
-    });
-  }
-
   async calculatePlanChangeCharge(
     tenantId: string,
     targetPlanId: string,
@@ -303,6 +288,11 @@ export class PackageSubscriptionService {
     tx?: Prisma.TransactionClient,
   ) {
     const client = tx ?? this.prisma;
+    const existingCreditBalance = await this.getTenantCreditBalance(
+      tenantId,
+      now,
+      tx,
+    );
     const targetPlan = await client.packagePlan.findFirst({
       where: {
         id: targetPlanId,
@@ -333,8 +323,15 @@ export class PackageSubscriptionService {
         charge: {
           targetPlanId: targetPlan.id,
           targetPlanPrice: Number(targetPlan.price),
-          currentUnusedBalance: 0,
-          amountDue: Number(targetPlan.price),
+          usedCurrentPlanValue: 0,
+          unusedCurrentBalance: 0,
+          existingCreditBalance,
+          creditApplied: Math.min(Number(targetPlan.price), existingCreditBalance),
+          amountDue: Math.max(
+            Number(targetPlan.price) - existingCreditBalance,
+            0,
+          ),
+          creditToAdd: 0,
           currencyCode: targetPlan.currencyCode,
           currentSubscriptionId: null,
           currentPlanId: null,
@@ -362,16 +359,23 @@ export class PackageSubscriptionService {
       );
     }
 
-    const currentUnusedBalance = this.calculateUnusedSubscriptionBalance({
+    const unusedCurrentBalance = this.calculateUnusedSubscriptionBalance({
       price: Number(currentSubscription.price),
       billingCycle: currentSubscription.billingCycle,
       currentPeriodStart: currentSubscription.currentPeriodStart,
       currentPeriodEnd: currentSubscription.currentPeriodEnd,
       now,
     });
-    const amountDue = Math.max(
-      Number(targetPlan.price) - currentUnusedBalance,
-      0,
+    const usedCurrentPlanValue = this.roundMoney(
+      Math.max(Number(currentSubscription.price) - unusedCurrentBalance, 0),
+    );
+    const rawDue = this.roundMoney(Number(targetPlan.price) - unusedCurrentBalance);
+    const creditApplied = rawDue > 0
+      ? Math.min(rawDue, existingCreditBalance)
+      : 0;
+    const amountDue = this.roundMoney(Math.max(rawDue - creditApplied, 0));
+    const creditToAdd = this.roundMoney(
+      Math.max(unusedCurrentBalance - Number(targetPlan.price), 0),
     );
     const totalPeriodMs = Math.max(
       currentSubscription.currentPeriodEnd.getTime() -
@@ -387,8 +391,12 @@ export class PackageSubscriptionService {
       charge: {
         targetPlanId: targetPlan.id,
         targetPlanPrice: Number(targetPlan.price),
-        currentUnusedBalance,
+        usedCurrentPlanValue,
+        unusedCurrentBalance,
+        existingCreditBalance,
+        creditApplied,
         amountDue,
+        creditToAdd,
         currencyCode: targetPlan.currencyCode,
         currentSubscriptionId: currentSubscription.id,
         currentPlanId: currentSubscription.packageId,
@@ -403,6 +411,20 @@ export class PackageSubscriptionService {
       targetPlan,
       targetPlanSnapshot: this.buildPlanSnapshot(targetPlan, now),
     };
+  }
+
+  async getTenantCreditBalance(
+    tenantId: string,
+    _now = new Date(),
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx ?? this.prisma;
+    const aggregate = await client.packageTenantCreditLedger.aggregate({
+      where: { tenantId },
+      _sum: { amount: true },
+    });
+
+    return this.roundMoney(Number(aggregate._sum.amount ?? 0));
   }
 
   private getPeriodEnd(start: Date, billingCycle: PackageBillingCycle) {

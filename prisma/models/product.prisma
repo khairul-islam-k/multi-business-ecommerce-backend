@@ -132,6 +132,10 @@ model Product {
   name        String               @db.VarChar(200)
   slug        String               @db.VarChar(220)
   description String?
+  sku         String               @db.VarChar(100)
+  barcode     String               @db.VarChar(100)
+  price       Decimal              @default(0) @db.Decimal(12, 2)
+  weight      Decimal?             @db.Decimal(10, 2)
   status      CatalogProductStatus @default(DRAFT)
 
   createdBy String?   @map("created_by") @db.Uuid
@@ -146,10 +150,11 @@ model Product {
   unit     ProductUnit?     @relation(fields: [unitId], references: [id], onDelete: SetNull)
 
   variants   ProductVariant[]
-  attributes ProductAttribute[]
   images     ProductImage[]
   tags       ProductTagMap[]
 
+  @@unique([businessId, sku])
+  @@unique([businessId, barcode])
   @@index([businessId])
   @@index([categoryId])
   @@index([brandId])
@@ -167,7 +172,7 @@ model ProductVariant {
   sku     String               @db.VarChar(100)
   barcode String               @db.VarChar(100)
   title   String               @db.VarChar(200)
-  price   Decimal              @db.Decimal(12, 2)
+  priceOverride Decimal?       @map("price_override") @db.Decimal(12, 2)
   weight  Decimal?             @db.Decimal(10, 2)
   status  ProductVariantStatus @default(ACTIVE)
 
@@ -194,7 +199,6 @@ model ProductVariant {
 model ProductAttribute {
   id         String @id @default(uuid()) @db.Uuid
   businessId String @map("business_id") @db.Uuid
-  productId  String @map("product_id") @db.Uuid
 
   name   String              @db.VarChar(100)
   status ProductSimpleStatus @default(ACTIVE)
@@ -206,13 +210,11 @@ model ProductAttribute {
   deletedAt DateTime? @map("deleted_at")
 
   business Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  product  Product                   @relation(fields: [productId], references: [id], onDelete: Cascade)
   values   ProductAttributeValue[]
   variants ProductVariantAttribute[]
 
-  @@unique([name, productId])
+  @@unique([businessId, name])
   @@index([businessId])
-  @@index([productId])
   @@index([status])
   @@index([deletedAt])
   @@map("product_attributes")
@@ -235,6 +237,7 @@ model ProductAttributeValue {
   attribute ProductAttribute          @relation(fields: [attributeId], references: [id], onDelete: Cascade)
   variants  ProductVariantAttribute[]
 
+  @@unique([attributeId, value])
   @@index([businessId])
   @@index([attributeId])
   @@index([deletedAt])

@@ -156,7 +156,7 @@ export class StockService {
         orderId: dto.orderId,
         orderItemId: dto.orderItemId,
         productId: dto.productId,
-        variantId: dto.variantId,
+        variantId: dto.variantId ?? null,
         quantity: dto.quantity,
         warehouseId: dto.warehouseId,
         createdBy: currentUser.id,
@@ -218,7 +218,7 @@ export class StockService {
         id: dto.orderItemId,
         orderId: dto.orderId,
         productId: dto.productId,
-        variantId: dto.variantId,
+        variantId: dto.variantId ?? null,
         order: {
           businessId,
           deletedAt: null,

@@ -18,9 +18,10 @@ export class StockAdjustmentItemDto {
   @IsUUID()
   productId!: string;
 
-  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
   @IsUUID()
-  variantId!: string;
+  variantId?: string;
 
   @ApiProperty({ example: 3 })
   @Type(() => Number)

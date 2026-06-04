@@ -47,21 +47,22 @@ export class StockAdjustmentService {
 
     const items = await Promise.all(
       dto.items.map(async (item) => {
-        await this.lookup.assertVariantForStock(
+        await this.lookup.assertStockItem(
           businessId,
           item.productId,
-          item.variantId,
+          item.variantId ?? null,
         );
 
         const warehouseStock = await this.lookup.getWarehouseStock(
           businessId,
           dto.warehouseId,
-          item.variantId,
+          item.productId,
+          item.variantId ?? null,
         );
 
         return {
           productId: item.productId,
-          variantId: item.variantId,
+          variantId: item.variantId ?? null,
           oldQuantity: warehouseStock?.totalQuantity ?? 0,
           adjustmentQty: item.adjustmentQty,
           reason: this.lookup.normalizeNullableText(item.reason),
@@ -236,18 +237,22 @@ export class StockAdjustmentService {
     return adjustment;
   }
 
-  private assertItems(items: { variantId: string }[]) {
+  private assertItems(items: { productId: string; variantId?: string | null }[]) {
     if (items.length === 0) {
       throw new BadRequestException(
         "At least one stock adjustment item is required",
       );
     }
 
-    const variantIds = new Set(items.map((item) => item.variantId));
+    const itemKeys = new Set(
+      items.map((item) =>
+        this.lookup.buildStockItemKey(item.productId, item.variantId),
+      ),
+    );
 
-    if (variantIds.size !== items.length) {
+    if (itemKeys.size !== items.length) {
       throw new BadRequestException(
-        "Stock adjustment cannot contain duplicate variants",
+        "Stock adjustment cannot contain duplicate items",
       );
     }
   }

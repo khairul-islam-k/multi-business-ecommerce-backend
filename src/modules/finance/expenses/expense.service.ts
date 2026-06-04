@@ -57,7 +57,6 @@ export class ExpenseService {
         amount: dto.amount,
         expenseDate: dto.expenseDate,
         status: FinanceExpenseStatus.DRAFT,
-        referenceNo: this.normalizeNullableText(dto.referenceNo),
         note: this.normalizeNullableText(dto.note),
         createdBy: currentUser.id,
       },
@@ -69,7 +68,7 @@ export class ExpenseService {
 
   async findAll(businessId: string, query: QueryExpenseDto) {
     const page = query.page ?? 1;
-    const limit = query.limit ?? 20;
+    const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
 
     const where: Prisma.FinanceExpenseWhereInput = {
@@ -152,9 +151,6 @@ export class ExpenseService {
         ...(dto.amount !== undefined && { amount: dto.amount }),
         ...(dto.expenseDate !== undefined && {
           expenseDate: dto.expenseDate,
-        }),
-        ...(dto.referenceNo !== undefined && {
-          referenceNo: this.normalizeNullableText(dto.referenceNo),
         }),
         ...(dto.note !== undefined && {
           note: this.normalizeNullableText(dto.note),

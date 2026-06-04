@@ -38,9 +38,7 @@ import {
   PermissionGuard,
   PackageLimitGuard,
 )
-@Controller(
-  "product-catalog/businesses/:businessId/products/:productId/attributes",
-)
+@Controller("product-catalog/businesses/:businessId/attributes")
 export class ProductAttributeController {
   constructor(private readonly attributes: ProductAttributeService) {}
 
@@ -54,10 +52,9 @@ export class ProductAttributeController {
   create(
     @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
-    @Param("productId", ParseUUIDPipe) productId: string,
     @Body() dto: CreateProductAttributeDto,
   ) {
-    return this.attributes.create(user, businessId, productId, dto);
+    return this.attributes.create(user, businessId, dto);
   }
 
   @RequirePermission(
@@ -68,9 +65,8 @@ export class ProductAttributeController {
   @ApiOperation({ summary: "Get product attributes" })
   findAll(
     @Param("businessId", ParseUUIDPipe) businessId: string,
-    @Param("productId", ParseUUIDPipe) productId: string,
   ) {
-    return this.attributes.findAll(businessId, productId);
+    return this.attributes.findAll(businessId);
   }
 
   @RequirePermission(
@@ -82,17 +78,10 @@ export class ProductAttributeController {
   update(
     @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
-    @Param("productId", ParseUUIDPipe) productId: string,
     @Param("attributeId", ParseUUIDPipe) attributeId: string,
     @Body() dto: UpdateProductAttributeDto,
   ) {
-    return this.attributes.update(
-      user,
-      businessId,
-      productId,
-      attributeId,
-      dto,
-    );
+    return this.attributes.update(user, businessId, attributeId, dto);
   }
 
   @RequirePermission(
@@ -104,10 +93,9 @@ export class ProductAttributeController {
   remove(
     @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
-    @Param("productId", ParseUUIDPipe) productId: string,
     @Param("attributeId", ParseUUIDPipe) attributeId: string,
   ) {
-    return this.attributes.remove(user, businessId, productId, attributeId);
+    return this.attributes.remove(user, businessId, attributeId);
   }
 
   @RequirePermission(
@@ -119,17 +107,10 @@ export class ProductAttributeController {
   createValue(
     @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
-    @Param("productId", ParseUUIDPipe) productId: string,
     @Param("attributeId", ParseUUIDPipe) attributeId: string,
     @Body() dto: CreateProductAttributeValueDto,
   ) {
-    return this.attributes.createValue(
-      user,
-      businessId,
-      productId,
-      attributeId,
-      dto,
-    );
+    return this.attributes.createValue(user, businessId, attributeId, dto);
   }
 
   @RequirePermission(
@@ -141,7 +122,6 @@ export class ProductAttributeController {
   updateValue(
     @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
-    @Param("productId", ParseUUIDPipe) productId: string,
     @Param("attributeId", ParseUUIDPipe) attributeId: string,
     @Param("valueId", ParseUUIDPipe) valueId: string,
     @Body() dto: UpdateProductAttributeValueDto,
@@ -149,7 +129,6 @@ export class ProductAttributeController {
     return this.attributes.updateValue(
       user,
       businessId,
-      productId,
       attributeId,
       valueId,
       dto,
@@ -165,16 +144,9 @@ export class ProductAttributeController {
   removeValue(
     @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
-    @Param("productId", ParseUUIDPipe) productId: string,
     @Param("attributeId", ParseUUIDPipe) attributeId: string,
     @Param("valueId", ParseUUIDPipe) valueId: string,
   ) {
-    return this.attributes.removeValue(
-      user,
-      businessId,
-      productId,
-      attributeId,
-      valueId,
-    );
+    return this.attributes.removeValue(user, businessId, attributeId, valueId);
   }
 }

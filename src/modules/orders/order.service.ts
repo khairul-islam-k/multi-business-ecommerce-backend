@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  CatalogProductStatus,
   CourierShipmentStatus,
   FinanceReceivableStatus,
   FinanceSourceType,
@@ -44,7 +45,8 @@ const ORDER_INCLUDE = {
 
 const CODE_RETRY_LIMIT = 5;
 
-type OrderItemWithPrice = OrderItemInputDto & {
+type OrderItemWithPrice = Omit<OrderItemInputDto, "variantId"> & {
+  variantId: string | null;
   unitPrice: Prisma.Decimal;
   taxAmount: Prisma.Decimal;
   lineTotal: Prisma.Decimal;
@@ -494,7 +496,7 @@ export class OrderService {
           data: {
             orderId: createdOrder.id,
             productId: item.productId,
-            variantId: item.variantId,
+            variantId: item.variantId ?? null,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             discountAmount: item.discountAmount ?? 0,
@@ -510,7 +512,7 @@ export class OrderService {
           orderId: createdOrder.id,
           orderItemId: createdItem.id,
           productId: item.productId,
-          variantId: item.variantId,
+          variantId: item.variantId ?? null,
           quantity: item.quantity,
           warehouseId: params.warehouseId,
           createdBy: currentUser.id,
@@ -598,9 +600,7 @@ export class OrderService {
         amount,
         paymentMethod: params.payment.paymentMethod,
         paymentStatus: OrderPaymentStatus.PAID,
-        transactionReference: this.normalizeNullableText(
-          params.payment.transactionReference,
-        ),
+        transactionReference: paymentNo,
         paidAt: new Date(),
         createdBy: params.currentUserId,
       },
@@ -708,7 +708,7 @@ export class OrderService {
       items: {
         id: string;
         productId: string;
-        variantId: string;
+        variantId: string | null;
         quantity: Prisma.Decimal;
         unitPrice: Prisma.Decimal;
         discountAmount: Prisma.Decimal;
@@ -777,7 +777,7 @@ export class OrderService {
       items: {
         id: string;
         productId: string;
-        variantId: string;
+        variantId: string | null;
         quantity: Prisma.Decimal;
       }[];
       courier: NonNullable<CreateOrderDto["courier"]>;
@@ -833,24 +833,57 @@ export class OrderService {
     const rate = new Prisma.Decimal(taxRate);
 
     for (const item of items) {
-      const variant = await this.prisma.productVariant.findFirst({
+      const product = await this.prisma.product.findFirst({
         where: {
-          id: item.variantId,
-          productId: item.productId,
+          id: item.productId,
           businessId,
           deletedAt: null,
-          status: ProductVariantStatus.ACTIVE,
+          status: CatalogProductStatus.ACTIVE,
         },
-        select: { price: true },
+        select: {
+          id: true,
+          price: true,
+          _count: {
+            select: {
+              variants: {
+                where: { deletedAt: null },
+              },
+            },
+          },
+        },
       });
 
-      if (!variant) {
+      if (!product) {
         throw new BadRequestException("One or more order items are invalid");
+      }
+
+      const selectedVariant = item.variantId
+        ? await this.prisma.productVariant.findFirst({
+            where: {
+              id: item.variantId,
+              productId: item.productId,
+              businessId,
+              deletedAt: null,
+              status: ProductVariantStatus.ACTIVE,
+            },
+            select: { id: true, priceOverride: true },
+          })
+        : null;
+
+      if (item.variantId && !selectedVariant) {
+        throw new BadRequestException("One or more order items are invalid");
+      }
+
+      if (!item.variantId && product._count.variants > 0) {
+        throw new BadRequestException(
+          "Variant must be selected for a product that has variants",
+        );
       }
 
       const quantity = new Prisma.Decimal(item.quantity);
       const discountAmount = new Prisma.Decimal(item.discountAmount ?? 0);
-      const lineSubtotal = quantity.mul(variant.price);
+      const unitPrice = selectedVariant?.priceOverride ?? product.price;
+      const lineSubtotal = quantity.mul(unitPrice);
       const taxableAmount = lineSubtotal.minus(discountAmount);
       const taxAmount = taxableAmount.mul(rate).div(100).toDecimalPlaces(2);
       const lineTotal = taxableAmount.plus(taxAmount);
@@ -863,7 +896,8 @@ export class OrderService {
 
       builtItems.push({
         ...item,
-        unitPrice: variant.price,
+        variantId: item.variantId ?? null,
+        unitPrice,
         taxAmount,
         lineTotal,
       });
@@ -925,10 +959,12 @@ export class OrderService {
       throw new BadRequestException("At least one order item is required");
     }
 
-    const variantIds = new Set(items.map((item) => item.variantId));
+    const itemKeys = new Set(
+      items.map((item) => `${item.productId}:${item.variantId ?? "product"}`),
+    );
 
-    if (variantIds.size !== items.length) {
-      throw new BadRequestException("Order cannot contain duplicate variants");
+    if (itemKeys.size !== items.length) {
+      throw new BadRequestException("Order cannot contain duplicate items");
     }
   }
 

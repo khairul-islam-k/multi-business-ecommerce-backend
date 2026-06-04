@@ -181,7 +181,7 @@ model OrderCartItem {
   id        String @id @default(uuid()) @db.Uuid
   cartId    String @map("cart_id") @db.Uuid
   productId String @map("product_id") @db.Uuid
-  variantId String @map("variant_id") @db.Uuid
+  variantId String? @map("variant_id") @db.Uuid
 
   quantity Decimal @db.Decimal(14, 3)
 
@@ -253,7 +253,7 @@ model OrderOrderItem {
   id        String @id @default(uuid()) @db.Uuid
   orderId   String @map("order_id") @db.Uuid
   productId String @map("product_id") @db.Uuid
-  variantId String @map("variant_id") @db.Uuid
+  variantId String? @map("variant_id") @db.Uuid
 
   quantity       Decimal @db.Decimal(14, 3)
   unitPrice      Decimal @map("unit_price") @db.Decimal(12, 2)
@@ -376,7 +376,7 @@ model OrderReturnItem {
   returnId    String @map("return_id") @db.Uuid
   orderItemId String @map("order_item_id") @db.Uuid
   productId   String @map("product_id") @db.Uuid
-  variantId   String @map("variant_id") @db.Uuid
+  variantId   String? @map("variant_id") @db.Uuid
 
   quantity  Decimal @db.Decimal(14, 3)
   unitPrice Decimal @map("unit_price") @db.Decimal(12, 2)

@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  PackageCreditEntryType,
   PackagePaymentStatus,
   PackagePaymentType,
   PackageStatus,
@@ -18,8 +19,10 @@ import {
 import { QueryPackageDto } from "../dto/query-package.dto";
 import { PackageLimitService } from "../package-limit.service";
 import { PackageSubscriptionService } from "../package-subscription.service";
-import type { PackagePlanSnapshot } from "../package-subscription.service";
-import { CancelTenantSubscriptionDto } from "./dto/tenant-package.dto";
+import type {
+  PackagePlanSnapshot,
+  PlanChangeCharge,
+} from "../package-subscription.service";
 
 const MOCK_PAYMENT_EXPIRY_MINUTES = 15;
 
@@ -152,6 +155,56 @@ export class TenantPackageService {
     const { charge, targetPlan, targetPlanSnapshot } =
       await this.subscriptions.calculatePlanChangeCharge(tenantId, planId);
 
+    await this.limits.assertUsageFitsLimits(
+      tenantId,
+      targetPlanSnapshot.limits,
+    );
+
+    if (charge.amountDue === 0) {
+      const result = await this.prisma.$transaction(async (tx) => {
+        const payment = await tx.packageMockPayment.create({
+          data: {
+            tenantId,
+            planId: targetPlan.id,
+            type: PackagePaymentType.CREDIT_ONLY_PLAN_CHANGE,
+            status: PackagePaymentStatus.CONFIRMED,
+            amount: 0,
+            currencyCode: charge.currencyCode,
+            metadata: {
+              calculation: "plan_change_fully_covered_by_unused_balance_or_credit",
+              charge,
+              targetPlanSnapshot,
+            },
+            expiresAt: this.getPaymentExpiry(),
+            confirmedAt: new Date(),
+          },
+        });
+        const subscription =
+          await this.subscriptions.replaceCurrentSubscription(
+            tenantId,
+            targetPlan.id,
+            tx,
+            targetPlanSnapshot,
+          );
+
+        const confirmedPayment = await tx.packageMockPayment.update({
+          where: { id: payment.id },
+          data: { subscriptionId: subscription.id },
+        });
+
+        await this.recordPlanChangeCredits(tx, {
+          tenantId,
+          subscriptionId: subscription.id,
+          paymentId: payment.id,
+          charge,
+        });
+
+        return { payment: confirmedPayment, subscription };
+      });
+
+      return apiResponse(result, "Package plan changed successfully");
+    }
+
     const payment = await this.prisma.packageMockPayment.create({
       data: {
         tenantId,
@@ -221,11 +274,23 @@ export class TenantPackageService {
         throw new ForbiddenException("Payment plan is missing");
       }
 
+      const targetPlanSnapshot = this.getPlanSnapshotFromPayment(
+        payment.metadata,
+      );
+
+      if (targetPlanSnapshot) {
+        await this.limits.assertUsageFitsLimits(
+          tenantId,
+          targetPlanSnapshot.limits,
+        );
+      }
+
+      const charge = this.getChargeFromPayment(payment.metadata);
       const subscription = await this.subscriptions.replaceCurrentSubscription(
         tenantId,
         payment.planId,
         tx,
-        this.getPlanSnapshotFromPayment(payment.metadata),
+        targetPlanSnapshot,
       );
 
       const confirmedPayment = await tx.packageMockPayment.update({
@@ -239,6 +304,15 @@ export class TenantPackageService {
         },
       });
 
+      if (charge) {
+        await this.recordPlanChangeCredits(tx, {
+          tenantId,
+          subscriptionId: subscription.id,
+          paymentId: payment.id,
+          charge,
+        });
+      }
+
       return {
         payment: confirmedPayment,
         subscription,
@@ -246,15 +320,6 @@ export class TenantPackageService {
     });
 
     return apiResponse(result, "Package mock payment confirmed successfully");
-  }
-
-  async cancelSubscription(tenantId: string, dto: CancelTenantSubscriptionDto) {
-    const subscription = await this.subscriptions.cancelCurrentSubscription(
-      tenantId,
-      dto.reason,
-    );
-
-    return apiResponse(subscription, "Subscription cancelled successfully");
   }
 
   private getPlanSnapshotFromPayment(
@@ -271,6 +336,62 @@ export class TenantPackageService {
     }
 
     return snapshot as PackagePlanSnapshot;
+  }
+
+  private getChargeFromPayment(
+    metadata: Prisma.JsonValue,
+  ): PlanChangeCharge | undefined {
+    if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+      return undefined;
+    }
+
+    const charge = metadata.charge;
+
+    if (!charge || typeof charge !== "object" || Array.isArray(charge)) {
+      return undefined;
+    }
+
+    return charge as PlanChangeCharge;
+  }
+
+  private async recordPlanChangeCredits(
+    tx: Prisma.TransactionClient,
+    params: {
+      tenantId: string;
+      subscriptionId: string;
+      paymentId: string;
+      charge: PlanChangeCharge;
+    },
+  ) {
+    if (params.charge.creditApplied > 0) {
+      await tx.packageTenantCreditLedger.create({
+        data: {
+          tenantId: params.tenantId,
+          subscriptionId: params.subscriptionId,
+          paymentId: params.paymentId,
+          type: PackageCreditEntryType.CREDIT_APPLIED,
+          amount: new Prisma.Decimal(params.charge.creditApplied).negated(),
+          currencyCode: params.charge.currencyCode,
+          note: "Credit applied to package plan change",
+          metadata: { charge: params.charge },
+        },
+      });
+    }
+
+    if (params.charge.creditToAdd > 0) {
+      await tx.packageTenantCreditLedger.create({
+        data: {
+          tenantId: params.tenantId,
+          subscriptionId: params.subscriptionId,
+          paymentId: params.paymentId,
+          type: PackageCreditEntryType.DOWNGRADE_CREDIT,
+          amount: params.charge.creditToAdd,
+          currencyCode: params.charge.currencyCode,
+          note: "Unused package balance carried as tenant credit",
+          metadata: { charge: params.charge },
+        },
+      });
+    }
   }
 
   private getPaymentExpiry() {

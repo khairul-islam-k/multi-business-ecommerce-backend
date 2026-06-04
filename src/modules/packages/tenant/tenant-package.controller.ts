@@ -1,11 +1,9 @@
 import {
-  Body,
   Controller,
   ForbiddenException,
   Get,
   Param,
   ParseUUIDPipe,
-  Patch,
   Post,
   Query,
   UseGuards,
@@ -23,7 +21,6 @@ import { QueryPackageDto } from "../dto/query-package.dto";
 import { SubscriptionGuard } from "../guards/subscription.guard";
 import { PackageSubscriptionService } from "../package-subscription.service";
 import { TenantPackageService } from "./tenant-package.service";
-import { CancelTenantSubscriptionDto } from "./dto/tenant-package.dto";
 
 @ApiTags("Tenant Packages")
 @UseGuards(JwtAuthGuard, PermissionGuard)
@@ -96,18 +93,6 @@ export class TenantPackageController {
       this.getTenantId(currentUser),
       paymentId,
     );
-  }
-
-  @ApiBearerAuth()
-  @UseGuards(SubscriptionGuard)
-  @RequirePermission(RbacFeature.PACKAGE_MANAGEMENT, PermissionAction.UPDATE)
-  @Patch("subscription/cancel")
-  @ApiOperation({ summary: "Cancel current subscription" })
-  cancelSubscription(
-    @CurrentUser() currentUser: CurrentUserPayload,
-    @Body() dto: CancelTenantSubscriptionDto,
-  ) {
-    return this.packages.cancelSubscription(this.getTenantId(currentUser), dto);
   }
 
   private getTenantId(currentUser: CurrentUserPayload) {

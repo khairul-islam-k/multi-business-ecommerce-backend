@@ -170,7 +170,7 @@ export class ProductCatalogLookupService {
   async assertSkuAvailable(
     businessId: string,
     sku?: string | null,
-    exclude?: { variantId?: string },
+    exclude?: { productId?: string; variantId?: string },
   ) {
     const normalizedSku = this.normalizeNullableText(sku);
 
@@ -178,17 +178,28 @@ export class ProductCatalogLookupService {
       return;
     }
 
-    const variant = await this.prisma.productVariant.findFirst({
-      where: {
-        businessId,
-        sku: normalizedSku,
-        deletedAt: null,
-        ...(exclude?.variantId ? { id: { not: exclude.variantId } } : {}),
-      },
-      select: { id: true },
-    });
+    const [product, variant] = await Promise.all([
+      this.prisma.product.findFirst({
+        where: {
+          businessId,
+          sku: normalizedSku,
+          deletedAt: null,
+          ...(exclude?.productId ? { id: { not: exclude.productId } } : {}),
+        },
+        select: { id: true },
+      }),
+      this.prisma.productVariant.findFirst({
+        where: {
+          businessId,
+          sku: normalizedSku,
+          deletedAt: null,
+          ...(exclude?.variantId ? { id: { not: exclude.variantId } } : {}),
+        },
+        select: { id: true },
+      }),
+    ]);
 
-    if (variant) {
+    if (product || variant) {
       throw new ConflictException("SKU already exists for this business");
     }
   }
@@ -196,7 +207,7 @@ export class ProductCatalogLookupService {
   async assertBarcodeAvailable(
     businessId: string,
     barcode?: string | null,
-    exclude?: { variantId?: string },
+    exclude?: { productId?: string; variantId?: string },
   ) {
     const normalizedBarcode = this.normalizeNullableText(barcode);
 
@@ -204,17 +215,28 @@ export class ProductCatalogLookupService {
       return;
     }
 
-    const variant = await this.prisma.productVariant.findFirst({
-      where: {
-        businessId,
-        barcode: normalizedBarcode,
-        deletedAt: null,
-        ...(exclude?.variantId ? { id: { not: exclude.variantId } } : {}),
-      },
-      select: { id: true },
-    });
+    const [product, variant] = await Promise.all([
+      this.prisma.product.findFirst({
+        where: {
+          businessId,
+          barcode: normalizedBarcode,
+          deletedAt: null,
+          ...(exclude?.productId ? { id: { not: exclude.productId } } : {}),
+        },
+        select: { id: true },
+      }),
+      this.prisma.productVariant.findFirst({
+        where: {
+          businessId,
+          barcode: normalizedBarcode,
+          deletedAt: null,
+          ...(exclude?.variantId ? { id: { not: exclude.variantId } } : {}),
+        },
+        select: { id: true },
+      }),
+    ]);
 
-    if (variant) {
+    if (product || variant) {
       throw new ConflictException("Barcode already exists for this business");
     }
   }
@@ -245,7 +267,6 @@ export class ProductCatalogLookupService {
         deletedAt: null,
         attribute: {
           businessId,
-          productId,
           id: { in: attributeIds },
           deletedAt: null,
           status: ProductSimpleStatus.ACTIVE,
@@ -303,6 +324,14 @@ export class ProductCatalogLookupService {
     }
 
     throw new ConflictException("Could not generate a unique product slug");
+  }
+
+  async generateUniqueProductSku(businessId: string) {
+    return this.generateUniqueProductCode(businessId, "SKU", "sku");
+  }
+
+  async generateUniqueProductBarcode(businessId: string) {
+    return this.generateUniqueProductCode(businessId, "BAR", "barcode");
   }
 
   async generateUniqueVariantSku(businessId: string) {
@@ -391,24 +420,42 @@ export class ProductCatalogLookupService {
     prefix: string,
     field: "sku" | "barcode",
   ) {
+    return this.generateUniqueProductCode(businessId, prefix, field);
+  }
+
+  private async generateUniqueProductCode(
+    businessId: string,
+    prefix: string,
+    field: "sku" | "barcode",
+  ) {
     for (let attempt = 0; attempt < PRODUCT_CODE_RETRY_LIMIT; attempt++) {
       const code = generateRandomCode(prefix);
 
-      const existingVariant = await this.prisma.productVariant.findFirst({
-        where: {
-          businessId,
-          [field]: code,
-          deletedAt: null,
-        },
-        select: { id: true },
-      });
+      const [existingProduct, existingVariant] = await Promise.all([
+        this.prisma.product.findFirst({
+          where: {
+            businessId,
+            [field]: code,
+            deletedAt: null,
+          },
+          select: { id: true },
+        }),
+        this.prisma.productVariant.findFirst({
+          where: {
+            businessId,
+            [field]: code,
+            deletedAt: null,
+          },
+          select: { id: true },
+        }),
+      ]);
 
-      if (!existingVariant) {
+      if (!existingProduct && !existingVariant) {
         return code;
       }
     }
 
-    throw new ConflictException(`Could not generate a unique variant ${field}`);
+    throw new ConflictException(`Could not generate a unique product ${field}`);
   }
 
   private async assertCategoryParentDoesNotCreateCycle(

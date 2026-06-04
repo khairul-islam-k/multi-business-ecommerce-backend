@@ -35,11 +35,9 @@ export class ProductAttributeService {
   async create(
     currentUser: CurrentUserPayload,
     businessId: string,
-    productId: string,
     dto: CreateProductAttributeDto,
   ) {
-    await this.lookup.assertProductExists(businessId, productId);
-    await this.assertAttributeNameAvailable(businessId, productId, dto.name);
+    await this.assertAttributeNameAvailable(businessId, dto.name);
 
     const values = this.normalizeValues(dto.values);
 
@@ -47,7 +45,6 @@ export class ProductAttributeService {
       const attribute = await this.prisma.productAttribute.create({
         data: {
           businessId,
-          productId,
           name: this.lookup.normalizeName(dto.name),
           status: dto.status ?? ProductSimpleStatus.ACTIVE,
           createdBy: currentUser.id,
@@ -76,11 +73,9 @@ export class ProductAttributeService {
     }
   }
 
-  async findAll(businessId: string, productId: string) {
-    await this.lookup.assertProductExists(businessId, productId);
-
+  async findAll(businessId: string) {
     const attributes = await this.prisma.productAttribute.findMany({
-      where: { businessId, productId, deletedAt: null },
+      where: { businessId, deletedAt: null },
       include: ATTRIBUTE_INCLUDE,
       orderBy: ATTRIBUTE_ORDER,
     });
@@ -91,16 +86,14 @@ export class ProductAttributeService {
   async update(
     currentUser: CurrentUserPayload,
     businessId: string,
-    productId: string,
     attributeId: string,
     dto: UpdateProductAttributeDto,
   ) {
-    await this.findAttributeOrThrow(businessId, productId, attributeId);
+    await this.findAttributeOrThrow(businessId, attributeId);
 
     if (dto.name !== undefined) {
       await this.assertAttributeNameAvailable(
         businessId,
-        productId,
         dto.name,
         attributeId,
       );
@@ -128,10 +121,9 @@ export class ProductAttributeService {
   async remove(
     currentUser: CurrentUserPayload,
     businessId: string,
-    productId: string,
     attributeId: string,
   ) {
-    await this.findAttributeOrThrow(businessId, productId, attributeId);
+    await this.findAttributeOrThrow(businessId, attributeId);
     await this.assertAttributeCanBeDeleted(attributeId);
 
     await this.prisma.$transaction(async (tx) => {
@@ -159,11 +151,10 @@ export class ProductAttributeService {
   async createValue(
     currentUser: CurrentUserPayload,
     businessId: string,
-    productId: string,
     attributeId: string,
     dto: CreateProductAttributeValueDto,
   ) {
-    await this.findAttributeOrThrow(businessId, productId, attributeId);
+    await this.findAttributeOrThrow(businessId, attributeId);
 
     try {
       const value = await this.prisma.productAttributeValue.create({
@@ -188,12 +179,11 @@ export class ProductAttributeService {
   async updateValue(
     currentUser: CurrentUserPayload,
     businessId: string,
-    productId: string,
     attributeId: string,
     valueId: string,
     dto: UpdateProductAttributeValueDto,
   ) {
-    await this.findValueOrThrow(businessId, productId, attributeId, valueId);
+    await this.findValueOrThrow(businessId, attributeId, valueId);
 
     try {
       const value = await this.prisma.productAttributeValue.update({
@@ -218,11 +208,10 @@ export class ProductAttributeService {
   async removeValue(
     currentUser: CurrentUserPayload,
     businessId: string,
-    productId: string,
     attributeId: string,
     valueId: string,
   ) {
-    await this.findValueOrThrow(businessId, productId, attributeId, valueId);
+    await this.findValueOrThrow(businessId, attributeId, valueId);
     await this.assertAttributeValueCanBeDeleted(attributeId, valueId);
 
     await this.prisma.$transaction(async (tx) => {
@@ -240,13 +229,10 @@ export class ProductAttributeService {
 
   private async findAttributeOrThrow(
     businessId: string,
-    productId: string,
     attributeId: string,
   ) {
-    await this.lookup.assertProductExists(businessId, productId);
-
     const attribute = await this.prisma.productAttribute.findFirst({
-      where: { id: attributeId, businessId, productId, deletedAt: null },
+      where: { id: attributeId, businessId, deletedAt: null },
       include: ATTRIBUTE_INCLUDE,
     });
 
@@ -259,11 +245,10 @@ export class ProductAttributeService {
 
   private async findValueOrThrow(
     businessId: string,
-    productId: string,
     attributeId: string,
     valueId: string,
   ) {
-    await this.findAttributeOrThrow(businessId, productId, attributeId);
+    await this.findAttributeOrThrow(businessId, attributeId);
 
     const value = await this.prisma.productAttributeValue.findFirst({
       where: { id: valueId, businessId, attributeId, deletedAt: null },
@@ -278,14 +263,12 @@ export class ProductAttributeService {
 
   private async assertAttributeNameAvailable(
     businessId: string,
-    productId: string,
     name: string,
     excludeAttributeId?: string,
   ) {
     const attribute = await this.prisma.productAttribute.findFirst({
       where: {
         businessId,
-        productId,
         name: this.lookup.normalizeName(name),
         deletedAt: null,
         ...(excludeAttributeId ? { id: { not: excludeAttributeId } } : {}),
@@ -295,7 +278,7 @@ export class ProductAttributeService {
 
     if (attribute) {
       throw new BadRequestException(
-        "Product attribute name already exists for this product",
+        "Product attribute name already exists for this business",
       );
     }
   }

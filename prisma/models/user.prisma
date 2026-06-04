@@ -81,6 +81,7 @@ model SystemUser {
 
   packageSubscriptions PackageSubscription[] @relation("TenantPackageSubscriptions")
   packageMockPayments  PackageMockPayment[]  @relation("TenantPackageMockPayments")
+  packageCreditEntries PackageTenantCreditLedger[] @relation("TenantPackageCreditEntries")
 
   @@index([type])
   @@index([status])

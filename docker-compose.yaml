@@ -9,10 +9,10 @@ services:
       - POSTGRES_DB=onecomm_db
 
     ports:
-      - "7777:7777"
+      - "5432:5432"
 
     volumes:
-      - onecomm_postgres_data:/var/lib/postgres
+      - onecomm_postgres_data:/var/lib/postgres/data
 
 volumes:
   onecomm_postgres_data:

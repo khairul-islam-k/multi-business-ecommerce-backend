@@ -70,12 +70,6 @@ export class PayFinancePayableDto {
   @IsEnum(SupplierPaymentMethod)
   paymentMethod?: SupplierPaymentMethod;
 
-  @ApiPropertyOptional({ example: "BANK-TXN-1001" })
-  @IsOptional()
-  @IsString()
-  @MaxLength(150)
-  referenceNo?: string;
-
   @ApiPropertyOptional({ example: "Paid supplier invoice" })
   @IsOptional()
   @IsString()
