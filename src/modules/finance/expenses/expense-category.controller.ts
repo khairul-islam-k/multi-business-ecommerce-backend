@@ -2,12 +2,12 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
-  Get,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";

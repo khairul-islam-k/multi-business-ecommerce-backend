@@ -1,5 +1,5 @@
-import { Reflector } from "@nestjs/core";
 import { isUUID } from "class-validator";
+
 import {
   BadRequestException,
   CanActivate,
@@ -8,15 +8,17 @@ import {
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+import { SystemUserType } from "@prisma/client";
 
-import { BusinessService } from "../business.service";
-import type { AuthenticatedRequest } from "../../auth/strategies/jwt.strategy";
 import {
   REQUIRED_PERMISSION_KEY,
   RequiredPermissionMeta,
 } from "../../permissions/decorators/require-permission.decorator";
-import { SystemUserType } from "@prisma/client";
+import { BusinessService } from "../business.service";
 import { SKIP_BUSINESS_GUARD_KEY } from "../decorators/skip-business-guard.decorator";
+
+import type { AuthenticatedRequest } from "../../auth/strategies/jwt.strategy";
 
 @Injectable()
 export class BusinessGuard implements CanActivate {

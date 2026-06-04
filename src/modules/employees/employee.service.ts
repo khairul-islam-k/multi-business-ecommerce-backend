@@ -1,4 +1,5 @@
 import * as argon2 from "argon2";
+
 import {
   BadRequestException,
   ConflictException,
@@ -14,19 +15,19 @@ import {
   UserRoleMapStatus,
 } from "@prisma/client";
 
-import { PrismaService } from "../../prisma/prisma.service";
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
-
+import { PrismaService } from "../../prisma/prisma.service";
+import { AssignEmployeeRolesDto } from "./dto/assign-employee-roles.dto";
 import { CreateEmployeeDto } from "./dto/create-employee.dto";
 import { EmployeeProfileDto } from "./dto/employee-profile.dto";
 import { QueryEmployeesDto } from "./dto/query-employees.dto";
-import { UpdateEmployeeDto } from "./dto/update-employee.dto";
-import { AssignEmployeeRolesDto } from "./dto/assign-employee-roles.dto";
 import { UpdateEmployeeStatusDto } from "./dto/update-employee-status.dto";
+import { UpdateEmployeeDto } from "./dto/update-employee.dto";
+
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class EmployeeService {

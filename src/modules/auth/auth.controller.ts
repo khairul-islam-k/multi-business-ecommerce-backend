@@ -1,4 +1,3 @@
-import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import {
   Body,
   Controller,
@@ -8,25 +7,26 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
+import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 
-import { JwtAuthGuard } from "./guards/jwt-auth.guard";
-import { CurrentUser } from "./decorators/current-user.decorator";
-import type { CurrentUserPayload } from "./decorators/current-user.decorator";
-
-import { LoginDto } from "./dto/login.dto";
 import { AuthService } from "./auth.service";
+import { CurrentUser } from "./decorators/current-user.decorator";
+import { ForgotPasswordDto } from "./dto/forgot-password.dto";
+import { LoginDto } from "./dto/login.dto";
 import { LogoutDto } from "./dto/logout.dto";
-import { RegisterDto } from "./dto/register.dto";
-import { UpdateUserDto } from "./dto/update-user.dto";
-import { VerifyEmailDto } from "./dto/verify-email.dto";
 import { RefreshTokenDto } from "./dto/refresh-token.dto";
+import { RegisterDto } from "./dto/register.dto";
+import { RequestEmailChangeOrVerificationDto } from "./dto/request-email-change-or-verification.dto";
+import { ResetForgotPasswordDto } from "./dto/reset-forgot-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { SelectBusinessDto } from "./dto/select-business.dto";
-import { ForgotPasswordDto } from "./dto/forgot-password.dto";
-import { VerifyResetOtpDto } from "./dto/verify-reset-email.dto";
+import { UpdateUserDto } from "./dto/update-user.dto";
 import { VerifyChangeEmailDto } from "./dto/verify-email-change.dto";
-import { ResetForgotPasswordDto } from "./dto/reset-forgot-password.dto";
-import { RequestEmailChangeOrVerificationDto } from "./dto/request-email-change-or-verification.dto";
+import { VerifyEmailDto } from "./dto/verify-email.dto";
+import { VerifyResetOtpDto } from "./dto/verify-reset-email.dto";
+import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+
+import type { CurrentUserPayload } from "./decorators/current-user.decorator";
 
 @ApiTags("Auth")
 @Controller("auth")

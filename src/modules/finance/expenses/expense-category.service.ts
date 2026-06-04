@@ -6,11 +6,11 @@ import {
 } from "@nestjs/common";
 import { FinanceExpenseCategoryStatus, Prisma } from "@prisma/client";
 
-import { PrismaService } from "../../../prisma/prisma.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import { PrismaService } from "../../../prisma/prisma.service";
 import {
   CreateExpenseCategoryDto,
   QueryExpenseCategoryDto,

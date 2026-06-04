@@ -1,7 +1,6 @@
 import * as argon2 from "argon2";
-import { JwtService } from "@nestjs/jwt";
-import { ConfigService } from "@nestjs/config";
 import { createHash, randomBytes, randomInt } from "node:crypto";
+
 import {
   BadRequestException,
   ConflictException,
@@ -11,6 +10,8 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { JwtService } from "@nestjs/jwt";
 import {
   BusinessMemberStatus,
   BusinessStatus,
@@ -20,26 +21,27 @@ import {
   SystemUserType,
 } from "@prisma/client";
 
+import { apiResponse } from "../../common/utils/api-response.util";
+import { PrismaService } from "../../prisma/prisma.service";
+import { BusinessService } from "../business/business.service";
+import { MailService } from "../mail/mail.service";
+import { PackageSubscriptionService } from "../packages/package-subscription.service";
+import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { LoginDto } from "./dto/login.dto";
 import { LogoutDto } from "./dto/logout.dto";
-import { RegisterDto } from "./dto/register.dto";
-import { MailService } from "../mail/mail.service";
-import { UpdateUserDto } from "./dto/update-user.dto";
-import { JwtPayload } from "./strategies/jwt.strategy";
-import { VerifyEmailDto } from "./dto/verify-email.dto";
 import { RefreshTokenDto } from "./dto/refresh-token.dto";
-import { ResetPasswordDto } from "./dto/reset-password.dto";
-import { PrismaService } from "../../prisma/prisma.service";
-import { SelectBusinessDto } from "./dto/select-business.dto";
-import { ForgotPasswordDto } from "./dto/forgot-password.dto";
-import { BusinessService } from "../business/business.service";
-import { VerifyResetOtpDto } from "./dto/verify-reset-email.dto";
-import { apiResponse } from "../../common/utils/api-response.util";
-import { VerifyChangeEmailDto } from "./dto/verify-email-change.dto";
-import { ResetForgotPasswordDto } from "./dto/reset-forgot-password.dto";
-import type { CurrentUserPayload } from "./decorators/current-user.decorator";
-import { PackageSubscriptionService } from "../packages/package-subscription.service";
+import { RegisterDto } from "./dto/register.dto";
 import { RequestEmailChangeOrVerificationDto } from "./dto/request-email-change-or-verification.dto";
+import { ResetForgotPasswordDto } from "./dto/reset-forgot-password.dto";
+import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { SelectBusinessDto } from "./dto/select-business.dto";
+import { UpdateUserDto } from "./dto/update-user.dto";
+import { VerifyChangeEmailDto } from "./dto/verify-email-change.dto";
+import { VerifyEmailDto } from "./dto/verify-email.dto";
+import { VerifyResetOtpDto } from "./dto/verify-reset-email.dto";
+import { JwtPayload } from "./strategies/jwt.strategy";
+
+import type { CurrentUserPayload } from "./decorators/current-user.decorator";
 
 type AuthBusiness = {
   id: string;

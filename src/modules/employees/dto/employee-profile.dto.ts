@@ -1,5 +1,3 @@
-import { Gender } from "@prisma/client";
-import { ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsDateString,
   IsEnum,
@@ -8,6 +6,9 @@ import {
   MaxLength,
   ValidateIf,
 } from "class-validator";
+
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { Gender } from "@prisma/client";
 
 export class EmployeeProfileDto {
   @ApiPropertyOptional({ example: "John" })

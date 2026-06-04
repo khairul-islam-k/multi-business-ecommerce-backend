@@ -14,7 +14,6 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { PermissionAction, RbacFeature } from "@prisma/client";
 
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard";
 import { BusinessGuard } from "../../business/guards/business.guard";
 import { SubscriptionGuard } from "../../packages/guards/subscription.guard";
@@ -28,6 +27,8 @@ import {
   UpdateFinanceAccountDto,
 } from "./dto/finance-account.dto";
 import { FinanceAccountService } from "./finance-account.service";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @ApiTags("Finance Accounts")
 @ApiBearerAuth()

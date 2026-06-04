@@ -1,31 +1,32 @@
 import {
-  BusinessMemberStatus,
-  BusinessStatus,
-  Prisma,
-  SystemUserType,
-} from "@prisma/client";
-import {
   ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-
-import { PrismaService } from "../../prisma/prisma.service";
-import { QueryBusinessDto } from "./dto/query-business.dto";
-import { UpdateBusinessDto } from "./dto/update-business.dto";
-import { CreateBusinessDto } from "./dto/create-business.dto";
-import { RequestContextService } from "../../common/request-context/request-context.service";
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import {
-  apiResponse,
-  paginatedResponse,
-} from "../../common/utils/api-response.util";
+  BusinessMemberStatus,
+  BusinessStatus,
+  Prisma,
+  SystemUserType,
+} from "@prisma/client";
+
+import { RequestContextService } from "../../common/request-context/request-context.service";
 import {
   BusinessAccessContext,
   getBusinessAccessCacheKey,
 } from "../../common/request-context/request-context.types";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../common/utils/api-response.util";
 import { generateRandomSlug } from "../../common/utils/slug-generator.util";
+import { PrismaService } from "../../prisma/prisma.service";
+import { CreateBusinessDto } from "./dto/create-business.dto";
+import { QueryBusinessDto } from "./dto/query-business.dto";
+import { UpdateBusinessDto } from "./dto/update-business.dto";
+
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 const BUSINESS_INCLUDE = {
   ownerUser: {

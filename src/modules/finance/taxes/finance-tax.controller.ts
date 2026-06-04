@@ -14,7 +14,6 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { PermissionAction, RbacFeature } from "@prisma/client";
 
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard";
 import { BusinessGuard } from "../../business/guards/business.guard";
 import { SubscriptionGuard } from "../../packages/guards/subscription.guard";
@@ -26,6 +25,8 @@ import {
   UpdateFinanceTaxDto,
 } from "./dto/finance-tax.dto";
 import { FinanceTaxService } from "./finance-tax.service";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @ApiTags("Finance Taxes")
 @ApiBearerAuth()

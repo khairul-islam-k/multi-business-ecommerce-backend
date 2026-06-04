@@ -1,6 +1,7 @@
 import "dotenv/config";
 
 import * as argon2 from "argon2";
+
 import { Logger } from "@nestjs/common";
 import { SystemUserStatus, SystemUserType } from "@prisma/client";
 

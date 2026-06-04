@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from "express";
+
 import { Injectable, Logger, NestMiddleware } from "@nestjs/common";
 
 import type { CurrentUserPayload } from "../../modules/auth/decorators/current-user.decorator";

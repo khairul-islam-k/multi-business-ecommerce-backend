@@ -9,17 +9,18 @@ import {
   Prisma,
 } from "@prisma/client";
 
-import { PrismaService } from "../../../prisma/prisma.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import { PrismaService } from "../../../prisma/prisma.service";
 import { FinanceLedgerService } from "../common/finance-ledger.service";
 import {
   QueryFinanceReceivableDto,
   ReceiveFinanceReceivableDto,
 } from "./dto/finance-receivable.dto";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class FinanceReceivableService {
@@ -146,9 +147,7 @@ export class FinanceReceivableService {
       const receivedAmount = new Prisma.Decimal(receivable.receivedAmount).plus(
         receiveAmount,
       );
-      const status = receivedAmount.greaterThanOrEqualTo(
-        receivable.totalAmount,
-      )
+      const status = receivedAmount.greaterThanOrEqualTo(receivable.totalAmount)
         ? FinanceReceivableStatus.RECEIVED
         : FinanceReceivableStatus.PARTIALLY_RECEIVED;
 

@@ -1,5 +1,4 @@
-import { Gender } from "@prisma/client";
-import { ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 import {
   IsDateString,
   IsEnum,
@@ -8,7 +7,9 @@ import {
   MaxLength,
   ValidateNested,
 } from "class-validator";
-import { Type } from "class-transformer";
+
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { Gender } from "@prisma/client";
 
 export class UpdateUserProfileDto {
   @ApiPropertyOptional({ example: "John" })

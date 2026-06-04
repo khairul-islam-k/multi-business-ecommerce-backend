@@ -5,8 +5,8 @@ import {
 } from "@nestjs/common";
 import {
   FinanceAccountStatus,
-  FinancePayableStatus,
   FinancePartyType,
+  FinancePayableStatus,
   FinanceReceivableStatus,
   FinanceSourceType,
   FinanceTaxStatus,
@@ -14,8 +14,8 @@ import {
   Prisma,
 } from "@prisma/client";
 
-import { PrismaService } from "../../../prisma/prisma.service";
 import { generateRandomCode } from "../../../common/utils/code-generator.util";
+import { PrismaService } from "../../../prisma/prisma.service";
 
 const FINANCE_CODE_RETRY_LIMIT = 5;
 
@@ -222,7 +222,9 @@ export class FinanceLedgerService {
     });
 
     if (existing) {
-      throw new BadRequestException("Supplier return receivable already exists");
+      throw new BadRequestException(
+        "Supplier return receivable already exists",
+      );
     }
 
     return tx.financeReceivable.create({
