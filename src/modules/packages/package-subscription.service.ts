@@ -25,6 +25,7 @@ const ACTIVE_SUBSCRIPTION_STATUSES = [
 ] satisfies PackageSubscriptionStatus[];
 
 const DEFAULT_TRIAL_DAYS = 7;
+const MIN_BILLABLE_AMOUNT = 0.01;
 
 const PLAN_SNAPSHOT_INCLUDE = {
   limits: true,
@@ -326,10 +327,11 @@ export class PackageSubscriptionService {
           usedCurrentPlanValue: 0,
           unusedCurrentBalance: 0,
           existingCreditBalance,
-          creditApplied: Math.min(Number(targetPlan.price), existingCreditBalance),
-          amountDue: Math.max(
+          creditApplied: this.normalizeMoney(
+            Math.min(Number(targetPlan.price), existingCreditBalance),
+          ),
+          amountDue: this.normalizeBillableAmount(
             Number(targetPlan.price) - existingCreditBalance,
-            0,
           ),
           creditToAdd: 0,
           currencyCode: targetPlan.currencyCode,
@@ -369,12 +371,15 @@ export class PackageSubscriptionService {
     const usedCurrentPlanValue = this.roundMoney(
       Math.max(Number(currentSubscription.price) - unusedCurrentBalance, 0),
     );
-    const rawDue = this.roundMoney(Number(targetPlan.price) - unusedCurrentBalance);
-    const creditApplied = rawDue > 0
-      ? Math.min(rawDue, existingCreditBalance)
-      : 0;
-    const amountDue = this.roundMoney(Math.max(rawDue - creditApplied, 0));
-    const creditToAdd = this.roundMoney(
+    const rawDue = this.normalizeMoney(
+      Number(targetPlan.price) - unusedCurrentBalance,
+    );
+    const creditApplied =
+      rawDue > 0
+        ? this.normalizeMoney(Math.min(rawDue, existingCreditBalance))
+        : 0;
+    const amountDue = this.normalizeBillableAmount(rawDue - creditApplied);
+    const creditToAdd = this.normalizeMoney(
       Math.max(unusedCurrentBalance - Number(targetPlan.price), 0),
     );
     const totalPeriodMs = Math.max(
@@ -532,5 +537,15 @@ export class PackageSubscriptionService {
 
   private roundMoney(amount: number) {
     return Math.round(amount * 100) / 100;
+  }
+
+  private normalizeMoney(amount: number) {
+    return this.roundMoney(Math.max(amount, 0));
+  }
+
+  private normalizeBillableAmount(amount: number) {
+    const normalizedAmount = this.normalizeMoney(amount);
+
+    return normalizedAmount <= MIN_BILLABLE_AMOUNT ? 0 : normalizedAmount;
   }
 }

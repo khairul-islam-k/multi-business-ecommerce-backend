@@ -160,56 +160,14 @@ export class TenantPackageService {
       targetPlanSnapshot.limits,
     );
 
-    if (charge.amountDue === 0) {
-      const result = await this.prisma.$transaction(async (tx) => {
-        const payment = await tx.packageMockPayment.create({
-          data: {
-            tenantId,
-            planId: targetPlan.id,
-            type: PackagePaymentType.CREDIT_ONLY_PLAN_CHANGE,
-            status: PackagePaymentStatus.CONFIRMED,
-            amount: 0,
-            currencyCode: charge.currencyCode,
-            metadata: {
-              calculation: "plan_change_fully_covered_by_unused_balance_or_credit",
-              charge,
-              targetPlanSnapshot,
-            },
-            expiresAt: this.getPaymentExpiry(),
-            confirmedAt: new Date(),
-          },
-        });
-        const subscription =
-          await this.subscriptions.replaceCurrentSubscription(
-            tenantId,
-            targetPlan.id,
-            tx,
-            targetPlanSnapshot,
-          );
-
-        const confirmedPayment = await tx.packageMockPayment.update({
-          where: { id: payment.id },
-          data: { subscriptionId: subscription.id },
-        });
-
-        await this.recordPlanChangeCredits(tx, {
-          tenantId,
-          subscriptionId: subscription.id,
-          paymentId: payment.id,
-          charge,
-        });
-
-        return { payment: confirmedPayment, subscription };
-      });
-
-      return apiResponse(result, "Package plan changed successfully");
-    }
-
     const payment = await this.prisma.packageMockPayment.create({
       data: {
         tenantId,
         planId: targetPlan.id,
-        type: PackagePaymentType.PLAN_CHANGE,
+        type:
+          charge.amountDue === 0
+            ? PackagePaymentType.CREDIT_ONLY_PLAN_CHANGE
+            : PackagePaymentType.PLAN_CHANGE,
         status: PackagePaymentStatus.PENDING,
         amount: charge.amountDue,
         currencyCode: charge.currencyCode,
