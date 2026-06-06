@@ -6,12 +6,16 @@ import {
 import { Prisma, ProductSimpleStatus } from "@prisma/client";
 
 import { PrismaService } from "../../../prisma/prisma.service";
-import { apiResponse } from "../../../common/utils/api-response.util";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
 import {
   CreateProductAttributeDto,
   CreateProductAttributeValueDto,
+  QueryProductAttributeDto,
   UpdateProductAttributeDto,
   UpdateProductAttributeValueDto,
 } from "./dto/product-attribute.dto";
@@ -19,11 +23,6 @@ import {
 const ATTRIBUTE_INCLUDE = {
   values: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } },
 } satisfies Prisma.ProductAttributeInclude;
-
-const ATTRIBUTE_ORDER = [
-  { name: "asc" },
-  { createdAt: "asc" },
-] satisfies Prisma.ProductAttributeOrderByWithRelationInput[];
 
 @Injectable()
 export class ProductAttributeService {
@@ -73,14 +72,54 @@ export class ProductAttributeService {
     }
   }
 
-  async findAll(businessId: string) {
-    const attributes = await this.prisma.productAttribute.findMany({
-      where: { businessId, deletedAt: null },
-      include: ATTRIBUTE_INCLUDE,
-      orderBy: ATTRIBUTE_ORDER,
-    });
+  async findAll(businessId: string, query: QueryProductAttributeDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const skip = (page - 1) * limit;
+    const sortBy = query.sortBy ?? "name";
+    const sortOrder = query.sortOrder ?? "asc";
+    const where: Prisma.ProductAttributeWhereInput = {
+      businessId,
+      deletedAt: null,
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { name: { contains: query.search, mode: "insensitive" } },
+              {
+                values: {
+                  some: {
+                    value: { contains: query.search, mode: "insensitive" },
+                    deletedAt: null,
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+    };
 
-    return apiResponse(attributes);
+    const [items, total] = await Promise.all([
+      this.prisma.productAttribute.findMany({
+        where,
+        skip,
+        take: limit,
+        include: ATTRIBUTE_INCLUDE,
+        orderBy: [{ [sortBy]: sortOrder }, { createdAt: "asc" }],
+      }),
+      this.prisma.productAttribute.count({ where }),
+    ]);
+
+    return paginatedResponse(items, {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    });
+  }
+
+  async findOne(businessId: string, attributeId: string) {
+    return apiResponse(await this.findAttributeOrThrow(businessId, attributeId));
   }
 
   async update(

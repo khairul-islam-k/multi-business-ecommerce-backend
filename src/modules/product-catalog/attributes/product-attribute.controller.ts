@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
@@ -25,6 +26,7 @@ import { ProductAttributeService } from "./product-attribute.service";
 import {
   CreateProductAttributeDto,
   CreateProductAttributeValueDto,
+  QueryProductAttributeDto,
   UpdateProductAttributeDto,
   UpdateProductAttributeValueDto,
 } from "./dto/product-attribute.dto";
@@ -65,8 +67,22 @@ export class ProductAttributeController {
   @ApiOperation({ summary: "Get product attributes" })
   findAll(
     @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Query() query: QueryProductAttributeDto,
   ) {
-    return this.attributes.findAll(businessId);
+    return this.attributes.findAll(businessId, query);
+  }
+
+  @RequirePermission(
+    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
+    PermissionAction.READ,
+  )
+  @Get(":attributeId")
+  @ApiOperation({ summary: "Get product attribute" })
+  findOne(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("attributeId", ParseUUIDPipe) attributeId: string,
+  ) {
+    return this.attributes.findOne(businessId, attributeId);
   }
 
   @RequirePermission(
