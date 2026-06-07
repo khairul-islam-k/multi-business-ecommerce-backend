@@ -1099,7 +1099,9 @@ export class SupplierService {
     return purchaseOrder;
   }
 
-  private assertItems(items: { productId: string; variantId?: string | null }[]) {
+  private assertItems(
+    items: { productId: string; variantId?: string | null }[],
+  ) {
     if (items.length === 0) {
       throw new BadRequestException(
         "At least one purchase order item is required",

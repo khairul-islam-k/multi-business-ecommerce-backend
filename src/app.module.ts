@@ -10,6 +10,7 @@ import { RequestLoggerMiddleware } from "./common/middlewares/request-logger.mid
 import { RequestContextMiddleware } from "./common/request-context/request-context.middleware";
 import { AuthModule } from "./modules/auth/auth.module";
 import { BusinessModule } from "./modules/business/business.module";
+import { CustomerModule } from "./modules/customers/customer.module";
 import { EmployeeModule } from "./modules/employees/employee.module";
 import { FinanceModule } from "./modules/finance/finance.module";
 import { InventoryModule } from "./modules/inventory/inventory.module";
@@ -45,6 +46,7 @@ import { PrismaModule } from "./prisma/prisma.module";
     EmployeeModule,
     ProductCatalogModule,
     InventoryModule,
+    CustomerModule,
     FinanceModule,
     SupplierModule,
     OrderModule,
