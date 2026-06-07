@@ -357,12 +357,6 @@ export class SupplierPurchaseReturnItemDto {
 }
 
 export class CreateSupplierPurchaseReturnDto {
-  @ApiPropertyOptional({ example: "2026-06-02T00:00:00.000Z" })
-  @IsOptional()
-  @Type(() => Date)
-  @IsDate()
-  returnDate?: Date;
-
   @ApiPropertyOptional({ example: "Supplier agreed to take these back" })
   @IsOptional()
   @IsString()

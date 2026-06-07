@@ -846,7 +846,7 @@ export class SupplierService {
           warehouseId: purchaseOrder.warehouseId,
           taxId: purchaseOrder.taxId,
           returnNo: await this.generateUniqueReturnNo(businessId),
-          returnDate: dto.returnDate ?? new Date(),
+          returnDate: new Date(),
           status: SupplierPurchaseReturnStatus.PENDING,
           reason: this.normalizeNullableText(dto.reason),
           subtotal: totals.subtotal,
