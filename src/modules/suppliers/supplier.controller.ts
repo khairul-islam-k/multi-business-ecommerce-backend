@@ -33,6 +33,8 @@ import {
   UpdatePurchaseOrderDto,
   UpdateSupplierDto,
   UpdateSupplierProductMapDto,
+  PurchaseOrderItemDto,
+  CancelPurchaseOrderDto,
 } from "./dto/supplier.dto";
 import { SupplierService } from "./supplier.service";
 
@@ -204,6 +206,23 @@ export class SupplierController {
     @Body() dto: ReceivePurchaseOrderDto,
   ) {
     return this.suppliers.receivePurchaseOrder(
+      user,
+      businessId,
+      purchaseOrderId,
+      dto,
+    );
+  }
+
+  @RequirePermission(RbacFeature.SUPPLIER_MANAGEMENT, PermissionAction.UPDATE)
+  @Patch("purchase-orders/:purchaseOrderId/cancel")
+  @ApiOperation({ summary: "Cancel supplier purchase order" })
+  cancelPurchaseOrder(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("purchaseOrderId", ParseUUIDPipe) purchaseOrderId: string,
+    @Body() dto: CancelPurchaseOrderDto,
+  ) {
+    return this.suppliers.cancelPurchaseOrder(
       user,
       businessId,
       purchaseOrderId,

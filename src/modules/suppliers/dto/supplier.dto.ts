@@ -297,6 +297,13 @@ export class ReceivePurchaseOrderDto {
   note?: string;
 }
 
+export class CancelPurchaseOrderDto {
+  @ApiPropertyOptional({ example: "Received at dock A" })
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
 export class QuerySupplierInvoiceDto {
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()

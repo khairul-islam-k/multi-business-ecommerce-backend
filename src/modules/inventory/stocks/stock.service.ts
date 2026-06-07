@@ -1,12 +1,11 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
-import { PrismaService } from "../../../prisma/prisma.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import { PrismaService } from "../../../prisma/prisma.service";
 import { InventoryLookupService } from "../common/inventory-lookup.service";
 import {
   FulfillOrderAllocationDto,
@@ -16,7 +15,10 @@ import {
   UpdateStockAlertDto,
 } from "./dto/stock.dto";
 
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 const STOCK_INCLUDE = {
+  product: true,
+  variant: true,
   warehouseStocks: {
     include: { warehouse: true },
     orderBy: { updatedAt: "desc" },
@@ -49,6 +51,16 @@ export class StockService {
       ...(query.search
         ? {
             OR: [
+              {
+                product: {
+                  name: { contains: query.search, mode: "insensitive" },
+                },
+              },
+              {
+                variant: {
+                  title: { contains: query.search, mode: "insensitive" },
+                },
+              },
               {
                 warehouseStocks: {
                   some: {

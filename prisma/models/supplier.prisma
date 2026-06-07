@@ -168,6 +168,8 @@ model SupplierPurchaseOrderItem {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   purchaseOrder SupplierPurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product               @relation("SupplierPurchaseOrderItemProduct", fields: [productId], references: [id], onDelete: Restrict)
+  variant       ProductVariant?       @relation("SupplierPurchaseOrderItemVariant", fields: [variantId], references: [id], onDelete: SetNull)
 
   @@index([purchaseOrderId])
   @@index([productId])

@@ -38,6 +38,7 @@ import {
   UpdatePurchaseOrderDto,
   UpdateSupplierDto,
   UpdateSupplierProductMapDto,
+  CancelPurchaseOrderDto,
 } from "./dto/supplier.dto";
 
 const SUPPLIER_INCLUDE = {
@@ -52,7 +53,10 @@ const SUPPLIER_INCLUDE = {
 const PURCHASE_ORDER_INCLUDE = {
   supplier: true,
   tax: true,
-  items: { orderBy: { createdAt: "asc" } },
+  items: {
+    orderBy: { createdAt: "asc" },
+    include: { product: true, variant: true },
+  },
   invoices: { orderBy: { createdAt: "desc" } },
 } satisfies Prisma.SupplierPurchaseOrderInclude;
 
@@ -670,6 +674,43 @@ export class SupplierService {
     });
 
     return apiResponse(receivedOrder, "Purchase order received successfully");
+  }
+
+  async cancelPurchaseOrder(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    purchaseOrderId: string,
+    dto: CancelPurchaseOrderDto,
+  ) {
+    const purchaseOrder = await this.getPurchaseOrderOrThrow(
+      businessId,
+      purchaseOrderId,
+    );
+
+    if (purchaseOrder.status === SupplierPurchaseOrderStatus.RECEIVED) {
+      throw new BadRequestException(
+        "Received purchase orders cannot be deleted",
+      );
+    }
+
+    if (purchaseOrder.status !== SupplierPurchaseOrderStatus.ORDERED) {
+      throw new BadRequestException(
+        "Only ordered purchase orders can be cancelled",
+      );
+    }
+
+    const cancelledOrder = await this.prisma.$transaction(async (tx) => {
+      return tx.supplierPurchaseOrder.update({
+        where: { id: purchaseOrderId },
+        data: {
+          status: SupplierPurchaseOrderStatus.CANCELLED,
+          note: dto.note,
+        },
+        include: PURCHASE_ORDER_INCLUDE,
+      });
+    });
+
+    return apiResponse(cancelledOrder, "Purchase order received successfully");
   }
 
   async removePurchaseOrder(businessId: string, purchaseOrderId: string) {

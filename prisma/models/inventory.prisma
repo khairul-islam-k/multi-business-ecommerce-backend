@@ -107,6 +107,9 @@ model InventoryStock {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  product       Product               @relation("StockProduct", fields: [productId], references: [id], onDelete: Restrict)
+  variant       ProductVariant?       @relation("StockVariant", fields: [variantId], references: [id], onDelete: SetNull)
+
   warehouseStocks InventoryWarehouseStock[]
   movements       InventoryStockMovement[]
   allocations     InventoryOrderAllocation[]

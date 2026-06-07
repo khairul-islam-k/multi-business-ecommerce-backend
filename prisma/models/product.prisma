@@ -152,6 +152,8 @@ model Product {
   variants   ProductVariant[]
   images     ProductImage[]
   tags       ProductTagMap[]
+  supplierPurchaseOrderItems SupplierPurchaseOrderItem[] @relation("SupplierPurchaseOrderItemProduct")
+  productStocks InventoryStock[] @relation("StockProduct")
 
   @@unique([businessId, sku])
   @@unique([businessId, barcode])
@@ -186,6 +188,8 @@ model ProductVariant {
   product    Product                   @relation(fields: [productId], references: [id], onDelete: Cascade)
   images     ProductImage[]
   attributes ProductVariantAttribute[]
+  supplierPurchaseOrderItems SupplierPurchaseOrderItem[] @relation("SupplierPurchaseOrderItemVariant")
+  variantStocks InventoryStock[] @relation("StockVariant")
 
   @@unique([businessId, sku])
   @@unique([businessId, barcode])
