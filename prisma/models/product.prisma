@@ -154,6 +154,7 @@ model Product {
   tags       ProductTagMap[]
   supplierPurchaseOrderItems SupplierPurchaseOrderItem[] @relation("SupplierPurchaseOrderItemProduct")
   productStocks InventoryStock[] @relation("StockProduct")
+  stockMovementProducts InventoryStockMovement[] @relation("StockMovementProduct")
 
   @@unique([businessId, sku])
   @@unique([businessId, barcode])
@@ -190,6 +191,7 @@ model ProductVariant {
   attributes ProductVariantAttribute[]
   supplierPurchaseOrderItems SupplierPurchaseOrderItem[] @relation("SupplierPurchaseOrderItemVariant")
   variantStocks InventoryStock[] @relation("StockVariant")
+  stockMovementVariants InventoryStockMovement[] @relation("StockMovementVariant")
 
   @@unique([businessId, sku])
   @@unique([businessId, barcode])

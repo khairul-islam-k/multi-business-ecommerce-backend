@@ -10,6 +10,7 @@ import { apiResponse } from "../../../common/utils/api-response.util";
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
 import {
+  BulkCreateProductVariantsDto,
   CreateProductVariantDto,
   ProductVariantAttributeInputDto,
   QueryProductVariantDto,
@@ -29,6 +30,10 @@ const VARIANT_INCLUDE = {
   },
   images: { where: { deletedAt: null }, orderBy: { sortOrder: "asc" } },
 } satisfies Prisma.ProductVariantInclude;
+
+type ProductVariantWithInclude = Prisma.ProductVariantGetPayload<{
+  include: typeof VARIANT_INCLUDE;
+}>;
 
 @Injectable()
 export class ProductVariantService {
@@ -96,6 +101,100 @@ export class ProductVariantService {
       });
 
       return apiResponse(variant, "Product variant created successfully");
+    } catch (error) {
+      this.lookup.handleUniqueError(
+        error,
+        "Variant SKU, barcode, or attribute already exists",
+      );
+    }
+  }
+
+  async bulkCreate(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    productId: string,
+    dto: BulkCreateProductVariantsDto,
+  ) {
+    await this.lookup.assertProductExists(businessId, productId);
+
+    const variants = await Promise.all(
+      dto.variants.map(async (variant) => ({
+        dto: variant,
+        title: this.lookup.normalizeName(variant.title),
+        attributes: await this.lookup.assertAttributeValuePairs(
+          businessId,
+          productId,
+          variant.attributes,
+        ),
+      })),
+    );
+
+    this.assertUniqueAttributeCombinations(
+      variants.map((variant) => variant.attributes),
+    );
+    await this.assertAttributeCombinationsAvailable(
+      businessId,
+      productId,
+      variants.map((variant) => variant.attributes),
+    );
+
+    const [skus, barcodes] = await Promise.all([
+      this.generateUniqueVariantCodes(businessId, variants.length, "sku"),
+      this.generateUniqueVariantCodes(businessId, variants.length, "barcode"),
+    ]);
+
+    try {
+      const createdVariants = await this.prisma.$transaction(async (tx) => {
+        const created: ProductVariantWithInclude[] = [];
+
+        for (const [index, variant] of variants.entries()) {
+          const createdVariant = await tx.productVariant.create({
+            data: {
+              businessId,
+              productId,
+              title: variant.title,
+              sku: skus[index],
+              barcode: barcodes[index],
+              priceOverride: variant.dto.priceOverride ?? null,
+              weight: variant.dto.weight ?? null,
+              status: variant.dto.status ?? ProductVariantStatus.ACTIVE,
+              createdBy: currentUser.id,
+              updatedBy: currentUser.id,
+              attributes: this.buildAttributeCreate(variant.attributes),
+              images: this.buildImageCreate(
+                businessId,
+                productId,
+                currentUser.id,
+                variant.dto.images,
+              ),
+            },
+            include: VARIANT_INCLUDE,
+          });
+
+          await tx.inventoryStock.create({
+            data: {
+              businessId,
+              productId,
+              variantId: createdVariant.id,
+              stockItemKey: this.buildStockItemKey(
+                productId,
+                createdVariant.id,
+              ),
+            },
+          });
+
+          created.push(createdVariant);
+        }
+
+        await this.zeroProductLevelStock(tx, businessId, productId);
+
+        return created;
+      });
+
+      return apiResponse(
+        createdVariants,
+        "Product variants created successfully",
+      );
     } catch (error) {
       this.lookup.handleUniqueError(
         error,
@@ -282,6 +381,117 @@ export class ProductVariantService {
           })),
         }
       : undefined;
+  }
+
+  private assertUniqueAttributeCombinations(
+    attributeSets: ProductVariantAttributeInputDto[][],
+  ) {
+    const seenKeys = new Set<string>();
+
+    for (const attributes of attributeSets) {
+      const key = this.buildAttributeCombinationKey(attributes);
+
+      if (!key) {
+        continue;
+      }
+
+      if (seenKeys.has(key)) {
+        throw new BadRequestException(
+          "Bulk variants cannot contain duplicate attribute combinations",
+        );
+      }
+
+      seenKeys.add(key);
+    }
+  }
+
+  private async assertAttributeCombinationsAvailable(
+    businessId: string,
+    productId: string,
+    attributeSets: ProductVariantAttributeInputDto[][],
+  ) {
+    const requestedKeys = new Set(
+      attributeSets
+        .map((attributes) => this.buildAttributeCombinationKey(attributes))
+        .filter((key): key is string => Boolean(key)),
+    );
+
+    if (requestedKeys.size === 0) {
+      return;
+    }
+
+    const existingVariants = await this.prisma.productVariant.findMany({
+      where: {
+        businessId,
+        productId,
+        deletedAt: null,
+      },
+      select: {
+        attributes: {
+          select: {
+            attributeId: true,
+            attributeValueId: true,
+          },
+        },
+      },
+    });
+
+    const hasExistingCombination = existingVariants.some((variant) => {
+      const key = this.buildAttributeCombinationKey(variant.attributes);
+
+      return key ? requestedKeys.has(key) : false;
+    });
+
+    if (hasExistingCombination) {
+      throw new BadRequestException(
+        "One or more variant attribute combinations already exist",
+      );
+    }
+  }
+
+  private buildAttributeCombinationKey(
+    attributes: ProductVariantAttributeInputDto[] = [],
+  ) {
+    if (attributes.length === 0) {
+      return null;
+    }
+
+    return attributes
+      .map(
+        (attribute) =>
+          `${attribute.attributeId}:${attribute.attributeValueId}`,
+      )
+      .sort()
+      .join("|");
+  }
+
+  private async generateUniqueVariantCodes(
+    businessId: string,
+    amount: number,
+    codeType: "sku" | "barcode",
+  ) {
+    const codes = new Set<string>();
+    const maxAttempts = amount * 10;
+    let attempts = 0;
+
+    while (codes.size < amount && attempts < maxAttempts) {
+      attempts += 1;
+
+      const code =
+        codeType === "sku"
+          ? await this.lookup.generateUniqueVariantSku(businessId)
+          : await this.lookup.generateUniqueVariantBarcode(businessId);
+
+      codes.add(code);
+    }
+
+    if (codes.size !== amount) {
+      throw new BadRequestException(
+        `Could not generate enough unique variant ${codeType}s`,
+      );
+    }
+
+    return Array.from(codes);
   }
 
   private buildImageCreate(

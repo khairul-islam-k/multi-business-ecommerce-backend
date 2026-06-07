@@ -1,5 +1,7 @@
 import { Type } from "class-transformer";
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsEnum,
   IsNumber,
@@ -55,6 +57,16 @@ export class CreateProductVariantDto extends ProductImagesDto {
   @ValidateNested({ each: true })
   @Type(() => ProductVariantAttributeInputDto)
   attributes?: ProductVariantAttributeInputDto[];
+}
+
+export class BulkCreateProductVariantsDto {
+  @ApiProperty({ type: [CreateProductVariantDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => CreateProductVariantDto)
+  variants!: CreateProductVariantDto[];
 }
 
 export class UpdateProductVariantAttributesDto {

@@ -134,6 +134,27 @@ export class StockService {
       ...(query.warehouseId ? { warehouseId: query.warehouseId } : {}),
       ...(query.productId ? { productId: query.productId } : {}),
       ...(query.variantId ? { variantId: query.variantId } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              {
+                product: {
+                  name: { contains: query.search, mode: "insensitive" },
+                },
+              },
+              {
+                variant: {
+                  title: { contains: query.search, mode: "insensitive" },
+                },
+              },
+              {
+                warehouse: {
+                  name: { contains: query.search, mode: "insensitive" },
+                },
+              },
+            ],
+          }
+        : {}),
     };
 
     const [items, total] = await Promise.all([
@@ -142,7 +163,7 @@ export class StockService {
         skip,
         take: limit,
         orderBy: { createdAt: "desc" },
-        include: { stock: true, warehouse: true },
+        include: { stock: true, warehouse: true, product: true, variant: true },
       }),
       this.prisma.inventoryStockMovement.count({ where }),
     ]);

@@ -170,6 +170,8 @@ model InventoryStockMovement {
 
   stock     InventoryStock @relation(fields: [stockId], references: [id], onDelete: Cascade)
   warehouse Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  product Product @relation("StockMovementProduct", fields: [productId], references: [id], onDelete: Restrict)
+  variant ProductVariant? @relation("StockMovementVariant", fields: [variantId], references: [id], onDelete: Cascade)
 
   @@index([businessId])
   @@index([stockId])
