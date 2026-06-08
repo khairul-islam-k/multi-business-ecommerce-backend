@@ -25,6 +25,7 @@ import type { CurrentUserPayload } from "../../auth/decorators/current-user.deco
 import { ProductVariantService } from "./product-variant.service";
 import {
   BulkCreateProductVariantsDto,
+  BulkUpdateProductVariantsDto,
   CreateProductVariantDto,
   QueryProductVariantDto,
   UpdateProductVariantAttributesDto,
@@ -103,6 +104,21 @@ export class ProductVariantController {
     @Param("variantId", ParseUUIDPipe) variantId: string,
   ) {
     return this.variants.findOne(businessId, productId, variantId);
+  }
+
+  @RequirePermission(
+    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
+    PermissionAction.UPDATE,
+  )
+  @Patch("bulk")
+  @ApiOperation({ summary: "Update product variants in bulk" })
+  bulkUpdate(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("productId", ParseUUIDPipe) productId: string,
+    @Body() dto: BulkUpdateProductVariantsDto,
+  ) {
+    return this.variants.bulkUpdate(user, businessId, productId, dto);
   }
 
   @RequirePermission(

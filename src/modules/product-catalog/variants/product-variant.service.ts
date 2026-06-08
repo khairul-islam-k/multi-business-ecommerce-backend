@@ -11,6 +11,7 @@ import type { CurrentUserPayload } from "../../auth/decorators/current-user.deco
 import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
 import {
   BulkCreateProductVariantsDto,
+  BulkUpdateProductVariantsDto,
   CreateProductVariantDto,
   ProductVariantAttributeInputDto,
   QueryProductVariantDto,
@@ -331,6 +332,122 @@ export class ProductVariantService {
     }
   }
 
+  async bulkUpdate(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    productId: string,
+    dto: BulkUpdateProductVariantsDto,
+  ) {
+    await this.lookup.assertProductExists(businessId, productId);
+
+    const variantIds = dto.variants.map((variant) => variant.variantId);
+    this.assertUniqueVariantIds(variantIds);
+
+    const existingVariants = await this.prisma.productVariant.findMany({
+      where: {
+        businessId,
+        productId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        attributes: {
+          select: {
+            attributeId: true,
+            attributeValueId: true,
+          },
+        },
+      },
+    });
+    const existingVariantIds = new Set(
+      existingVariants.map((variant) => variant.id),
+    );
+
+    if (variantIds.some((variantId) => !existingVariantIds.has(variantId))) {
+      throw new NotFoundException("One or more product variants were not found");
+    }
+
+    const updates = await Promise.all(
+      dto.variants.map(async (variant) => ({
+        dto: variant,
+        variantId: variant.variantId,
+        attributes:
+          variant.attributes !== undefined
+            ? await this.lookup.assertAttributeValuePairs(
+                businessId,
+                productId,
+                variant.attributes,
+              )
+            : undefined,
+      })),
+    );
+
+    this.assertBulkUpdateAttributeCombinations(existingVariants, updates);
+
+    try {
+      const updatedVariants = await this.prisma.$transaction(async (tx) => {
+        const updated: ProductVariantWithInclude[] = [];
+
+        for (const update of updates) {
+          if (update.attributes !== undefined) {
+            await tx.productVariantAttribute.deleteMany({
+              where: { variantId: update.variantId },
+            });
+          }
+
+          if (update.dto.images !== undefined) {
+            await tx.productImage.updateMany({
+              where: { variantId: update.variantId, deletedAt: null },
+              data: { deletedAt: new Date(), updatedBy: currentUser.id },
+            });
+          }
+
+          const variant = await tx.productVariant.update({
+            where: { id: update.variantId },
+            data: {
+              ...(update.dto.title !== undefined && {
+                title: this.lookup.normalizeName(update.dto.title),
+              }),
+              ...(update.dto.priceOverride !== undefined && {
+                priceOverride: update.dto.priceOverride,
+              }),
+              ...(update.dto.weight !== undefined && {
+                weight: update.dto.weight,
+              }),
+              ...(update.dto.status !== undefined && {
+                status: update.dto.status,
+              }),
+              updatedBy: currentUser.id,
+              ...(update.attributes !== undefined && {
+                attributes: this.buildAttributeCreate(update.attributes),
+              }),
+              ...(update.dto.images !== undefined && {
+                images: this.buildImageCreate(
+                  businessId,
+                  productId,
+                  currentUser.id,
+                  update.dto.images,
+                ),
+              }),
+            },
+            include: VARIANT_INCLUDE,
+          });
+
+          updated.push(variant);
+        }
+
+        return updated;
+      });
+
+      return apiResponse(
+        updatedVariants,
+        "Product variants updated successfully",
+      );
+    } catch (error) {
+      this.lookup.handleUniqueError(error, "Variant attribute already exists");
+    }
+  }
+
   async updateAttributes(
     currentUser: CurrentUserPayload,
     businessId: string,
@@ -402,6 +519,74 @@ export class ProductVariantService {
       }
 
       seenKeys.add(key);
+    }
+  }
+
+  private assertUniqueVariantIds(variantIds: string[]) {
+    const uniqueVariantIds = new Set(variantIds);
+
+    if (uniqueVariantIds.size !== variantIds.length) {
+      throw new BadRequestException(
+        "Bulk variant update cannot contain duplicate variants",
+      );
+    }
+  }
+
+  private assertBulkUpdateAttributeCombinations(
+    existingVariants: {
+      id: string;
+      attributes: ProductVariantAttributeInputDto[];
+    }[],
+    updates: {
+      variantId: string;
+      attributes?: ProductVariantAttributeInputDto[];
+    }[],
+  ) {
+    const nextAttributesByVariantId = new Map(
+      updates
+        .filter((update) => update.attributes !== undefined)
+        .map((update) => [update.variantId, update.attributes ?? []]),
+    );
+    const keyToVariantIds = new Map<string, string[]>();
+
+    for (const variant of existingVariants) {
+      const attributes =
+        nextAttributesByVariantId.get(variant.id) ?? variant.attributes;
+      const key = this.buildAttributeCombinationKey(attributes);
+
+      if (!key) {
+        continue;
+      }
+
+      keyToVariantIds.set(key, [
+        ...(keyToVariantIds.get(key) ?? []),
+        variant.id,
+      ]);
+    }
+
+    for (const update of updates) {
+      const variant = existingVariants.find(
+        (existingVariant) => existingVariant.id === update.variantId,
+      );
+      const attributes =
+        update.attributes !== undefined
+          ? update.attributes
+          : variant?.attributes ?? [];
+      const key = this.buildAttributeCombinationKey(attributes);
+
+      if (!key) {
+        continue;
+      }
+
+      const conflictingVariantIds = (keyToVariantIds.get(key) ?? []).filter(
+        (variantId) => variantId !== update.variantId,
+      );
+
+      if (conflictingVariantIds.length > 0) {
+        throw new BadRequestException(
+          "One or more variant attribute combinations already exist",
+        );
+      }
     }
   }
 

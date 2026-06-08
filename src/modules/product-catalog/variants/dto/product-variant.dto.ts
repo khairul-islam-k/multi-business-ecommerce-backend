@@ -80,6 +80,22 @@ export class UpdateProductVariantDto extends PartialType(
   CreateProductVariantDto,
 ) {}
 
+export class BulkUpdateProductVariantItemDto extends UpdateProductVariantDto {
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsUUID()
+  variantId!: string;
+}
+
+export class BulkUpdateProductVariantsDto {
+  @ApiProperty({ type: [BulkUpdateProductVariantItemDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => BulkUpdateProductVariantItemDto)
+  variants!: BulkUpdateProductVariantItemDto[];
+}
+
 export class QueryProductVariantDto {
   @ApiPropertyOptional({ example: "red" })
   @IsOptional()
