@@ -27,6 +27,7 @@ import {
   BulkCreateProductVariantsDto,
   BulkUpdateProductVariantsDto,
   CreateProductVariantDto,
+  ProductVariantOptionsDto,
   QueryProductVariantDto,
   UpdateProductVariantAttributesDto,
   UpdateProductVariantDto,
@@ -76,6 +77,20 @@ export class ProductVariantController {
     @Body() dto: BulkCreateProductVariantsDto,
   ) {
     return this.variants.bulkCreate(user, businessId, productId, dto);
+  }
+
+  @RequirePermission(
+    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
+    PermissionAction.READ,
+  )
+  @Post("options")
+  @ApiOperation({ summary: "Resolve product variant options" })
+  options(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("productId", ParseUUIDPipe) productId: string,
+    @Body() dto: ProductVariantOptionsDto,
+  ) {
+    return this.variants.options(businessId, productId, dto);
   }
 
   @RequirePermission(

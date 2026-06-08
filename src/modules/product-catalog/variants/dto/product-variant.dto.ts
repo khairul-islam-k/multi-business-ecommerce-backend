@@ -2,6 +2,7 @@ import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
   ArrayMinSize,
+  IsBoolean,
   IsArray,
   IsEnum,
   IsNumber,
@@ -94,6 +95,20 @@ export class BulkUpdateProductVariantsDto {
   @ValidateNested({ each: true })
   @Type(() => BulkUpdateProductVariantItemDto)
   variants!: BulkUpdateProductVariantItemDto[];
+}
+
+export class ProductVariantOptionsDto {
+  @ApiPropertyOptional({ type: [ProductVariantAttributeInputDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductVariantAttributeInputDto)
+  selectedAttributes?: ProductVariantAttributeInputDto[];
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @IsBoolean()
+  includeOutOfStock?: boolean;
 }
 
 export class QueryProductVariantDto {

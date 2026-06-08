@@ -14,6 +14,7 @@ import {
   BulkUpdateProductVariantsDto,
   CreateProductVariantDto,
   ProductVariantAttributeInputDto,
+  ProductVariantOptionsDto,
   QueryProductVariantDto,
   UpdateProductVariantDto,
 } from "./dto/product-variant.dto";
@@ -35,6 +36,16 @@ const VARIANT_INCLUDE = {
 type ProductVariantWithInclude = Prisma.ProductVariantGetPayload<{
   include: typeof VARIANT_INCLUDE;
 }>;
+
+type VariantOptionVariant = ProductVariantWithInclude & {
+  stock: {
+    totalQuantity: number;
+    quantityReserved: number;
+    availableQuantity: number;
+    inStock: boolean;
+  };
+  effectivePrice: string;
+};
 
 @Injectable()
 export class ProductVariantService {
@@ -204,6 +215,48 @@ export class ProductVariantService {
     }
   }
 
+  async options(
+    businessId: string,
+    productId: string,
+    dto: ProductVariantOptionsDto,
+  ) {
+    await this.lookup.assertProductExists(businessId, productId);
+
+    const selectedAttributes = await this.lookup.assertAttributeValuePairs(
+      businessId,
+      productId,
+      dto.selectedAttributes,
+    );
+    const includeOutOfStock = dto.includeOutOfStock ?? true;
+    const variants = await this.getOptionVariants(businessId, productId);
+    const selectableVariants = includeOutOfStock
+      ? variants
+      : variants.filter((variant) => variant.stock.inStock);
+    const matchingVariants = selectableVariants.filter((variant) =>
+      this.variantMatchesAttributes(variant, selectedAttributes),
+    );
+
+    const availableOptions = this.buildAvailableOptions(
+      variants,
+      selectedAttributes,
+      includeOutOfStock,
+    );
+    const selectedVariant =
+      selectedAttributes.length > 0 && matchingVariants.length === 1
+        ? matchingVariants[0]
+        : null;
+
+    return apiResponse({
+      selectedAttributes: this.describeSelectedAttributes(
+        variants,
+        selectedAttributes,
+      ),
+      availableOptions,
+      matchingVariants,
+      selectedVariant,
+    });
+  }
+
   async findAll(
     businessId: string,
     productId: string,
@@ -364,7 +417,9 @@ export class ProductVariantService {
     );
 
     if (variantIds.some((variantId) => !existingVariantIds.has(variantId))) {
-      throw new NotFoundException("One or more product variants were not found");
+      throw new NotFoundException(
+        "One or more product variants were not found",
+      );
     }
 
     const updates = await Promise.all(
@@ -500,6 +555,190 @@ export class ProductVariantService {
       : undefined;
   }
 
+  private async getOptionVariants(businessId: string, productId: string) {
+    const variants = await this.prisma.productVariant.findMany({
+      where: {
+        businessId,
+        productId,
+        deletedAt: null,
+        status: ProductVariantStatus.ACTIVE,
+      },
+      include: VARIANT_INCLUDE,
+      orderBy: { createdAt: "desc" },
+    });
+    const stocks = await this.prisma.inventoryStock.findMany({
+      where: {
+        businessId,
+        productId,
+        variantId: { in: variants.map((variant) => variant.id) },
+      },
+      select: {
+        variantId: true,
+        totalQuantity: true,
+        quantityReserved: true,
+      },
+    });
+    const stockByVariantId = new Map(
+      stocks
+        .filter((stock) => stock.variantId)
+        .map((stock) => [
+          stock.variantId,
+          {
+            totalQuantity: Number(stock.totalQuantity.toString()),
+            quantityReserved: Number(stock.quantityReserved.toString()),
+          },
+        ]),
+    );
+
+    return variants.map((variant) => {
+      const stock = stockByVariantId.get(variant.id) ?? {
+        totalQuantity: 0,
+        quantityReserved: 0,
+      };
+      const availableQuantity = Math.max(
+        stock.totalQuantity - stock.quantityReserved,
+        0,
+      );
+
+      return {
+        ...variant,
+        effectivePrice: (
+          variant.priceOverride ?? variant.product.price
+        ).toString(),
+        stock: {
+          ...stock,
+          availableQuantity,
+          inStock: availableQuantity > 0,
+        },
+      } satisfies VariantOptionVariant;
+    });
+  }
+
+  private buildAvailableOptions(
+    variants: VariantOptionVariant[],
+    selectedAttributes: ProductVariantAttributeInputDto[],
+    includeOutOfStock: boolean,
+  ) {
+    const attributes = new Map<
+      string,
+      {
+        attributeId: string;
+        name: string;
+        values: Map<
+          string,
+          {
+            attributeValueId: string;
+            value: string;
+            matchingVariantCount: number;
+            availableQuantity: number;
+            inStock: boolean;
+            selected: boolean;
+          }
+        >;
+      }
+    >();
+    const selectedValueByAttributeId = new Map(
+      selectedAttributes.map((attribute) => [
+        attribute.attributeId,
+        attribute.attributeValueId,
+      ]),
+    );
+
+    for (const variant of variants) {
+      for (const attribute of variant.attributes) {
+        if (!attributes.has(attribute.attributeId)) {
+          attributes.set(attribute.attributeId, {
+            attributeId: attribute.attributeId,
+            name: attribute.attribute.name,
+            values: new Map(),
+          });
+        }
+      }
+    }
+
+    for (const option of attributes.values()) {
+      const comparableSelections = selectedAttributes.filter(
+        (attribute) => attribute.attributeId !== option.attributeId,
+      );
+      const candidateVariants = variants.filter(
+        (variant) =>
+          (includeOutOfStock || variant.stock.inStock) &&
+          this.variantMatchesAttributes(variant, comparableSelections),
+      );
+
+      for (const variant of candidateVariants) {
+        const attribute = variant.attributes.find(
+          (item) => item.attributeId === option.attributeId,
+        );
+
+        if (!attribute) {
+          continue;
+        }
+
+        const current = option.values.get(attribute.attributeValueId) ?? {
+          attributeValueId: attribute.attributeValueId,
+          value: attribute.attributeValue.value,
+          matchingVariantCount: 0,
+          availableQuantity: 0,
+          inStock: false,
+          selected:
+            selectedValueByAttributeId.get(option.attributeId) ===
+            attribute.attributeValueId,
+        };
+
+        current.matchingVariantCount += 1;
+        current.availableQuantity += variant.stock.availableQuantity;
+        current.inStock = current.inStock || variant.stock.inStock;
+        option.values.set(attribute.attributeValueId, current);
+      }
+    }
+
+    return Array.from(attributes.values())
+      .map((option) => ({
+        attributeId: option.attributeId,
+        name: option.name,
+        values: Array.from(option.values.values()).sort((a, b) =>
+          a.value.localeCompare(b.value),
+        ),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  private describeSelectedAttributes(
+    variants: VariantOptionVariant[],
+    selectedAttributes: ProductVariantAttributeInputDto[],
+  ) {
+    return selectedAttributes.map((selectedAttribute) => {
+      const attribute = variants
+        .flatMap((variant) => variant.attributes)
+        .find(
+          (item) =>
+            item.attributeId === selectedAttribute.attributeId &&
+            item.attributeValueId === selectedAttribute.attributeValueId,
+        );
+
+      return {
+        attributeId: selectedAttribute.attributeId,
+        attributeName: attribute?.attribute.name ?? null,
+        attributeValueId: selectedAttribute.attributeValueId,
+        attributeValue: attribute?.attributeValue.value ?? null,
+      };
+    });
+  }
+
+  private variantMatchesAttributes(
+    variant: { attributes: ProductVariantAttributeInputDto[] },
+    selectedAttributes: ProductVariantAttributeInputDto[],
+  ) {
+    return selectedAttributes.every((selectedAttribute) =>
+      variant.attributes.some(
+        (attribute) =>
+          attribute.attributeId === selectedAttribute.attributeId &&
+          attribute.attributeValueId === selectedAttribute.attributeValueId,
+      ),
+    );
+  }
+
   private assertUniqueAttributeCombinations(
     attributeSets: ProductVariantAttributeInputDto[][],
   ) {
@@ -571,7 +810,7 @@ export class ProductVariantService {
       const attributes =
         update.attributes !== undefined
           ? update.attributes
-          : variant?.attributes ?? [];
+          : (variant?.attributes ?? []);
       const key = this.buildAttributeCombinationKey(attributes);
 
       if (!key) {
@@ -643,8 +882,7 @@ export class ProductVariantService {
 
     return attributes
       .map(
-        (attribute) =>
-          `${attribute.attributeId}:${attribute.attributeValueId}`,
+        (attribute) => `${attribute.attributeId}:${attribute.attributeValueId}`,
       )
       .sort()
       .join("|");
