@@ -1,6 +1,7 @@
 import { Type } from "class-transformer";
 import {
   IsArray,
+  IsBoolean,
   IsOptional,
   IsString,
   IsUUID,
@@ -19,6 +20,11 @@ export class ProductImageInputDto {
   @IsString()
   @MaxLength(255)
   altText?: string;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @IsBoolean()
+  isThumbnail?: boolean;
 }
 
 export class ProductTagIdsDto {

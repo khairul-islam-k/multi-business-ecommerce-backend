@@ -17,6 +17,8 @@ import {
   QueryProductDto,
   UpdateProductDto,
 } from "./dto/product.dto";
+import { ProductImageInputDto } from "../common/dto/product-media.dto";
+import { dot } from "node:test/reporters";
 
 const PRODUCT_INCLUDE = {
   category: true,
@@ -286,7 +288,7 @@ export class ProductService {
   private buildImageCreate(
     businessId: string,
     userId: string,
-    images: { imageUrl: string; altText?: string }[] = [],
+    images: ProductImageInputDto[] = [],
   ) {
     return images.length > 0
       ? {
@@ -295,7 +297,7 @@ export class ProductService {
             imageUrl: image.imageUrl.trim(),
             altText: this.lookup.normalizeNullableText(image.altText),
             sortOrder: index,
-            isThumbnail: index === 0,
+            isThumbnail: image.isThumbnail,
             createdBy: userId,
             updatedBy: userId,
           })),

@@ -184,7 +184,7 @@ model ProductVariant {
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
-
+ 
   business   Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   product    Product                   @relation(fields: [productId], references: [id], onDelete: Cascade)
   images     ProductImage[]
