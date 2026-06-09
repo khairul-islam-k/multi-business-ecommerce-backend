@@ -43,7 +43,6 @@ const BUSINESS_INCLUDE = {
   _count: {
     select: {
       members: true,
-      roles: true,
     },
   },
 } satisfies Prisma.BusinessInclude;
@@ -65,16 +64,9 @@ export class BusinessService {
 
   async create(
     userId: string,
-    userType: SystemUserType,
     dto: CreateBusinessDto,
     tx?: Prisma.TransactionClient,
   ) {
-    if (userType !== SystemUserType.TENANT) {
-      throw new ForbiddenException(
-        "You do not have permission to create businesses",
-      );
-    }
-
     const client = tx ?? this.prisma;
 
     const slug = await this.generateUniqueBusinessSlug(

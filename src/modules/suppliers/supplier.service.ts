@@ -55,7 +55,16 @@ const PURCHASE_ORDER_INCLUDE = {
   tax: true,
   items: {
     orderBy: { createdAt: "asc" },
-    include: { product: true, variant: true },
+    include: {
+      product: {
+        include: {
+          productStocks: true,
+        },
+      },
+      variant: {
+        include: { variantStocks: true },
+      },
+    },
   },
   invoices: { orderBy: { createdAt: "desc" } },
 } satisfies Prisma.SupplierPurchaseOrderInclude;

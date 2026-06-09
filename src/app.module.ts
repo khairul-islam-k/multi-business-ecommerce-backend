@@ -24,6 +24,7 @@ import { RoleModule } from "./modules/roles/role.module";
 import { SupplierModule } from "./modules/suppliers/supplier.module";
 import { TenantModule } from "./modules/tenants/tenant.module";
 import { PrismaModule } from "./prisma/prisma.module";
+import { PrismaService } from "./prisma/prisma.service";
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { PrismaModule } from "./prisma/prisma.module";
   controllers: [AppController],
   providers: [
     AppService,
+    PrismaService,
     {
       provide: APP_FILTER,
       useClass: AllExceptionsFilter,

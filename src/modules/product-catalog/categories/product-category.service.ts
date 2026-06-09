@@ -20,6 +20,7 @@ import {
 
 const CATEGORY_INCLUDE = {
   parent: true,
+  children: true,
   _count: {
     select: {
       children: true,

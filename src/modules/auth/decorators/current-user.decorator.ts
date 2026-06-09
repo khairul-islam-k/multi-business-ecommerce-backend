@@ -9,8 +9,6 @@ export type CurrentUserPayload = {
   status: SystemUserStatus;
   businessId: string | null;
   tenantId: string | null;
-  createdAt: Date;
-  updatedAt: Date;
 };
 
 export const CurrentUser = createParamDecorator(

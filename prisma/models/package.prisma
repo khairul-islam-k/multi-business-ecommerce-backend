@@ -23,17 +23,10 @@ enum PackageResetCycle {
 }
 
 enum PackageLimitKey {
-  MAX_TAGS       @map("max_tags")
-  MAX_UNITS      @map("max_units")
-  MAX_ROLES      @map("max_roles")
   MAX_MEDIAS     @map("max_medias")
-  MAX_BRANDS     @map("max_brands")
   MAX_PRODUCTS   @map("max_products")
-  MAX_VARIANTS   @map("max_variants")
   MAX_EMPLOYEES  @map("max_employees")
-  MAX_ATTRIBUTES @map("max_attributes")
   MAX_BUSINESSES @map("max_businesses")
-  MAX_CATEGORIES @map("max_categories")
 }
 
 enum PackageSubscriptionStatus {
