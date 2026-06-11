@@ -39,7 +39,7 @@ export class PackageLimitGuard implements CanActivate {
     }>();
 
     if (!request.user) {
-      throw new UnauthorizedException("Unauthorized access");
+      throw new UnauthorizedException("Unauthorized");
     }
 
     const amount = this.resolveAmount(request, requirement);

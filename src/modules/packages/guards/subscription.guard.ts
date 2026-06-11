@@ -21,7 +21,7 @@ export class SubscriptionGuard implements CanActivate {
     const user = request.user;
 
     if (!user) {
-      throw new UnauthorizedException("Unauthorized Access");
+      throw new UnauthorizedException("Unauthorized");
     }
 
     if (user.type === SystemUserType.ADMIN) {

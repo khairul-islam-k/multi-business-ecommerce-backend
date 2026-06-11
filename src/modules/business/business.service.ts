@@ -20,6 +20,7 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
+import { throwConflictOnUnique } from "../../common/database/prisma-error.util";
 import { generateRandomSlug } from "../../common/utils/slug-generator.util";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CreateBusinessDto } from "./dto/create-business.dto";
@@ -354,12 +355,26 @@ export class BusinessService {
   }
 
   async remove(currentUser: CurrentUserPayload, businessId: string) {
-    await this.assertCanManageBusiness(currentUser, businessId);
+    const business = await this.assertCanDeleteBusiness(
+      currentUser,
+      businessId,
+    );
 
-    const businesses = await this.prisma.business.findMany({
-      where: this.getBusinessAccessWhere(currentUser),
+    const activeOwnedBusinessCount = await this.prisma.business.count({
+      where: {
+        ownerUserId: business.ownerUserId,
+        deletedAt: null,
+        status: {
+          in: ACCESSIBLE_BUSINESS_STATUSES,
+        },
+      },
     });
-    if (businesses.length <= 1) {
+
+    const isActiveOwnedBusiness =
+      business.status === BusinessStatus.ACTIVE ||
+      business.status === BusinessStatus.TRIAL;
+
+    if (isActiveOwnedBusiness && activeOwnedBusinessCount <= 1) {
       throw new ForbiddenException(
         "You must have at least one active business",
       );
@@ -473,6 +488,37 @@ export class BusinessService {
     return this.assertCanAccessBusiness(currentUser, businessId);
   }
 
+  private async assertCanDeleteBusiness(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+  ) {
+    const access = await this.assertCanAccessBusiness(currentUser, businessId);
+
+    if (!access.isAdmin && !access.isOwner) {
+      throw new ForbiddenException(
+        "Only the business owner can delete this business",
+      );
+    }
+
+    const business = await this.prisma.business.findFirst({
+      where: {
+        id: businessId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        ownerUserId: true,
+        status: true,
+      },
+    });
+
+    if (!business) {
+      throw new NotFoundException("Business not found");
+    }
+
+    return business;
+  }
+
   private buildBusinessSettingData(
     dto: NonNullable<CreateBusinessDto["settings"]>,
   ) {
@@ -583,13 +629,6 @@ export class BusinessService {
   }
 
   private handlePrismaError(error: unknown): never {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
-      throw new ConflictException("Business slug already exists");
-    }
-
-    throw error;
+    throwConflictOnUnique(error, "Business slug already exists");
   }
 }

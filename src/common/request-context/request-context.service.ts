@@ -11,8 +11,8 @@ import {
 export class RequestContextService {
   private readonly storage = new AsyncLocalStorage<RequestContextStore>();
 
-  run(callback: () => void) {
-    this.storage.run(
+  run<T>(callback: () => T): T {
+    return this.storage.run(
       {
         businessAccess: new Map(),
       },
