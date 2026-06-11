@@ -1,4 +1,9 @@
-import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { SystemUserType } from "@prisma/client";
 
 import { PackageSubscriptionService } from "../package-subscription.service";
@@ -15,8 +20,11 @@ export class SubscriptionGuard implements CanActivate {
 
     const user = request.user;
 
-    // TODO: not user and return true? ain't it a bit risky?
-    if (!user || user.type === SystemUserType.ADMIN) {
+    if (!user) {
+      throw new UnauthorizedException("Unauthorized Access");
+    }
+
+    if (user.type === SystemUserType.ADMIN) {
       return true;
     }
 

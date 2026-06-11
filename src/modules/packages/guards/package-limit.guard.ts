@@ -1,5 +1,10 @@
 import { Reflector } from "@nestjs/core";
-import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from "@nestjs/common";
 
 import { PackageLimitService } from "../package-limit.service";
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
@@ -34,7 +39,7 @@ export class PackageLimitGuard implements CanActivate {
     }>();
 
     if (!request.user) {
-      return true;
+      throw new UnauthorizedException("Unauthorized access");
     }
 
     const amount = this.resolveAmount(request, requirement);

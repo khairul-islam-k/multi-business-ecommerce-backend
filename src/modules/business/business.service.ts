@@ -356,8 +356,10 @@ export class BusinessService {
   async remove(currentUser: CurrentUserPayload, businessId: string) {
     await this.assertCanManageBusiness(currentUser, businessId);
 
-    const businessCount = await this.prisma.business.count();
-    if (businessCount <= 1) {
+    const businesses = await this.prisma.business.findMany({
+      where: this.getBusinessAccessWhere(currentUser),
+    });
+    if (businesses.length <= 1) {
       throw new ForbiddenException(
         "You must have at least one active business",
       );
@@ -389,18 +391,29 @@ export class BusinessService {
     }
 
     return {
-      OR: [
+      AND: [
         {
-          ownerUserId: currentUser.id,
+          OR: [
+            { status: BusinessStatus.ACTIVE },
+            { status: BusinessStatus.TRIAL },
+          ],
+          deletedAt: null,
         },
         {
-          members: {
-            some: {
-              userId: currentUser.id,
-              status: BusinessMemberStatus.ACTIVE,
-              deletedAt: null,
+          OR: [
+            {
+              ownerUserId: currentUser.id,
             },
-          },
+            {
+              members: {
+                some: {
+                  userId: currentUser.id,
+                  status: BusinessMemberStatus.ACTIVE,
+                  deletedAt: null,
+                },
+              },
+            },
+          ],
         },
       ],
     };
