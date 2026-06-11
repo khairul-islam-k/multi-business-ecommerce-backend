@@ -77,10 +77,7 @@ export class PackageLimitService {
     return items.sort((a, b) => a.limitKey.localeCompare(b.limitKey));
   }
 
-  async assertUsageFitsLimits(
-    tenantId: string,
-    limits: PlanSnapshotLimit[],
-  ) {
+  async assertUsageFitsLimits(tenantId: string, limits: PlanSnapshotLimit[]) {
     const violations: string[] = [];
 
     for (const limit of limits) {
@@ -205,16 +202,6 @@ export class PackageLimitService {
       });
     }
 
-    if (limitKey === PackageLimitKey.MAX_ROLES) {
-      return this.prisma.rbacRole.count({
-        where: {
-          deletedAt: null,
-          status: CommonStatus.ACTIVE,
-          business: activeBusinessWhere,
-        },
-      });
-    }
-
     if (limitKey === PackageLimitKey.MAX_MEDIAS) {
       return this.prisma.mediaAsset.count({
         where: {
@@ -226,62 +213,8 @@ export class PackageLimitService {
       });
     }
 
-    if (limitKey === PackageLimitKey.MAX_CATEGORIES) {
-      return this.prisma.productCategory.count({
-        where: {
-          deletedAt: null,
-          business: activeBusinessWhere,
-        },
-      });
-    }
-
-    if (limitKey === PackageLimitKey.MAX_BRANDS) {
-      return this.prisma.productBrand.count({
-        where: {
-          deletedAt: null,
-          business: activeBusinessWhere,
-        },
-      });
-    }
-
-    if (limitKey === PackageLimitKey.MAX_UNITS) {
-      return this.prisma.productUnit.count({
-        where: {
-          deletedAt: null,
-          business: activeBusinessWhere,
-        },
-      });
-    }
-
-    if (limitKey === PackageLimitKey.MAX_TAGS) {
-      return this.prisma.productTag.count({
-        where: {
-          deletedAt: null,
-          business: activeBusinessWhere,
-        },
-      });
-    }
-
     if (limitKey === PackageLimitKey.MAX_PRODUCTS) {
       return this.prisma.product.count({
-        where: {
-          deletedAt: null,
-          business: activeBusinessWhere,
-        },
-      });
-    }
-
-    if (limitKey === PackageLimitKey.MAX_VARIANTS) {
-      return this.prisma.productVariant.count({
-        where: {
-          deletedAt: null,
-          business: activeBusinessWhere,
-        },
-      });
-    }
-
-    if (limitKey === PackageLimitKey.MAX_ATTRIBUTES) {
-      return this.prisma.productAttribute.count({
         where: {
           deletedAt: null,
           business: activeBusinessWhere,

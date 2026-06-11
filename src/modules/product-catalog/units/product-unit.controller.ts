@@ -11,15 +11,13 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { PackageLimitKey, PermissionAction, RbacFeature } from "@prisma/client";
+import { PermissionAction, RbacFeature } from "@prisma/client";
 
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard";
 import { BusinessGuard } from "../../business/guards/business.guard";
 import { PermissionGuard } from "../../permissions/guards/permission.guard";
 import { RequirePermission } from "../../permissions/decorators/require-permission.decorator";
 import { SubscriptionGuard } from "../../packages/guards/subscription.guard";
-import { PackageLimitGuard } from "../../packages/guards/package-limit.guard";
-import { RequirePackageLimit } from "../../packages/decorators/require-package-limit.decorator";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { QueryCatalogDto } from "../common/dto/query-catalog.dto";
@@ -31,22 +29,12 @@ import {
 
 @ApiTags("Product Units")
 @ApiBearerAuth()
-@UseGuards(
-  JwtAuthGuard,
-  SubscriptionGuard,
-  BusinessGuard,
-  PermissionGuard,
-  PackageLimitGuard,
-)
+@UseGuards(JwtAuthGuard, SubscriptionGuard, BusinessGuard, PermissionGuard)
 @Controller("product-catalog/businesses/:businessId/units")
 export class ProductUnitController {
   constructor(private readonly units: ProductUnitService) {}
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.CREATE,
-  )
-  @RequirePackageLimit(PackageLimitKey.MAX_UNITS)
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.CREATE)
   @Post()
   @ApiOperation({ summary: "Create product unit" })
   create(
@@ -57,10 +45,7 @@ export class ProductUnitController {
     return this.units.create(user, businessId, dto);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.READ,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.READ)
   @Get()
   @ApiOperation({ summary: "Get product units" })
   findAll(
@@ -70,10 +55,7 @@ export class ProductUnitController {
     return this.units.findAll(businessId, query);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.READ,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.READ)
   @Get(":unitId")
   @ApiOperation({ summary: "Get product unit" })
   findOne(
@@ -83,10 +65,7 @@ export class ProductUnitController {
     return this.units.findOne(businessId, unitId);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.UPDATE,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.UPDATE)
   @Patch(":unitId")
   @ApiOperation({ summary: "Update product unit" })
   update(
@@ -98,10 +77,7 @@ export class ProductUnitController {
     return this.units.update(user, businessId, unitId, dto);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.DELETE,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.DELETE)
   @Delete(":unitId")
   @ApiOperation({ summary: "Delete product unit" })
   remove(

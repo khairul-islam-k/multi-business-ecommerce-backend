@@ -11,15 +11,13 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { PackageLimitKey, PermissionAction, RbacFeature } from "@prisma/client";
+import { PermissionAction, RbacFeature } from "@prisma/client";
 
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard";
 import { BusinessGuard } from "../../business/guards/business.guard";
 import { PermissionGuard } from "../../permissions/guards/permission.guard";
 import { RequirePermission } from "../../permissions/decorators/require-permission.decorator";
 import { SubscriptionGuard } from "../../packages/guards/subscription.guard";
-import { PackageLimitGuard } from "../../packages/guards/package-limit.guard";
-import { RequirePackageLimit } from "../../packages/decorators/require-package-limit.decorator";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { ProductAttributeService } from "./product-attribute.service";
@@ -33,22 +31,12 @@ import {
 
 @ApiTags("Product Attributes")
 @ApiBearerAuth()
-@UseGuards(
-  JwtAuthGuard,
-  SubscriptionGuard,
-  BusinessGuard,
-  PermissionGuard,
-  PackageLimitGuard,
-)
+@UseGuards(JwtAuthGuard, SubscriptionGuard, BusinessGuard, PermissionGuard)
 @Controller("product-catalog/businesses/:businessId/attributes")
 export class ProductAttributeController {
   constructor(private readonly attributes: ProductAttributeService) {}
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.CREATE,
-  )
-  @RequirePackageLimit(PackageLimitKey.MAX_ATTRIBUTES)
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.CREATE)
   @Post()
   @ApiOperation({ summary: "Create product attribute" })
   create(
@@ -59,10 +47,7 @@ export class ProductAttributeController {
     return this.attributes.create(user, businessId, dto);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.READ,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.READ)
   @Get()
   @ApiOperation({ summary: "Get product attributes" })
   findAll(
@@ -72,10 +57,7 @@ export class ProductAttributeController {
     return this.attributes.findAll(businessId, query);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.READ,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.READ)
   @Get(":attributeId")
   @ApiOperation({ summary: "Get product attribute" })
   findOne(
@@ -85,10 +67,7 @@ export class ProductAttributeController {
     return this.attributes.findOne(businessId, attributeId);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.UPDATE,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.UPDATE)
   @Patch(":attributeId")
   @ApiOperation({ summary: "Update product attribute" })
   update(
@@ -100,10 +79,7 @@ export class ProductAttributeController {
     return this.attributes.update(user, businessId, attributeId, dto);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.DELETE,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.DELETE)
   @Delete(":attributeId")
   @ApiOperation({ summary: "Delete product attribute" })
   remove(
@@ -114,10 +90,7 @@ export class ProductAttributeController {
     return this.attributes.remove(user, businessId, attributeId);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.CREATE,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.CREATE)
   @Post(":attributeId/values")
   @ApiOperation({ summary: "Create product attribute value" })
   createValue(
@@ -129,10 +102,7 @@ export class ProductAttributeController {
     return this.attributes.createValue(user, businessId, attributeId, dto);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.UPDATE,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.UPDATE)
   @Patch(":attributeId/values/:valueId")
   @ApiOperation({ summary: "Update product attribute value" })
   updateValue(
@@ -151,10 +121,7 @@ export class ProductAttributeController {
     );
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.DELETE,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.DELETE)
   @Delete(":attributeId/values/:valueId")
   @ApiOperation({ summary: "Delete product attribute value" })
   removeValue(

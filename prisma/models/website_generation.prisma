@@ -2,9 +2,8 @@
 // ENUMS
 // ======================================================
 
-enum WebsiteTemplateStatus {
-  ACTIVE
-  INACTIVE
+enum WebsiteTemplate {
+  ELECTRONIC
 }
 
 enum WebsiteStatus {
@@ -31,74 +30,19 @@ enum WebsiteDomainSslStatus {
   FAILED
 }
 
-enum WebsitePageStatus {
-  DRAFT
-  PUBLISHED
-  UNPUBLISHED
-  ARCHIVED
-}
-
-enum WebsitePageType {
-  HOME
-  PRODUCT_LIST
-  PRODUCT_DETAILS
-  CATEGORY
-  CART
-  CHECKOUT
-  ABOUT
-  CONTACT
-  CUSTOM
-}
-
-enum WebsiteSectionStatus {
-  ACTIVE
-  INACTIVE
-}
-
-enum WebsiteComponentStatus {
-  ACTIVE
-  INACTIVE
-}
-
 // ======================================================
 // Models
 // ======================================================
 
-model WebsiteTemplate {
-  id String @id @default(uuid()) @db.Uuid
-
-  name         String  @db.VarChar(150)
-  slug         String  @db.VarChar(180)
-  category     String? @db.VarChar(100)
-  thumbnailUrl String? @map("thumbnail_url")
-  previewUrl   String? @map("preview_url")
-  configSchema Json?   @map("config_schema")
-
-  status    WebsiteTemplateStatus @default(ACTIVE)
-  sortOrder Int                   @default(0) @map("sort_order")
-
-  createdBy String?   @map("created_by") @db.Uuid
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
-
-  websites Website[]
-
-  @@unique([slug])
-  @@index([category])
-  @@index([status])
-  @@map("website_templates")
-}
-
 model Website {
   id               String  @id @default(uuid()) @db.Uuid
   businessId       String  @map("business_id") @db.Uuid
-  templateId       String? @map("template_id") @db.Uuid
   currentVersionId String? @unique @map("current_version_id") @db.Uuid
 
   name   String        @db.VarChar(150)
   slug   String        @db.VarChar(180)
   status WebsiteStatus @default(DRAFT)
+  template WebsiteTemplate
 
   createdBy String?   @map("created_by") @db.Uuid
   updatedBy String?   @map("updated_by") @db.Uuid
@@ -106,19 +50,16 @@ model Website {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  template       WebsiteTemplate?       @relation(fields: [templateId], references: [id], onDelete: SetNull)
   currentVersion WebsitePublishVersion? @relation("CurrentWebsiteVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
 
   config          WebsiteConfig?
   domains         WebsiteDomain[]
-  pages           WebsitePage[]
   themeSetting    WebsiteThemeSetting?
   seoSettings     WebsiteSeoSetting[]
   publishVersions WebsitePublishVersion[] @relation("WebsitePublishVersions")
 
   @@unique([businessId, slug])
   @@index([businessId])
-  @@index([templateId])
   @@index([status])
   @@map("website_websites")
 }
@@ -164,81 +105,6 @@ model WebsiteDomain {
   @@index([isPrimary])
   @@index([verificationStatus])
   @@map("website_domains")
-}
-
-model WebsitePage {
-  id        String @id @default(uuid()) @db.Uuid
-  websiteId String @map("website_id") @db.Uuid
-
-  title      String            @db.VarChar(180)
-  slug       String            @db.VarChar(180)
-  pageType   WebsitePageType   @default(CUSTOM) @map("page_type")
-  status     WebsitePageStatus @default(DRAFT)
-  sortOrder  Int               @default(0) @map("sort_order")
-  isHomepage Boolean           @default(false) @map("is_homepage")
-
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
-
-  website    Website              @relation(fields: [websiteId], references: [id], onDelete: Cascade)
-  sections   WebsitePageSection[]
-  seoSetting WebsiteSeoSetting?
-
-  @@unique([websiteId, slug])
-  @@index([websiteId])
-  @@index([pageType])
-  @@index([status])
-  @@index([isHomepage])
-  @@map("website_pages")
-}
-
-model WebsitePageSection {
-  id          String  @id @default(uuid()) @db.Uuid
-  pageId      String  @map("page_id") @db.Uuid
-  componentId String? @map("component_id") @db.Uuid
-
-  name          String?              @db.VarChar(150)
-  sectionKey    String               @map("section_key") @db.VarChar(120)
-  contentConfig Json?                @map("content_config")
-  styleConfig   Json?                @map("style_config")
-  sortOrder     Int                  @default(0) @map("sort_order")
-  status        WebsiteSectionStatus @default(ACTIVE)
-
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
-
-  page      WebsitePage       @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  component WebsiteComponent? @relation(fields: [componentId], references: [id], onDelete: SetNull)
-
-  @@index([pageId])
-  @@index([componentId])
-  @@index([sectionKey])
-  @@index([status])
-  @@map("website_page_sections")
-}
-
-model WebsiteComponent {
-  id String @id @default(uuid()) @db.Uuid
-
-  name            String                 @db.VarChar(150)
-  code            String                 @db.VarChar(120)
-  componentType   String                 @map("component_type") @db.VarChar(100)
-  previewImageUrl String?                @map("preview_image_url")
-  defaultConfig   Json?                  @map("default_config")
-  status          WebsiteComponentStatus @default(ACTIVE)
-  sortOrder       Int                    @default(0) @map("sort_order")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  sections WebsitePageSection[]
-
-  @@unique([code])
-  @@index([componentType])
-  @@index([status])
-  @@map("website_components")
 }
 
 model WebsiteThemeSetting {

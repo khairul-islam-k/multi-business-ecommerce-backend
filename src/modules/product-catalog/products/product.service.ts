@@ -18,7 +18,6 @@ import {
   UpdateProductDto,
 } from "./dto/product.dto";
 import { ProductImageInputDto } from "../common/dto/product-media.dto";
-import { dot } from "node:test/reporters";
 
 const PRODUCT_INCLUDE = {
   category: true,

@@ -54,7 +54,7 @@ export class BusinessController {
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateBusinessDto,
   ) {
-    return this.businessService.create(user.id, user.type, dto);
+    return this.businessService.create(user.id, dto);
   }
 
   @RequirePermission(RbacFeature.BUSINESS_MANAGEMENT, PermissionAction.READ)

@@ -11,15 +11,13 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { PackageLimitKey, PermissionAction, RbacFeature } from "@prisma/client";
+import { PermissionAction, RbacFeature } from "@prisma/client";
 
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard";
 import { BusinessGuard } from "../../business/guards/business.guard";
 import { PermissionGuard } from "../../permissions/guards/permission.guard";
 import { RequirePermission } from "../../permissions/decorators/require-permission.decorator";
 import { SubscriptionGuard } from "../../packages/guards/subscription.guard";
-import { PackageLimitGuard } from "../../packages/guards/package-limit.guard";
-import { RequirePackageLimit } from "../../packages/decorators/require-package-limit.decorator";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { QueryCatalogDto } from "../common/dto/query-catalog.dto";
@@ -31,22 +29,12 @@ import {
 
 @ApiTags("Product Tags")
 @ApiBearerAuth()
-@UseGuards(
-  JwtAuthGuard,
-  SubscriptionGuard,
-  BusinessGuard,
-  PermissionGuard,
-  PackageLimitGuard,
-)
+@UseGuards(JwtAuthGuard, SubscriptionGuard, BusinessGuard, PermissionGuard)
 @Controller("product-catalog/businesses/:businessId/tags")
 export class ProductTagController {
   constructor(private readonly tags: ProductTagService) {}
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.CREATE,
-  )
-  @RequirePackageLimit(PackageLimitKey.MAX_TAGS)
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.CREATE)
   @Post()
   @ApiOperation({ summary: "Create product tag" })
   create(
@@ -57,10 +45,7 @@ export class ProductTagController {
     return this.tags.create(user, businessId, dto);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.READ,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.READ)
   @Get()
   @ApiOperation({ summary: "Get product tags" })
   findAll(
@@ -70,10 +55,7 @@ export class ProductTagController {
     return this.tags.findAll(businessId, query);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.READ,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.READ)
   @Get(":tagId")
   @ApiOperation({ summary: "Get product tag" })
   findOne(
@@ -83,10 +65,7 @@ export class ProductTagController {
     return this.tags.findOne(businessId, tagId);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.UPDATE,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.UPDATE)
   @Patch(":tagId")
   @ApiOperation({ summary: "Update product tag" })
   update(
@@ -98,10 +77,7 @@ export class ProductTagController {
     return this.tags.update(user, businessId, tagId, dto);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.DELETE,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.DELETE)
   @Delete(":tagId")
   @ApiOperation({ summary: "Delete product tag" })
   remove(

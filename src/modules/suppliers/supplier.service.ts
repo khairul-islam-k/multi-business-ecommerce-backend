@@ -88,7 +88,6 @@ const PURCHASE_RETURN_INCLUDE = {
 const ORDER_MANUAL_STATUSES: SupplierPurchaseOrderStatus[] = [
   SupplierPurchaseOrderStatus.DRAFT,
   SupplierPurchaseOrderStatus.ORDERED,
-  SupplierPurchaseOrderStatus.CANCELLED,
 ];
 
 const SUPPLIER_CODE_RETRY_LIMIT = 5;

@@ -42,10 +42,7 @@ import {
 export class ProductController {
   constructor(private readonly products: ProductService) {}
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.CREATE,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.CREATE)
   @RequirePackageLimit(PackageLimitKey.MAX_PRODUCTS)
   @Post()
   @ApiOperation({ summary: "Create product" })
@@ -57,10 +54,7 @@ export class ProductController {
     return this.products.create(user, businessId, dto);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.READ,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.READ)
   @Get()
   @ApiOperation({ summary: "Get products" })
   findAll(
@@ -70,10 +64,7 @@ export class ProductController {
     return this.products.findAll(businessId, query);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.READ,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.READ)
   @Get(":productId")
   @ApiOperation({ summary: "Get product" })
   findOne(
@@ -83,10 +74,7 @@ export class ProductController {
     return this.products.findOne(businessId, productId);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.UPDATE,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.UPDATE)
   @Patch(":productId")
   @ApiOperation({ summary: "Update product" })
   update(
@@ -98,10 +86,7 @@ export class ProductController {
     return this.products.update(user, businessId, productId, dto);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.DELETE,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.DELETE)
   @Delete(":productId")
   @ApiOperation({ summary: "Delete product" })
   remove(

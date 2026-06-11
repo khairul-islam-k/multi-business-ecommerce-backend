@@ -11,15 +11,13 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { PackageLimitKey, PermissionAction, RbacFeature } from "@prisma/client";
+import { PermissionAction, RbacFeature } from "@prisma/client";
 
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard";
 import { BusinessGuard } from "../../business/guards/business.guard";
 import { PermissionGuard } from "../../permissions/guards/permission.guard";
 import { RequirePermission } from "../../permissions/decorators/require-permission.decorator";
 import { SubscriptionGuard } from "../../packages/guards/subscription.guard";
-import { PackageLimitGuard } from "../../packages/guards/package-limit.guard";
-import { RequirePackageLimit } from "../../packages/decorators/require-package-limit.decorator";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { ProductVariantService } from "./product-variant.service";
@@ -35,24 +33,14 @@ import {
 
 @ApiTags("Product Variants")
 @ApiBearerAuth()
-@UseGuards(
-  JwtAuthGuard,
-  SubscriptionGuard,
-  BusinessGuard,
-  PermissionGuard,
-  PackageLimitGuard,
-)
+@UseGuards(JwtAuthGuard, SubscriptionGuard, BusinessGuard, PermissionGuard)
 @Controller(
   "product-catalog/businesses/:businessId/products/:productId/variants",
 )
 export class ProductVariantController {
   constructor(private readonly variants: ProductVariantService) {}
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.CREATE,
-  )
-  @RequirePackageLimit(PackageLimitKey.MAX_VARIANTS)
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.CREATE)
   @Post()
   @ApiOperation({ summary: "Create product variant" })
   create(
@@ -64,10 +52,7 @@ export class ProductVariantController {
     return this.variants.create(user, businessId, productId, dto);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.CREATE,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.CREATE)
   @Post("bulk")
   @ApiOperation({ summary: "Create product variants in bulk" })
   bulkCreate(
@@ -79,10 +64,7 @@ export class ProductVariantController {
     return this.variants.bulkCreate(user, businessId, productId, dto);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.READ,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.READ)
   @Post("options")
   @ApiOperation({ summary: "Resolve product variant options" })
   options(
@@ -93,10 +75,7 @@ export class ProductVariantController {
     return this.variants.options(businessId, productId, dto);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.READ,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.READ)
   @Get()
   @ApiOperation({ summary: "Get product variants" })
   findAll(
@@ -107,10 +86,7 @@ export class ProductVariantController {
     return this.variants.findAll(businessId, productId, query);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.READ,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.READ)
   @Get(":variantId")
   @ApiOperation({ summary: "Get product variant" })
   findOne(
@@ -121,10 +97,7 @@ export class ProductVariantController {
     return this.variants.findOne(businessId, productId, variantId);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.UPDATE,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.UPDATE)
   @Patch("bulk")
   @ApiOperation({ summary: "Update product variants in bulk" })
   bulkUpdate(
@@ -136,10 +109,7 @@ export class ProductVariantController {
     return this.variants.bulkUpdate(user, businessId, productId, dto);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.UPDATE,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.UPDATE)
   @Patch(":variantId")
   @ApiOperation({ summary: "Update product variant" })
   update(
@@ -152,10 +122,7 @@ export class ProductVariantController {
     return this.variants.update(user, businessId, productId, variantId, dto);
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.UPDATE,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.UPDATE)
   @Patch(":variantId/attributes")
   @ApiOperation({ summary: "Update product variant attributes" })
   updateAttributes(
@@ -174,10 +141,7 @@ export class ProductVariantController {
     );
   }
 
-  @RequirePermission(
-    RbacFeature.PRODUCT_CATALOG_MANAGEMENT,
-    PermissionAction.DELETE,
-  )
+  @RequirePermission(RbacFeature.PRODUCT_MANAGEMENT, PermissionAction.DELETE)
   @Delete(":variantId")
   @ApiOperation({ summary: "Delete product variant" })
   remove(
