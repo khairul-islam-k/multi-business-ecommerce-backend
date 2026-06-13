@@ -3,6 +3,11 @@ import { Module } from "@nestjs/common";
 import { BusinessModule } from "../business/business.module";
 import { PackageModule } from "../packages/package.module";
 import { PermissionModule } from "../permissions/permission.module";
+import { AccountBalanceService } from "./application/account-balance.service";
+import { FinanceCodeService } from "./application/finance-code.service";
+import { PayableSyncService } from "./application/payable-sync.service";
+import { ReceivableSyncService } from "./application/receivable-sync.service";
+import { TaxLookupService } from "./application/tax-lookup.service";
 import { FinanceAccountController } from "./accounts/finance-account.controller";
 import { FinanceAccountService } from "./accounts/finance-account.service";
 import { FinanceLedgerService } from "./common/finance-ledger.service";
@@ -29,6 +34,11 @@ import { FinanceTaxService } from "./taxes/finance-tax.service";
   ],
   providers: [
     FinanceLedgerService,
+    TaxLookupService,
+    AccountBalanceService,
+    ReceivableSyncService,
+    PayableSyncService,
+    FinanceCodeService,
     FinanceAccountService,
     FinanceTaxService,
     ExpenseCategoryService,
@@ -36,6 +46,13 @@ import { FinanceTaxService } from "./taxes/finance-tax.service";
     FinanceReceivableService,
     FinancePayableService,
   ],
-  exports: [FinanceLedgerService],
+  exports: [
+    FinanceLedgerService,
+    TaxLookupService,
+    AccountBalanceService,
+    ReceivableSyncService,
+    PayableSyncService,
+    FinanceCodeService,
+  ],
 })
 export class FinanceModule {}
