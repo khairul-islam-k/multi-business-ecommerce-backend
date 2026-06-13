@@ -5,6 +5,12 @@ import { FinanceModule } from "../finance/finance.module";
 import { InventoryModule } from "../inventory/inventory.module";
 import { PackageModule } from "../packages/package.module";
 import { PermissionModule } from "../permissions/permission.module";
+import { CreateOrderService } from "./application/create-order.service";
+import { OrderPaymentService } from "./application/order-payment.service";
+import { OrderQueryService } from "./application/order-query.service";
+import { OrderStatusService } from "./application/order-status.service";
+import { OrderCodeRepository } from "./infrastructure/order-code.repository";
+import { OrderRepository } from "./infrastructure/order.repository";
 import { OrderController } from "./order.controller";
 import { OrderService } from "./order.service";
 
@@ -17,7 +23,15 @@ import { OrderService } from "./order.service";
     FinanceModule,
   ],
   controllers: [OrderController],
-  providers: [OrderService],
+  providers: [
+    OrderService,
+    CreateOrderService,
+    OrderQueryService,
+    OrderPaymentService,
+    OrderStatusService,
+    OrderRepository,
+    OrderCodeRepository,
+  ],
   exports: [OrderService],
 })
 export class OrderModule {}

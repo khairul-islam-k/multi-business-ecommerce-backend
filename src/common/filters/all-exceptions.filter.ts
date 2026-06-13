@@ -1,5 +1,4 @@
 import { Request, Response } from "express";
-
 import {
   ArgumentsHost,
   Catch,
@@ -86,12 +85,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
       if (this.isRecord(response)) {
         const responseMessage = response.message;
 
+        // TODO: is it safe to convert types like this?
         return {
-          message: Array.isArray(responseMessage)
+          message: (Array.isArray(responseMessage)
             ? responseMessage[0]
             : typeof responseMessage === "string"
               ? responseMessage
-              : exception.message,
+              : exception.message) as string,
           errors: Array.isArray(responseMessage) ? responseMessage : undefined,
           error:
             typeof response.error === "string" ? response.error : undefined,
