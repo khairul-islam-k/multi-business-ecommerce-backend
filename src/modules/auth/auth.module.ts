@@ -1,32 +1,30 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { JwtModule, JwtSignOptions } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
+import { JwtModule, JwtSignOptions } from "@nestjs/jwt";
 
-import { BusinessModule } from "../business/business.module";
-import { MailModule } from "../mail/mail.module";
-import { PackageModule } from "../packages/package.module";
-import { OtpPolicy } from "./domain/otp.policy";
-import { SessionService } from "./application/session.service";
-import { TokenService } from "./application/token.service";
-import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
+import { OtpPolicy } from "./domain/otp.policy";
+import { MailModule } from "../mail/mail.module";
+import { AuthController } from "./auth.controller";
 import { JwtStrategy } from "./strategies/jwt.strategy";
+import { PackageModule } from "../packages/package.module";
+import { TokenService } from "./application/token.service";
+import { BusinessModule } from "../business/business.module";
+import { SessionService } from "./application/session.service";
 
 @Module({
   imports: [
-    MailModule,
     PassportModule.register({
       defaultStrategy: "jwt",
     }),
-    BusinessModule,
-    PackageModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const secret = configService.getOrThrow<string>("JWT_ACCESS_SECRET");
-
-        const expiresIn = configService.get<string>("JWT_ACCESS_EXPIRES_IN");
+        const expiresIn = configService.getOrThrow<string>(
+          "JWT_ACCESS_EXPIRES_IN",
+        );
 
         return {
           secret,
@@ -36,14 +34,18 @@ import { JwtStrategy } from "./strategies/jwt.strategy";
         };
       },
     }),
+
+    BusinessModule,
+    PackageModule,
+    MailModule,
   ],
   controllers: [AuthController],
   providers: [
-    AuthService,
     JwtStrategy,
+    OtpPolicy,
+    AuthService,
     TokenService,
     SessionService,
-    OtpPolicy,
   ],
   exports: [AuthService, JwtModule],
 })
