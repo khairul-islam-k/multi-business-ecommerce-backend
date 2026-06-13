@@ -8,7 +8,14 @@ import { Prisma, ProductVariantStatus } from "@prisma/client";
 import { PrismaService } from "../../../prisma/prisma.service";
 import { apiResponse } from "../../../common/utils/api-response.util";
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import { buildStockItemKey } from "../../inventory/domain/stock-item-key";
 import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import {
+  assertBulkUpdateAttributeCombinations,
+  assertUniqueAttributeCombinations,
+  buildAttributeCombinationKey,
+  variantMatchesAttributes,
+} from "./domain/variant-combination.policy";
 import {
   BulkCreateProductVariantsDto,
   BulkUpdateProductVariantsDto,
@@ -18,20 +25,7 @@ import {
   QueryProductVariantDto,
   UpdateProductVariantDto,
 } from "./dto/product-variant.dto";
-
-const VARIANT_INCLUDE = {
-  product: {
-    select: { name: true, price: true },
-  },
-  attributes: {
-    include: {
-      attribute: true,
-      attributeValue: true,
-    },
-    orderBy: { createdAt: "asc" },
-  },
-  images: { where: { deletedAt: null }, orderBy: { sortOrder: "asc" } },
-} satisfies Prisma.ProductVariantInclude;
+import { VARIANT_INCLUDE } from "./infrastructure/product-variant.selects";
 
 type ProductVariantWithInclude = Prisma.ProductVariantGetPayload<{
   include: typeof VARIANT_INCLUDE;
@@ -103,7 +97,7 @@ export class ProductVariantService {
             businessId,
             productId,
             variantId: createdVariant.id,
-            stockItemKey: this.buildStockItemKey(productId, createdVariant.id),
+            stockItemKey: buildStockItemKey(productId, createdVariant.id),
           },
         });
 
@@ -141,7 +135,7 @@ export class ProductVariantService {
       })),
     );
 
-    this.assertUniqueAttributeCombinations(
+    assertUniqueAttributeCombinations(
       variants.map((variant) => variant.attributes),
     );
     await this.assertAttributeCombinationsAvailable(
@@ -188,10 +182,7 @@ export class ProductVariantService {
               businessId,
               productId,
               variantId: createdVariant.id,
-              stockItemKey: this.buildStockItemKey(
-                productId,
-                createdVariant.id,
-              ),
+              stockItemKey: buildStockItemKey(productId, createdVariant.id),
             },
           });
 
@@ -233,7 +224,7 @@ export class ProductVariantService {
       ? variants
       : variants.filter((variant) => variant.stock.inStock);
     const matchingVariants = selectableVariants.filter((variant) =>
-      this.variantMatchesAttributes(variant, selectedAttributes),
+      variantMatchesAttributes(variant, selectedAttributes),
     );
 
     const availableOptions = this.buildAvailableOptions(
@@ -437,7 +428,7 @@ export class ProductVariantService {
       })),
     );
 
-    this.assertBulkUpdateAttributeCombinations(existingVariants, updates);
+    assertBulkUpdateAttributeCombinations(existingVariants, updates);
 
     try {
       const updatedVariants = await this.prisma.$transaction(async (tx) => {
@@ -663,7 +654,7 @@ export class ProductVariantService {
       const candidateVariants = variants.filter(
         (variant) =>
           (includeOutOfStock || variant.stock.inStock) &&
-          this.variantMatchesAttributes(variant, comparableSelections),
+          variantMatchesAttributes(variant, comparableSelections),
       );
 
       for (const variant of candidateVariants) {
@@ -726,41 +717,6 @@ export class ProductVariantService {
     });
   }
 
-  private variantMatchesAttributes(
-    variant: { attributes: ProductVariantAttributeInputDto[] },
-    selectedAttributes: ProductVariantAttributeInputDto[],
-  ) {
-    return selectedAttributes.every((selectedAttribute) =>
-      variant.attributes.some(
-        (attribute) =>
-          attribute.attributeId === selectedAttribute.attributeId &&
-          attribute.attributeValueId === selectedAttribute.attributeValueId,
-      ),
-    );
-  }
-
-  private assertUniqueAttributeCombinations(
-    attributeSets: ProductVariantAttributeInputDto[][],
-  ) {
-    const seenKeys = new Set<string>();
-
-    for (const attributes of attributeSets) {
-      const key = this.buildAttributeCombinationKey(attributes);
-
-      if (!key) {
-        continue;
-      }
-
-      if (seenKeys.has(key)) {
-        throw new BadRequestException(
-          "Bulk variants cannot contain duplicate attribute combinations",
-        );
-      }
-
-      seenKeys.add(key);
-    }
-  }
-
   private assertUniqueVariantIds(variantIds: string[]) {
     const uniqueVariantIds = new Set(variantIds);
 
@@ -771,64 +727,6 @@ export class ProductVariantService {
     }
   }
 
-  private assertBulkUpdateAttributeCombinations(
-    existingVariants: {
-      id: string;
-      attributes: ProductVariantAttributeInputDto[];
-    }[],
-    updates: {
-      variantId: string;
-      attributes?: ProductVariantAttributeInputDto[];
-    }[],
-  ) {
-    const nextAttributesByVariantId = new Map(
-      updates
-        .filter((update) => update.attributes !== undefined)
-        .map((update) => [update.variantId, update.attributes ?? []]),
-    );
-    const keyToVariantIds = new Map<string, string[]>();
-
-    for (const variant of existingVariants) {
-      const attributes =
-        nextAttributesByVariantId.get(variant.id) ?? variant.attributes;
-      const key = this.buildAttributeCombinationKey(attributes);
-
-      if (!key) {
-        continue;
-      }
-
-      keyToVariantIds.set(key, [
-        ...(keyToVariantIds.get(key) ?? []),
-        variant.id,
-      ]);
-    }
-
-    for (const update of updates) {
-      const variant = existingVariants.find(
-        (existingVariant) => existingVariant.id === update.variantId,
-      );
-      const attributes =
-        update.attributes !== undefined
-          ? update.attributes
-          : (variant?.attributes ?? []);
-      const key = this.buildAttributeCombinationKey(attributes);
-
-      if (!key) {
-        continue;
-      }
-
-      const conflictingVariantIds = (keyToVariantIds.get(key) ?? []).filter(
-        (variantId) => variantId !== update.variantId,
-      );
-
-      if (conflictingVariantIds.length > 0) {
-        throw new BadRequestException(
-          "One or more variant attribute combinations already exist",
-        );
-      }
-    }
-  }
-
   private async assertAttributeCombinationsAvailable(
     businessId: string,
     productId: string,
@@ -836,7 +734,7 @@ export class ProductVariantService {
   ) {
     const requestedKeys = new Set(
       attributeSets
-        .map((attributes) => this.buildAttributeCombinationKey(attributes))
+        .map((attributes) => buildAttributeCombinationKey(attributes))
         .filter((key): key is string => Boolean(key)),
     );
 
@@ -861,7 +759,7 @@ export class ProductVariantService {
     });
 
     const hasExistingCombination = existingVariants.some((variant) => {
-      const key = this.buildAttributeCombinationKey(variant.attributes);
+      const key = buildAttributeCombinationKey(variant.attributes);
 
       return key ? requestedKeys.has(key) : false;
     });
@@ -871,21 +769,6 @@ export class ProductVariantService {
         "One or more variant attribute combinations already exist",
       );
     }
-  }
-
-  private buildAttributeCombinationKey(
-    attributes: ProductVariantAttributeInputDto[] = [],
-  ) {
-    if (attributes.length === 0) {
-      return null;
-    }
-
-    return attributes
-      .map(
-        (attribute) => `${attribute.attributeId}:${attribute.attributeValueId}`,
-      )
-      .sort()
-      .join("|");
   }
 
   private async generateUniqueVariantCodes(
@@ -986,16 +869,12 @@ export class ProductVariantService {
     }
   }
 
-  private buildStockItemKey(productId: string, variantId?: string | null) {
-    return variantId ?? `product:${productId}`;
-  }
-
   private async zeroProductLevelStock(
     tx: Prisma.TransactionClient,
     businessId: string,
     productId: string,
   ) {
-    const stockItemKey = this.buildStockItemKey(productId, null);
+    const stockItemKey = buildStockItemKey(productId, null);
     const productStock = await tx.inventoryStock.findUnique({
       where: {
         businessId_stockItemKey: {

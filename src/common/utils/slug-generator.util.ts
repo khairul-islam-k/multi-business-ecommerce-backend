@@ -32,9 +32,9 @@ export const generateRandomSlug = (
   value: string,
   options: GenerateRandomSlugOptions = {},
 ) => {
+  const separator = options.separator ?? DEFAULT_SEPARATOR;
   const maxLength = options.maxLength ?? DEFAULT_MAX_LENGTH;
   const randomLength = options.randomLength ?? DEFAULT_RANDOM_LENGTH;
-  const separator = options.separator ?? DEFAULT_SEPARATOR;
   const suffix = randomBytes(Math.ceil(randomLength / 2))
     .toString("hex")
     .slice(0, randomLength);

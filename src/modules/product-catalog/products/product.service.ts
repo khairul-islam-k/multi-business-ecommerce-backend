@@ -18,27 +18,8 @@ import {
   UpdateProductDto,
 } from "./dto/product.dto";
 import { ProductImageInputDto } from "../common/dto/product-media.dto";
-
-const PRODUCT_INCLUDE = {
-  category: true,
-  brand: true,
-  unit: true,
-  tags: { include: { tag: true } },
-  images: { where: { deletedAt: null }, orderBy: { sortOrder: "asc" } },
-  variants: {
-    where: { deletedAt: null },
-    include: {
-      attributes: {
-        include: {
-          attribute: true,
-          attributeValue: true,
-        },
-        orderBy: { createdAt: "asc" },
-      },
-      images: { where: { deletedAt: null }, orderBy: { sortOrder: "asc" } },
-    },
-  },
-} satisfies Prisma.ProductInclude;
+import { buildStockItemKey } from "../../inventory/domain/stock-item-key";
+import { PRODUCT_INCLUDE } from "./infrastructure/product.selects";
 
 @Injectable()
 export class ProductService {
@@ -94,7 +75,7 @@ export class ProductService {
             businessId,
             productId: createdProduct.id,
             variantId: null,
-            stockItemKey: this.buildStockItemKey(createdProduct.id, null),
+            stockItemKey: buildStockItemKey(createdProduct.id, null),
           },
         });
 
@@ -349,10 +330,6 @@ export class ProductService {
         "Product cannot be deleted while referenced by inventory, order, invoice, supplier, or courier records",
       );
     }
-  }
-
-  private buildStockItemKey(productId: string, variantId?: string | null) {
-    return variantId ?? `product:${productId}`;
   }
 
   private async enrichProductStock<

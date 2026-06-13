@@ -4,6 +4,8 @@ import { BusinessModule } from "../business/business.module";
 import { PackageModule } from "../packages/package.module";
 import { PermissionModule } from "../permissions/permission.module";
 import { ProductCatalogModule } from "../product-catalog/product-catalog.module";
+import { StockMutationService } from "./application/stock-mutation.service";
+import { StockReservationService } from "./application/stock-reservation.service";
 import { StockAdjustmentController } from "./adjustments/stock-adjustment.controller";
 import { StockAdjustmentService } from "./adjustments/stock-adjustment.service";
 import { InventoryLookupService } from "./common/inventory-lookup.service";
@@ -29,11 +31,17 @@ import { WarehouseService } from "./warehouses/warehouse.service";
   ],
   providers: [
     InventoryLookupService,
+    StockMutationService,
+    StockReservationService,
     WarehouseService,
     StockService,
     StockAdjustmentService,
     StockTransferService,
   ],
-  exports: [InventoryLookupService],
+  exports: [
+    InventoryLookupService,
+    StockMutationService,
+    StockReservationService,
+  ],
 })
 export class InventoryModule {}
