@@ -1,7 +1,8 @@
 import { Module } from "@nestjs/common";
 import { MulterModule } from "@nestjs/platform-express";
-import { ConfigModule, ConfigService } from "@nestjs/config";
+import { ConfigModule } from "@nestjs/config";
 
+import { AppConfigService } from "../../common/config/app-config.service";
 import { MediaService } from "./media.service";
 import { MediaController } from "./media.controller";
 import { BusinessModule } from "../business/business.module";
@@ -20,9 +21,9 @@ import { MEDIA_LIMITS } from "./uploaders/media-uploader.constants";
     ConfigModule,
     MulterModule.registerAsync({
       imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => {
-        const limits = getMediaLimits(configService);
+      inject: [AppConfigService],
+      useFactory: (appConfig: AppConfigService) => {
+        const limits = getMediaLimits(appConfig);
 
         return {
           limits: {
@@ -39,7 +40,7 @@ import { MEDIA_LIMITS } from "./uploaders/media-uploader.constants";
     LocalMediaUploader,
     {
       provide: MEDIA_LIMITS,
-      inject: [ConfigService],
+      inject: [AppConfigService],
       useFactory: getMediaLimits,
     },
     {

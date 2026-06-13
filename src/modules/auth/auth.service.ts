@@ -41,6 +41,7 @@ import { VerifyEmailDto } from "./dto/verify-email.dto";
 import { VerifyResetOtpDto } from "./dto/verify-reset-email.dto";
 
 import type { CurrentUserPayload } from "./decorators/current-user.decorator";
+import { normalizeEmail } from "../../common/text/normalizers";
 
 type AuthBusiness = {
   id: string;
@@ -71,7 +72,7 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
-    const email = this.normalizeEmail(dto.email);
+    const email = normalizeEmail(dto.email);
 
     const existingUser = await this.prisma.systemUser.findUnique({
       where: { email },
@@ -1228,10 +1229,6 @@ export class AuthService {
     if (user.status !== SystemUserStatus.ACTIVE) {
       throw new ForbiddenException("User account is not active");
     }
-  }
-
-  private normalizeEmail(email: string) {
-    return email.trim().toLowerCase();
   }
 
   private async hashPassword(password: string) {

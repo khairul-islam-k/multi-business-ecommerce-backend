@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { extname, join, normalize, relative } from "node:path";
 import { Injectable } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 
+import { AppConfigService } from "../../../common/config/app-config.service";
 import {
   MediaUploader,
   UploadableMediaFile,
@@ -23,11 +23,9 @@ export class LocalMediaUploader implements MediaUploader {
   private readonly uploadRoot: string;
   private readonly publicUploadPrefix: string;
 
-  constructor(configService: ConfigService) {
-    this.uploadRoot = configService.getOrThrow<string>("MEDIA_UPLOAD_ROOT");
-    this.publicUploadPrefix = configService.getOrThrow<string>(
-      "PUBLIC_UPLOAD_PREFIX",
-    );
+  constructor(appConfig: AppConfigService) {
+    this.uploadRoot = appConfig.mediaUploadRoot;
+    this.publicUploadPrefix = appConfig.publicUploadPrefix;
   }
 
   async upload(

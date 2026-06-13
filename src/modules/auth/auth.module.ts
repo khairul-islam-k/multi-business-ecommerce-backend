@@ -3,14 +3,17 @@ import { ConfigService } from "@nestjs/config";
 import { PassportModule } from "@nestjs/passport";
 import { JwtModule, JwtSignOptions } from "@nestjs/jwt";
 
-import { AuthService } from "./auth.service";
 import { OtpPolicy } from "./domain/otp.policy";
-import { MailModule } from "../mail/mail.module";
-import { AuthController } from "./auth.controller";
 import { JwtStrategy } from "./strategies/jwt.strategy";
+
+import { MailModule } from "../mail/mail.module";
 import { PackageModule } from "../packages/package.module";
-import { TokenService } from "./application/token.service";
 import { BusinessModule } from "../business/business.module";
+
+import { AuthController } from "./auth.controller";
+
+import { AuthService } from "./auth.service";
+import { TokenService } from "./application/token.service";
 import { SessionService } from "./application/session.service";
 
 @Module({

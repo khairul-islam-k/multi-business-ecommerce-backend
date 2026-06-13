@@ -11,9 +11,7 @@ describe("cors config", () => {
   });
 
   it("allows configured origins and rejects unknown origins", () => {
-    const corsOrigin = createCorsOrigin({
-      getOrThrow: () => "http://allowed.test",
-    } as never);
+    const corsOrigin = createCorsOrigin(["http://allowed.test"]);
     const allowedCallback = jest.fn();
     const rejectedCallback = jest.fn();
 

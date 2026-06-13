@@ -8,6 +8,8 @@ import {
   Logger,
 } from "@nestjs/common";
 
+import { AppConfigService } from "../config/app-config.service";
+
 type RequestWithMeta = Request & {
   requestId?: string;
 };
@@ -21,6 +23,8 @@ type NormalizedError = {
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger("Exception");
+
+  constructor(private readonly appConfig: AppConfigService) {}
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
@@ -55,13 +59,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
       this.logger.warn(logMessage);
     }
 
-    const isProduction = process.env.NODE_ENV === "production";
-
     res.status(status).json({
       success: false,
       statusCode: status,
       message:
-        status >= 500 && isProduction
+        status >= 500 && this.appConfig.isProduction
           ? "Internal server error"
           : normalized.message,
       errors: normalized.errors,

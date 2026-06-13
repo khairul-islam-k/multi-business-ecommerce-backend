@@ -1,5 +1,3 @@
-import type { ConfigService } from "@nestjs/config";
-
 export function parseCorsOrigins(value: string) {
   return value
     .split(",")
@@ -7,10 +5,7 @@ export function parseCorsOrigins(value: string) {
     .filter(Boolean);
 }
 
-export function createCorsOrigin(configService: ConfigService) {
-  const allowedOrigins = parseCorsOrigins(
-    configService.getOrThrow<string>("APP_CORS_ORIGINS"),
-  );
+export function createCorsOrigin(allowedOrigins: string[]) {
   const allowWildcard = allowedOrigins.includes("*");
 
   return (

@@ -1,7 +1,8 @@
 import * as nodemailer from "nodemailer";
 import { Injectable } from "@nestjs/common";
 import type { Transporter } from "nodemailer";
-import { ConfigService } from "@nestjs/config";
+
+import { AppConfigService } from "../../common/config/app-config.service";
 
 type OtpEmailOptions = {
   to: string;
@@ -18,20 +19,20 @@ export class MailService {
   private readonly appName: string;
   private readonly optExpiresIn: number;
 
-  constructor(private readonly configService: ConfigService) {
-    this.from = this.configService.getOrThrow<string>("MAIL_FROM");
-    this.appName = this.configService.getOrThrow<string>("APP_NAME");
-    this.optExpiresIn = this.configService.getOrThrow<number>(
-      "OTP_EXPIRES_IN_MINS",
-    );
+  constructor(appConfig: AppConfigService) {
+    const mail = appConfig.mail;
+
+    this.from = mail.from;
+    this.appName = appConfig.appName;
+    this.optExpiresIn = appConfig.otp.expiresInMinutes;
 
     this.transporter = nodemailer.createTransport({
-      host: this.configService.getOrThrow<string>("MAIL_HOST"),
-      port: Number(this.configService.getOrThrow<string>("MAIL_PORT")),
+      host: mail.host,
+      port: mail.port,
       secure: false,
       auth: {
-        user: this.configService.getOrThrow<string>("MAIL_USER"),
-        pass: this.configService.getOrThrow<string>("MAIL_PASS"),
+        user: mail.user,
+        pass: mail.pass,
       },
     });
   }

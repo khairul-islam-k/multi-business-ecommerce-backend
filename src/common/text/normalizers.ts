@@ -23,8 +23,6 @@ export function normalizeOptionalText(value?: string | null) {
   return normalized || null;
 }
 
-export function normalizeEmail(value?: string | null) {
-  const normalized = value?.trim().toLowerCase();
-
-  return normalized || null;
+export function normalizeEmail<T>(value: T) {
+  return typeof value === "string" ? value.trim().toLowerCase() : value;
 }

@@ -2,12 +2,12 @@ import { join } from "node:path";
 
 import { NestFactory } from "@nestjs/core";
 import { Logger, ValidationPipe } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { NestExpressApplication } from "@nestjs/platform-express";
 
 import { AppModule } from "./app.module";
 import { createCorsOrigin } from "./common/config/cors.config";
+import { AppConfigService } from "./common/config/app-config.service";
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -15,14 +15,12 @@ async function bootstrap() {
     logger: ["error", "warn", "log", "debug", "verbose"],
   });
 
-  const configService = app.get(ConfigService);
-  const uploadRoot = configService.getOrThrow<string>("MEDIA_UPLOAD_ROOT");
-  const publicUploadPrefix = configService.getOrThrow<string>(
-    "PUBLIC_UPLOAD_PREFIX",
-  );
+  const appConfig = app.get(AppConfigService);
+  const uploadRoot = appConfig.mediaUploadRoot;
+  const publicUploadPrefix = appConfig.publicUploadPrefix;
 
   app.enableCors({
-    origin: createCorsOrigin(configService),
+    origin: createCorsOrigin(appConfig.corsOrigins),
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   });
@@ -63,8 +61,8 @@ async function bootstrap() {
     },
   });
 
-  const port = configService.getOrThrow<string>("APP_PORT");
-  const ip = configService.getOrThrow<string>("APP_IP");
+  const port = appConfig.appPort;
+  const ip = appConfig.appIp;
 
   await app.listen(port, ip);
 

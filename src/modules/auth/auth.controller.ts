@@ -78,7 +78,7 @@ export class AuthController {
   @Post("change-email/verify")
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: "Verify email for email change" })
+  @ApiOperation({ summary: "Verify email change" })
   verifyEmailChange(
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: VerifyChangeEmailDto,

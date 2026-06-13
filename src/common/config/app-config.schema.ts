@@ -1,68 +1,175 @@
+import "reflect-metadata";
+import { Type, plainToInstance } from "class-transformer";
+import {
+  IsEmail,
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  Min,
+  validateSync,
+} from "class-validator";
+
 type RawConfig = Record<string, unknown>;
 
-const LOCAL_CORS_ORIGINS = [
-  "http://localhost:3000",
-  "http://localhost:5173",
-  "http://localhost:8080",
-];
+export class EnvironmentVariables {
+  @IsOptional()
+  @IsIn(["development", "production", "test"])
+  NODE_ENV?: string = "development";
 
-function readString(config: RawConfig, key: string) {
-  const value = config[key];
+  @IsString()
+  @IsNotEmpty()
+  APP_NAME!: string;
 
-  if (typeof value !== "string") {
-    return undefined;
-  }
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  APP_PORT!: number;
 
-  const trimmed = value.trim();
+  @IsString()
+  @IsNotEmpty()
+  APP_IP!: string;
 
-  return trimmed || undefined;
+  @IsString()
+  @IsNotEmpty()
+  APP_CORS_ORIGINS!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  DATABASE_URL!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  JWT_ACCESS_SECRET!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @Matches(/^\d+(ms|s|m|h|d|w)?$/, {
+    message: "JWT_ACCESS_EXPIRES_IN must be a duration like 30m",
+  })
+  JWT_ACCESS_EXPIRES_IN!: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  JWT_REFRESH_EXPIRES_IN_DAYS!: number;
+
+  @IsOptional()
+  @IsString()
+  SEED_ADMIN_NAME?: string;
+
+  @IsOptional()
+  @IsEmail()
+  SEED_ADMIN_EMAIL?: string;
+
+  @IsOptional()
+  @IsString()
+  SEED_ADMIN_PASSWORD?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  MEDIA_UPLOAD_ROOT!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @Matches(/^\//, {
+    message: "PUBLIC_UPLOAD_PREFIX must start with /",
+  })
+  PUBLIC_UPLOAD_PREFIX!: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  MEDIA_MAX_IMAGE_SIZE_BYTES!: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  MEDIA_MAX_BULK_IMAGE_FILES!: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  MEDIA_MAX_BULK_DELETE_IMAGES!: number;
+
+  @IsString()
+  @IsNotEmpty()
+  MAIL_PASS!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  MAIL_HOST!: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  MAIL_PORT!: number;
+
+  @IsString()
+  @IsNotEmpty()
+  MAIL_USER!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  MAIL_FROM!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  OTP_SECRET!: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  OTP_MAX_ATTEMPT!: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  OTP_EXPIRES_IN_MINS!: number;
 }
 
-function requireString(config: RawConfig, key: string) {
-  const value = readString(config, key);
+function normalizeOptionalBlankValues(config: RawConfig) {
+  const optionalKeys = [
+    "SEED_ADMIN_NAME",
+    "SEED_ADMIN_EMAIL",
+    "SEED_ADMIN_PASSWORD",
+  ];
+  const normalizedConfig = { ...config };
 
-  if (!value) {
-    throw new Error(`${key} is required`);
+  for (const key of optionalKeys) {
+    if (normalizedConfig[key] === "") {
+      normalizedConfig[key] = undefined;
+    }
   }
 
-  return value;
+  return normalizedConfig;
 }
 
-function requirePort(config: RawConfig, key: string) {
-  const rawValue = requireString(config, key);
-  const port = Number(rawValue);
+function withDefaults(config: RawConfig) {
+  const nodeEnv =
+    typeof config.NODE_ENV === "string" && config.NODE_ENV.trim()
+      ? config.NODE_ENV.trim()
+      : "development";
+  const appCorsOrigins =
+    typeof config.APP_CORS_ORIGINS === "string" &&
+    config.APP_CORS_ORIGINS.trim()
+      ? config.APP_CORS_ORIGINS
+      : undefined;
 
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error(`${key} must be a valid TCP port`);
-  }
-
-  return String(port);
+  return normalizeOptionalBlankValues({
+    ...config,
+    NODE_ENV: nodeEnv,
+    APP_CORS_ORIGINS: appCorsOrigins,
+  });
 }
 
-function requirePublicPrefix(config: RawConfig, key: string) {
-  const value = requireString(config, key);
-
-  if (!value.startsWith("/")) {
-    throw new Error(`${key} must start with /`);
-  }
-
-  return value;
-}
-
-function normalizeCorsOrigins(config: RawConfig) {
-  const nodeEnv = readString(config, "NODE_ENV") ?? "development";
-  const rawOrigins = readString(config, "APP_CORS_ORIGINS");
-
-  if (!rawOrigins && nodeEnv !== "production") {
-    return LOCAL_CORS_ORIGINS.join(",");
-  }
-
-  if (!rawOrigins) {
-    throw new Error("APP_CORS_ORIGINS is required in production");
-  }
-
-  const origins = rawOrigins
-    .split(",")
+function validateCorsOrigins(config: EnvironmentVariables) {
+  const origins = config.APP_CORS_ORIGINS.split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
 
@@ -70,20 +177,38 @@ function normalizeCorsOrigins(config: RawConfig) {
     throw new Error("APP_CORS_ORIGINS must include at least one origin");
   }
 
-  if (nodeEnv === "production" && origins.includes("*")) {
-    throw new Error("APP_CORS_ORIGINS cannot include * in production");
+  if (origins.includes("*")) {
+    throw new Error("APP_CORS_ORIGINS cannot include *");
   }
 
   return origins.join(",");
 }
 
+function formatValidationErrors(errors: ReturnType<typeof validateSync>) {
+  return errors
+    .flatMap((error) => Object.values(error.constraints ?? {}))
+    .join("; ");
+}
+
 export function validateAppConfig(config: RawConfig) {
-  return {
-    ...config,
-    APP_PORT: requirePort(config, "APP_PORT"),
-    APP_IP: requireString(config, "APP_IP"),
-    APP_CORS_ORIGINS: normalizeCorsOrigins(config),
-    MEDIA_UPLOAD_ROOT: requireString(config, "MEDIA_UPLOAD_ROOT"),
-    PUBLIC_UPLOAD_PREFIX: requirePublicPrefix(config, "PUBLIC_UPLOAD_PREFIX"),
-  };
+  const validatedConfig = plainToInstance(
+    EnvironmentVariables,
+    withDefaults(config),
+    {
+      enableImplicitConversion: true,
+    },
+  );
+  const errors = validateSync(validatedConfig, {
+    skipMissingProperties: false,
+  });
+
+  if (errors.length > 0) {
+    throw new Error(
+      `Invalid application config: ${formatValidationErrors(errors)}`,
+    );
+  }
+
+  validatedConfig.APP_CORS_ORIGINS = validateCorsOrigins(validatedConfig);
+
+  return validatedConfig;
 }
