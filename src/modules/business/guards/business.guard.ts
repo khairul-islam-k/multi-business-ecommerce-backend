@@ -15,7 +15,7 @@ import {
   REQUIRED_PERMISSION_KEY,
   RequiredPermissionMeta,
 } from "../../permissions/decorators/require-permission.decorator";
-import { BusinessService } from "../business.service";
+import { BusinessAccessService } from "../../access/services/business-access.service";
 import { SKIP_BUSINESS_GUARD_KEY } from "../decorators/skip-business-guard.decorator";
 
 import type { AuthenticatedRequest } from "../../auth/strategies/jwt.strategy";
@@ -24,7 +24,7 @@ import type { AuthenticatedRequest } from "../../auth/strategies/jwt.strategy";
 export class BusinessGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    private readonly businessService: BusinessService,
+    private readonly businessAccess: BusinessAccessService,
   ) {}
 
   async canActivate(context: ExecutionContext) {
@@ -59,8 +59,10 @@ export class BusinessGuard implements CanActivate {
       return true;
     }
 
-    request.businessContext =
-      await this.businessService.assertCanAccessBusiness(user, businessId);
+    request.businessContext = await this.businessAccess.assertCanAccessBusiness(
+      user,
+      businessId,
+    );
 
     request.businessId = businessId;
 

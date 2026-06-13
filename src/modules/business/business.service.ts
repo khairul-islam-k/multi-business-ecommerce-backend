@@ -11,11 +11,7 @@ import {
   SystemUserType,
 } from "@prisma/client";
 
-import { RequestContextService } from "../../common/request-context/request-context.service";
-import {
-  BusinessAccessContext,
-  getBusinessAccessCacheKey,
-} from "../../common/request-context/request-context.types";
+import { BusinessAccessContext } from "../../common/request-context/request-context.types";
 import {
   apiResponse,
   paginatedResponse,
@@ -23,6 +19,7 @@ import {
 import { throwConflictOnUnique } from "../../common/database/prisma-error.util";
 import { generateRandomSlug } from "../../common/utils/slug-generator.util";
 import { PrismaService } from "../../prisma/prisma.service";
+import { BusinessAccessService } from "../access/services/business-access.service";
 import { CreateBusinessDto } from "./dto/create-business.dto";
 import { QueryBusinessDto } from "./dto/query-business.dto";
 import { UpdateBusinessDto } from "./dto/update-business.dto";
@@ -60,7 +57,7 @@ const BUSINESS_SLUG_RETRY_LIMIT = 5;
 export class BusinessService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly requestContext: RequestContextService,
+    private readonly businessAccess: BusinessAccessService,
   ) {}
 
   async create(
@@ -438,47 +435,7 @@ export class BusinessService {
     currentUser: CurrentUserPayload,
     businessId: string,
   ): Promise<BusinessAccessContext> {
-    const cacheKey = getBusinessAccessCacheKey(currentUser.id, businessId);
-    const cachedAccess = this.requestContext.getBusinessAccess(cacheKey);
-
-    if (cachedAccess) {
-      return cachedAccess;
-    }
-
-    const where: Prisma.BusinessWhereInput = {
-      id: businessId,
-      deletedAt: null,
-      ...(currentUser.type !== SystemUserType.ADMIN && {
-        status: {
-          in: ACCESSIBLE_BUSINESS_STATUSES,
-        },
-        ...this.getBusinessAccessWhere(currentUser),
-      }),
-    };
-
-    const business = await this.prisma.business.findFirst({
-      where,
-      select: {
-        id: true,
-        ownerUserId: true,
-      },
-    });
-
-    if (!business) {
-      throw new ForbiddenException(
-        "You do not have permission for this business",
-      );
-    }
-
-    const accessContext = {
-      businessId: business.id,
-      isAdmin: currentUser.type === SystemUserType.ADMIN,
-      isOwner: business.ownerUserId === currentUser.id,
-    };
-
-    this.requestContext.setBusinessAccess(cacheKey, accessContext);
-
-    return accessContext;
+    return this.businessAccess.assertCanAccessBusiness(currentUser, businessId);
   }
 
   async assertCanManageBusiness(

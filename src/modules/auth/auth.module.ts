@@ -6,6 +6,9 @@ import { PassportModule } from "@nestjs/passport";
 import { BusinessModule } from "../business/business.module";
 import { MailModule } from "../mail/mail.module";
 import { PackageModule } from "../packages/package.module";
+import { OtpPolicy } from "./domain/otp.policy";
+import { SessionService } from "./application/session.service";
+import { TokenService } from "./application/token.service";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { JwtStrategy } from "./strategies/jwt.strategy";
@@ -35,7 +38,13 @@ import { JwtStrategy } from "./strategies/jwt.strategy";
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    TokenService,
+    SessionService,
+    OtpPolicy,
+  ],
   exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

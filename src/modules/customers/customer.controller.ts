@@ -8,18 +8,14 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { PermissionAction, RbacFeature } from "@prisma/client";
 
+import { SecuredBusinessRoute } from "../access/decorators/secured-business-route.decorator";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
-import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import { BusinessGuard } from "../business/guards/business.guard";
-import { SubscriptionGuard } from "../packages/guards/subscription.guard";
 import { RequirePermission } from "../permissions/decorators/require-permission.decorator";
-import { PermissionGuard } from "../permissions/guards/permission.guard";
 import { CustomerService } from "./customer.service";
 import {
   CreateCustomerDto,
@@ -32,7 +28,7 @@ import {
 
 @ApiTags("Customers")
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, SubscriptionGuard, BusinessGuard, PermissionGuard)
+@SecuredBusinessRoute()
 @Controller("customers/businesses/:businessId/customers")
 export class CustomerController {
   constructor(private readonly customers: CustomerService) {}
@@ -121,12 +117,7 @@ export class CustomerController {
     @Param("addressId", ParseUUIDPipe) addressId: string,
     @Body() dto: UpdateCustomerAddressDto,
   ) {
-    return this.customers.updateAddress(
-      businessId,
-      customerId,
-      addressId,
-      dto,
-    );
+    return this.customers.updateAddress(businessId, customerId, addressId, dto);
   }
 
   @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.DELETE)

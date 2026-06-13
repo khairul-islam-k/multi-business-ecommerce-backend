@@ -15,7 +15,7 @@ import {
 
 import { AddPermissionDto } from "./dto/add-permission";
 import { PrismaService } from "../../prisma/prisma.service";
-import { BusinessService } from "../business/business.service";
+import { BusinessAccessService } from "../access/services/business-access.service";
 import { PermissionItemDto } from "./dto/permission-item.dto";
 import { QueryPermissionDto } from "./dto/query-permission.dto";
 import { UpdatePermissionDto } from "./dto/update-permission.dto";
@@ -56,7 +56,7 @@ type PermissionCheckOptions = {
 export class PermissionService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly businessService: BusinessService,
+    private readonly businessAccess: BusinessAccessService,
   ) {}
 
   getAvailablePermissions() {
@@ -225,11 +225,10 @@ export class PermissionService {
     let isOwner = options.isOwner ?? false;
 
     if (!options.skipBusinessAccessCheck) {
-      const businessContext =
-        await this.businessService.assertCanAccessBusiness(
-          currentUser,
-          businessId,
-        );
+      const businessContext = await this.businessAccess.assertCanAccessBusiness(
+        currentUser,
+        businessId,
+      );
 
       isOwner = businessContext.isOwner;
     }

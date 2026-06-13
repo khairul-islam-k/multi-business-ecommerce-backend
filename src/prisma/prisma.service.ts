@@ -1,12 +1,12 @@
+import { PrismaPg } from "@prisma/adapter-pg";
+import { ConfigService } from "@nestjs/config";
+import { Prisma, PrismaClient } from "@prisma/client";
 import {
   Injectable,
   Logger,
   OnModuleDestroy,
   OnModuleInit,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { Prisma, PrismaClient } from "@prisma/client";
 
 const prismaLogOptions = [
   {

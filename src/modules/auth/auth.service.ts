@@ -1,5 +1,4 @@
 import * as argon2 from "argon2";
-import { createHash, randomBytes, randomInt } from "node:crypto";
 
 import {
   BadRequestException,
@@ -10,8 +9,6 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { JwtService } from "@nestjs/jwt";
 import {
   BusinessMemberStatus,
   BusinessStatus,
@@ -26,6 +23,9 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { BusinessService } from "../business/business.service";
 import { MailService } from "../mail/mail.service";
 import { PackageSubscriptionService } from "../packages/package-subscription.service";
+import { SessionService } from "./application/session.service";
+import { TokenService } from "./application/token.service";
+import { OtpPolicy } from "./domain/otp.policy";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { LoginDto } from "./dto/login.dto";
 import { LogoutDto } from "./dto/logout.dto";
@@ -39,7 +39,6 @@ import { UpdateUserDto } from "./dto/update-user.dto";
 import { VerifyChangeEmailDto } from "./dto/verify-email-change.dto";
 import { VerifyEmailDto } from "./dto/verify-email.dto";
 import { VerifyResetOtpDto } from "./dto/verify-reset-email.dto";
-import { JwtPayload } from "./strategies/jwt.strategy";
 
 import type { CurrentUserPayload } from "./decorators/current-user.decorator";
 
@@ -60,22 +59,16 @@ const ACCESSIBLE_BUSINESS_STATUSES = [
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger("Auth");
-  private readonly otpMaxAttempt: number;
-  private readonly optExpiresIn: number;
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
     private readonly businessService: BusinessService,
     private readonly packageSubscriptions: PackageSubscriptionService,
     private readonly mailService: MailService,
-  ) {
-    this.otpMaxAttempt = configService.getOrThrow<number>("OTP_MAX_ATTEMPT");
-    this.optExpiresIn = this.configService.getOrThrow<number>(
-      "OTP_EXPIRES_IN_MINS",
-    );
-  }
+    private readonly sessions: SessionService,
+    private readonly tokens: TokenService,
+    private readonly otpPolicy: OtpPolicy,
+  ) {}
 
   async register(dto: RegisterDto) {
     const email = this.normalizeEmail(dto.email);
@@ -97,10 +90,10 @@ export class AuthService {
       throw new ConflictException("Email already exists.");
     }
 
-    const otp = this.generateOtp();
+    const otp = this.otpPolicy.generateOtp();
     const otpHash = await this.hashPassword(otp);
     const passwordHash = await this.hashPassword(dto.password);
-    const expiresAt = this.getOtpExpiresAt();
+    const expiresAt = this.otpPolicy.getExpiresAt();
 
     const data = await this.prisma.$transaction(async (tx) => {
       const user = await tx.systemUser.create({
@@ -200,11 +193,7 @@ export class AuthService {
       throw new BadRequestException("OTP is invalid or has been expired.");
     }
 
-    if (verification.attemptCount >= this.otpMaxAttempt) {
-      throw new BadRequestException(
-        "Too many attempts. Please request a new OTP",
-      );
-    }
+    this.otpPolicy.assertCanAttempt(verification.attemptCount);
 
     const isOtpMatched = await this.verifyPassword(
       verification.otpHash,
@@ -266,9 +255,9 @@ export class AuthService {
       );
     }
 
-    const otp = this.generateOtp();
+    const otp = this.otpPolicy.generateOtp();
     const otpHash = await this.hashPassword(otp);
-    const expiresAt = this.getOtpExpiresAt();
+    const expiresAt = this.otpPolicy.getExpiresAt();
 
     const verification = await this.prisma.systemEmailVerification.create({
       data: {
@@ -359,7 +348,7 @@ export class AuthService {
     const { passwordHash, ...safeUser } = user;
 
     if (user.type === SystemUserType.ADMIN) {
-      const tokens = await this.issueTokenPair({
+      const tokens = await this.sessions.issueTokenPair({
         sub: user.id,
         type: user.type,
         businessId: null,
@@ -391,7 +380,7 @@ export class AuthService {
 
     const selectedBusiness = businesses[0];
 
-    const tokens = await this.issueTokenPair({
+    const tokens = await this.sessions.issueTokenPair({
       sub: user.id,
       type: user.type,
       businessId: selectedBusiness.id,
@@ -452,9 +441,9 @@ export class AuthService {
       throw new ConflictException("Email already exists.");
     }
 
-    const otp = this.generateOtp();
+    const otp = this.otpPolicy.generateOtp();
     const otpHash = await this.hashPassword(otp);
-    const expiresAt = this.getOtpExpiresAt();
+    const expiresAt = this.otpPolicy.getExpiresAt();
 
     const verification = await this.prisma.systemEmailVerification.create({
       data: {
@@ -614,9 +603,9 @@ export class AuthService {
 
     this.assertActiveUser(user);
 
-    const otp = this.generateOtp();
+    const otp = this.otpPolicy.generateOtp();
     const otpHash = await this.hashPassword(otp);
-    const expiresAt = this.getOtpExpiresAt();
+    const expiresAt = this.otpPolicy.getExpiresAt();
 
     await this.prisma.systemPasswordReset.create({
       data: {
@@ -784,11 +773,10 @@ export class AuthService {
       throw new BadRequestException("OTP is invalid or has been expired.");
     }
 
-    if (resetRecord.attemptCount >= this.otpMaxAttempt) {
-      throw new BadRequestException(
-        "Too many attempts. Please request a new OTP.",
-      );
-    }
+    this.otpPolicy.assertCanAttempt(
+      resetRecord.attemptCount,
+      "Too many attempts. Please request a new OTP.",
+    );
 
     const isOtpMatched = await this.verifyPassword(
       resetRecord.otpHash,
@@ -866,9 +854,6 @@ export class AuthService {
 
     const newPasswordHash = await this.hashPassword(dto.newPassword);
 
-    const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + this.optExpiresIn);
-
     const updatedUser = await this.prisma.systemUser.update({
       where: {
         id: existingUser.id,
@@ -886,37 +871,21 @@ export class AuthService {
 
   async refresh(dto: RefreshTokenDto) {
     const now = new Date();
-    const refreshTokenHash = this.hashRefreshToken(dto.refreshToken);
 
-    const session = await this.prisma.systemSession.findUnique({
-      where: {
-        refreshTokenHash,
-      },
-      include: {
-        user: true,
-      },
-    });
+    const session = await this.sessions.findByRefreshToken(dto.refreshToken);
 
     if (!session) {
       throw new UnauthorizedException("Invalid refresh token");
     }
 
     if (session.revokedAt) {
-      await this.revokeAllUserSessions(session.userId);
+      await this.sessions.revokeAllUserSessions(session.userId);
 
       throw new UnauthorizedException("Refresh token reuse detected");
     }
 
     if (session.expiresAt <= now) {
-      await this.prisma.systemSession.updateMany({
-        where: {
-          id: session.id,
-          revokedAt: null,
-        },
-        data: {
-          revokedAt: now,
-        },
-      });
+      await this.sessions.revokeSession(session.id, now);
 
       throw new UnauthorizedException("Refresh token has expired");
     }
@@ -936,39 +905,17 @@ export class AuthService {
 
     const tokenBusinessId = selectedBusiness?.id ?? null;
 
-    const accessToken = await this.generateAccessToken({
+    const accessToken = await this.tokens.generateAccessToken({
       sub: user.id,
       type: user.type,
       businessId: tokenBusinessId,
     });
 
-    const newRefreshToken = this.generateRefreshToken();
-    const newRefreshTokenHash = this.hashRefreshToken(newRefreshToken);
-    const newRefreshTokenExpiresAt = this.getRefreshTokenExpiresAt();
-
-    await this.prisma.$transaction(async (tx) => {
-      const revokedSession = await tx.systemSession.updateMany({
-        where: {
-          id: session.id,
-          revokedAt: null,
-        },
-        data: {
-          revokedAt: now,
-        },
-      });
-
-      if (revokedSession.count !== 1) {
-        throw new UnauthorizedException("Refresh token has already been used");
-      }
-
-      await tx.systemSession.create({
-        data: {
-          userId: user.id,
-          businessId: tokenBusinessId,
-          refreshTokenHash: newRefreshTokenHash,
-          expiresAt: newRefreshTokenExpiresAt,
-        },
-      });
+    const newRefreshToken = await this.sessions.rotateRefreshSession({
+      sessionId: session.id,
+      userId: user.id,
+      businessId: tokenBusinessId,
+      revokedAt: now,
     });
 
     const { passwordHash, ...safeUser } = user;
@@ -1004,13 +951,13 @@ export class AuthService {
       throw new ForbiddenException("You do not have access to this business");
     }
 
-    const accessToken = await this.generateAccessToken({
+    const accessToken = await this.tokens.generateAccessToken({
       sub: user.id,
       type: user.type,
       businessId: business.id,
     });
 
-    await this.bindRefreshSessionToBusiness(
+    await this.sessions.bindRefreshSessionToBusiness(
       user.id,
       dto.refreshToken,
       business.id,
@@ -1151,87 +1098,15 @@ export class AuthService {
   }
 
   async logout(dto: LogoutDto, userId?: string) {
-    const refreshTokenHash = this.hashRefreshToken(dto.refreshToken);
-
-    await this.prisma.systemSession.updateMany({
-      where: {
-        refreshTokenHash,
-        revokedAt: null,
-        ...(userId !== undefined ? { userId } : {}),
-      },
-      data: {
-        revokedAt: new Date(),
-      },
-    });
+    await this.sessions.revokeByRefreshToken(dto.refreshToken, userId);
 
     return apiResponse(null, "Logged out successfully");
   }
 
   async logoutAll(userId: string) {
-    await this.revokeAllUserSessions(userId);
+    await this.sessions.revokeAllUserSessions(userId);
 
     return apiResponse(null, "Logged out from all devices successfully");
-  }
-
-  private generateOtp() {
-    return String(randomInt(100000, 1000000));
-  }
-
-  private getOtpExpiresAt() {
-    const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + this.optExpiresIn);
-
-    return expiresAt;
-  }
-
-  private async issueTokenPair(payload: JwtPayload) {
-    const accessToken = await this.generateAccessToken(payload);
-    const refreshToken = this.generateRefreshToken();
-
-    await this.prisma.systemSession.create({
-      data: {
-        userId: payload.sub,
-        businessId: payload.businessId ?? null,
-        refreshTokenHash: this.hashRefreshToken(refreshToken),
-        expiresAt: this.getRefreshTokenExpiresAt(),
-      },
-    });
-
-    return {
-      accessToken,
-      refreshToken,
-    };
-  }
-
-  private async generateAccessToken(payload: JwtPayload) {
-    return this.jwtService.signAsync(payload, {
-      secret: this.configService.getOrThrow<string>("JWT_ACCESS_SECRET"),
-    });
-  }
-
-  private generateRefreshToken() {
-    return randomBytes(64).toString("hex");
-  }
-
-  private hashRefreshToken(refreshToken: string) {
-    return createHash("sha256").update(refreshToken).digest("hex");
-  }
-
-  private getRefreshTokenExpiresAt() {
-    const rawDays = this.configService.getOrThrow<string>(
-      "JWT_REFRESH_EXPIRES_IN_DAYS",
-    );
-
-    const days = Number(rawDays);
-
-    if (!Number.isInteger(days) || days <= 0) {
-      throw new Error("JWT_REFRESH_EXPIRES_IN_DAYS must be a positive integer");
-    }
-
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + days);
-
-    return expiresAt;
   }
 
   private async resolveSelectedBusiness(
@@ -1322,44 +1197,6 @@ export class AuthService {
       select: this.getBusinessSelect(userId),
       orderBy: {
         id: "asc",
-      },
-    });
-  }
-
-  private async bindRefreshSessionToBusiness(
-    userId: string,
-    refreshToken: string,
-    businessId: string,
-  ) {
-    const refreshTokenHash = this.hashRefreshToken(refreshToken);
-
-    const result = await this.prisma.systemSession.updateMany({
-      where: {
-        userId,
-        refreshTokenHash,
-        revokedAt: null,
-        expiresAt: {
-          gt: new Date(),
-        },
-      },
-      data: {
-        businessId,
-      },
-    });
-
-    if (result.count !== 1) {
-      throw new UnauthorizedException("Invalid refresh token");
-    }
-  }
-
-  private async revokeAllUserSessions(userId: string) {
-    await this.prisma.systemSession.updateMany({
-      where: {
-        userId,
-        revokedAt: null,
-      },
-      data: {
-        revokedAt: new Date(),
       },
     });
   }

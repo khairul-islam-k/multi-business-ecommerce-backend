@@ -1,7 +1,7 @@
 import { Injectable, InternalServerErrorException } from "@nestjs/common";
 
-import { apiResponse } from "./common/utils/api-response.util";
 import { PrismaService } from "./prisma/prisma.service";
+import { apiResponse } from "./common/utils/api-response.util";
 
 @Injectable()
 export class AppService {
