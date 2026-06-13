@@ -1,6 +1,5 @@
-import { IsEmail, MaxLength } from "class-validator";
-
 import { ApiProperty } from "@nestjs/swagger";
+import { IsEmail, MaxLength } from "class-validator";
 
 export class RequestEmailChangeOrVerificationDto {
   @ApiProperty({ example: "john@example.com" })

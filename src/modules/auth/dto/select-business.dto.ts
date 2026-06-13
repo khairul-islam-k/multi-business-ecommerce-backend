@@ -7,7 +7,7 @@ export class SelectBusinessDto {
   @IsUUID()
   businessId!: string;
 
-  @ApiProperty({ example: "refresh-token" })
+  @ApiProperty({ example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." })
   @IsString()
   refreshToken!: string;
 }

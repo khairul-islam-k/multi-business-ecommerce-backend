@@ -1,15 +1,15 @@
+import { Gender } from "@prisma/client";
 import { Type } from "class-transformer";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsDateString,
   IsEnum,
   IsOptional,
+  IsPhoneNumber,
   IsString,
   MaxLength,
   ValidateNested,
 } from "class-validator";
-
-import { ApiPropertyOptional } from "@nestjs/swagger";
-import { Gender } from "@prisma/client";
 
 export class UpdateUserProfileDto {
   @ApiPropertyOptional({ example: "John" })
@@ -24,7 +24,7 @@ export class UpdateUserProfileDto {
   @MaxLength(100)
   lastName?: string | null;
 
-  @ApiPropertyOptional({ example: "https://example.com/avatar.jpg" })
+  @ApiPropertyOptional({ example: "https://cdn.example.com/avatar.jpg" })
   @IsOptional()
   @IsString()
   imageUrl?: string | null;
@@ -34,12 +34,12 @@ export class UpdateUserProfileDto {
   @IsDateString()
   dateOfBirth?: string | null;
 
-  @ApiPropertyOptional({ enum: Gender, example: Gender.MALE })
+  @ApiPropertyOptional({ enum: Gender, example: Gender.OTHER })
   @IsOptional()
   @IsEnum(Gender)
   gender?: Gender | null;
 
-  @ApiPropertyOptional({ example: "House 10, Road 5" })
+  @ApiPropertyOptional({ example: "House 10, Road 5, Area X" })
   @IsOptional()
   @IsString()
   address?: string | null;
@@ -71,7 +71,7 @@ export class UpdateUserDto {
 
   @ApiPropertyOptional({ example: "+8801711111111" })
   @IsOptional()
-  @IsString()
+  @IsPhoneNumber()
   @MaxLength(30)
   phone?: string | null;
 

@@ -5,6 +5,7 @@ import { MiddlewareConsumer, Module } from "@nestjs/common";
 import { AppService } from "./app.service";
 import { AppController } from "./app.controller";
 
+import { validateAppConfig } from "./common/config/app-config.schema";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { RequestLoggerMiddleware } from "./common/middlewares/request-logger.middleware";
 import { RequestContextMiddleware } from "./common/request-context/request-context.middleware";
@@ -31,6 +32,7 @@ import { ProductCatalogModule } from "./modules/product-catalog/product-catalog.
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      validate: validateAppConfig,
     }),
 
     PrismaModule,
