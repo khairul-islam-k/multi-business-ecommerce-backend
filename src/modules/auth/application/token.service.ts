@@ -1,8 +1,7 @@
-import { createHash, randomBytes } from "node:crypto";
-
+import { JwtService } from "@nestjs/jwt";
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { JwtService } from "@nestjs/jwt";
+import { createHash, randomBytes } from "node:crypto";
 
 import { JwtPayload } from "../strategies/jwt.strategy";
 

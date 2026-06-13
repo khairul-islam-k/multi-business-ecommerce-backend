@@ -1,7 +1,6 @@
 import { randomInt } from "node:crypto";
-
-import { BadRequestException, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { BadRequestException, Injectable } from "@nestjs/common";
 
 @Injectable()
 export class OtpPolicy {

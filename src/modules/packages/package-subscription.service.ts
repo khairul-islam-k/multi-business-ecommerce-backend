@@ -16,6 +16,7 @@ import {
 } from "@prisma/client";
 
 import { PrismaService } from "../../prisma/prisma.service";
+
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 const ACTIVE_SUBSCRIPTION_STATUSES = [
@@ -24,7 +25,6 @@ const ACTIVE_SUBSCRIPTION_STATUSES = [
   PackageSubscriptionStatus.PAST_DUE,
 ] satisfies PackageSubscriptionStatus[];
 
-const DEFAULT_TRIAL_DAYS = 7;
 const MIN_BILLABLE_AMOUNT = 0.01;
 
 const PLAN_SNAPSHOT_INCLUDE = {
@@ -205,8 +205,7 @@ export class PackageSubscriptionService {
       );
     }
     const now = new Date();
-    const trialDays =
-      plan.freeTrialDays > 0 ? plan.freeTrialDays : DEFAULT_TRIAL_DAYS;
+    const trialDays = plan.freeTrialDays;
     const trialEndsAt = this.addDays(now, trialDays);
 
     return client.packageSubscription.create({
@@ -291,7 +290,6 @@ export class PackageSubscriptionService {
     const client = tx ?? this.prisma;
     const existingCreditBalance = await this.getTenantCreditBalance(
       tenantId,
-      now,
       tx,
     );
     const targetPlan = await client.packagePlan.findFirst({
@@ -420,7 +418,6 @@ export class PackageSubscriptionService {
 
   async getTenantCreditBalance(
     tenantId: string,
-    _now = new Date(),
     tx?: Prisma.TransactionClient,
   ) {
     const client = tx ?? this.prisma;

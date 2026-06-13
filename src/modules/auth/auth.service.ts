@@ -1,5 +1,12 @@
 import * as argon2 from "argon2";
-
+import {
+  BusinessMemberStatus,
+  BusinessStatus,
+  OtpPurpose,
+  SystemUser,
+  SystemUserStatus,
+  SystemUserType,
+} from "@prisma/client";
 import {
   BadRequestException,
   ConflictException,
@@ -9,39 +16,34 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-import {
-  BusinessMemberStatus,
-  BusinessStatus,
-  OtpPurpose,
-  SystemUser,
-  SystemUserStatus,
-  SystemUserType,
-} from "@prisma/client";
 
+import { normalizeEmail } from "../../common/text/normalizers";
 import { apiResponse } from "../../common/utils/api-response.util";
-import { PrismaService } from "../../prisma/prisma.service";
-import { BusinessService } from "../business/business.service";
-import { MailService } from "../mail/mail.service";
-import { PackageSubscriptionService } from "../packages/package-subscription.service";
-import { SessionService } from "./application/session.service";
-import { TokenService } from "./application/token.service";
-import { OtpPolicy } from "./domain/otp.policy";
-import { ForgotPasswordDto } from "./dto/forgot-password.dto";
-import { LoginDto } from "./dto/login.dto";
-import { LogoutDto } from "./dto/logout.dto";
-import { RefreshTokenDto } from "./dto/refresh-token.dto";
-import { RegisterDto } from "./dto/register.dto";
-import { RequestEmailChangeOrVerificationDto } from "./dto/request-email-change-or-verification.dto";
-import { ResetForgotPasswordDto } from "./dto/reset-forgot-password.dto";
-import { ResetPasswordDto } from "./dto/reset-password.dto";
-import { SelectBusinessDto } from "./dto/select-business.dto";
-import { UpdateUserDto } from "./dto/update-user.dto";
-import { VerifyChangeEmailDto } from "./dto/verify-email-change.dto";
-import { VerifyEmailDto } from "./dto/verify-email.dto";
-import { VerifyResetOtpDto } from "./dto/verify-reset-email.dto";
 
 import type { CurrentUserPayload } from "./decorators/current-user.decorator";
-import { normalizeEmail } from "../../common/text/normalizers";
+
+import { OtpPolicy } from "./domain/otp.policy";
+
+import { MailService } from "../mail/mail.service";
+import { TokenService } from "./application/token.service";
+import { PrismaService } from "../../prisma/prisma.service";
+import { BusinessService } from "../business/business.service";
+import { SessionService } from "./application/session.service";
+import { PackageSubscriptionService } from "../packages/package-subscription.service";
+
+import { LoginDto } from "./dto/login.dto";
+import { LogoutDto } from "./dto/logout.dto";
+import { RegisterDto } from "./dto/register.dto";
+import { UpdateUserDto } from "./dto/update-user.dto";
+import { VerifyEmailDto } from "./dto/verify-email.dto";
+import { RefreshTokenDto } from "./dto/refresh-token.dto";
+import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { ForgotPasswordDto } from "./dto/forgot-password.dto";
+import { SelectBusinessDto } from "./dto/select-business.dto";
+import { VerifyResetOtpDto } from "./dto/verify-reset-email.dto";
+import { VerifyChangeEmailDto } from "./dto/verify-email-change.dto";
+import { ResetForgotPasswordDto } from "./dto/reset-forgot-password.dto";
+import { RequestEmailChangeOrVerificationDto } from "./dto/request-email-change-or-verification.dto";
 
 type AuthBusiness = {
   id: string;
@@ -65,10 +67,10 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly businessService: BusinessService,
     private readonly packageSubscriptions: PackageSubscriptionService,
-    private readonly mailService: MailService,
-    private readonly sessions: SessionService,
     private readonly tokens: TokenService,
     private readonly otpPolicy: OtpPolicy,
+    private readonly mailService: MailService,
+    private readonly sessions: SessionService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -78,12 +80,6 @@ export class AuthService {
       where: { email },
       select: {
         id: true,
-        status: true,
-        ownedBusinesses: {
-          select: {
-            id: true,
-          },
-        },
       },
     });
 
@@ -105,7 +101,9 @@ export class AuthService {
           status: SystemUserStatus.INACTIVE,
           type: SystemUserType.TENANT,
           emailVerifiedAt: null,
-          profile: { create: {} },
+          profile: {
+            create: {},
+          },
         },
       });
 
@@ -154,7 +152,7 @@ export class AuthService {
   }
 
   async verifyEmail(dto: VerifyEmailDto) {
-    const email = this.normalizeEmail(dto.email);
+    const email = normalizeEmail(dto.email);
 
     const user = await this.prisma.systemUser.findUnique({
       where: { email },
@@ -244,7 +242,7 @@ export class AuthService {
   }
 
   async requestEmailVerification(dto: RequestEmailChangeOrVerificationDto) {
-    const email = this.normalizeEmail(dto.email);
+    const email = normalizeEmail(dto.email);
 
     const user = await this.prisma.systemUser.findUnique({
       where: { email },
@@ -294,7 +292,7 @@ export class AuthService {
   }
 
   async validateEmail(email: string) {
-    const normalizedEmail = this.normalizeEmail(email);
+    const normalizedEmail = normalizeEmail(email);
 
     const user = await this.prisma.systemUser.findUnique({
       where: {
@@ -316,7 +314,7 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const email = this.normalizeEmail(dto.email);
+    const email = normalizeEmail(dto.email);
 
     const user = await this.prisma.systemUser.findUnique({
       where: { email },
@@ -346,7 +344,7 @@ export class AuthService {
 
     this.assertActiveUser(user);
 
-    const { passwordHash, ...safeUser } = user;
+    const { passwordHash: _, ...safeUser } = user;
 
     if (user.type === SystemUserType.ADMIN) {
       const tokens = await this.sessions.issueTokenPair({
@@ -403,7 +401,7 @@ export class AuthService {
     userId: string,
     dto: RequestEmailChangeOrVerificationDto,
   ) {
-    const newEmail = this.normalizeEmail(dto.email);
+    const newEmail = normalizeEmail(dto.email);
 
     const user = await this.prisma.systemUser.findFirst({
       where: {
@@ -480,7 +478,7 @@ export class AuthService {
   }
 
   async verifyEmailChange(userId: string, dto: VerifyChangeEmailDto) {
-    const newEmail = this.normalizeEmail(dto.email);
+    const newEmail = normalizeEmail(dto.email);
 
     const user = await this.prisma.systemUser.findFirst({
       where: {
@@ -585,7 +583,7 @@ export class AuthService {
   }
 
   async requestForgotPasswordOtp(dto: ForgotPasswordDto) {
-    const email = this.normalizeEmail(dto.email);
+    const email = normalizeEmail(dto.email);
 
     const user = await this.prisma.systemUser.findUnique({
       where: { email },
@@ -632,7 +630,7 @@ export class AuthService {
   }
 
   async resetForgotPassword(dto: ResetForgotPasswordDto) {
-    const email = this.normalizeEmail(dto.email);
+    const email = normalizeEmail(dto.email);
 
     const user = await this.prisma.systemUser.findUnique({
       where: { email },
@@ -739,7 +737,7 @@ export class AuthService {
   }
 
   async verifyResetPassword(dto: VerifyResetOtpDto) {
-    const email = this.normalizeEmail(dto.email);
+    const email = normalizeEmail(dto.email);
 
     const user = await this.prisma.systemUser.findUnique({
       where: { email },
@@ -985,7 +983,7 @@ export class AuthService {
       throw new NotFoundException("User with the given id does not exist.");
     }
 
-    const { passwordHash, ...safeUser } = user;
+    const { passwordHash: _, ...safeUser } = user;
 
     if (user.type === SystemUserType.ADMIN) {
       return apiResponse({

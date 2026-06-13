@@ -1,15 +1,14 @@
 import { Request } from "express";
-import { ExtractJwt, Strategy } from "passport-jwt";
-
-import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { ExtractJwt, Strategy } from "passport-jwt";
 import { PassportStrategy } from "@nestjs/passport";
 import { SystemUserStatus, SystemUserType } from "@prisma/client";
+import { Injectable, UnauthorizedException } from "@nestjs/common";
 
 import { PrismaService } from "../../../prisma/prisma.service";
 
-import type { BusinessAccessContext } from "../../../common/request-context/request-context.types";
 import type { CurrentUserPayload } from "../decorators/current-user.decorator";
+import type { BusinessAccessContext } from "../../../common/request-context/request-context.types";
 
 export type JwtPayload = {
   sub: string;

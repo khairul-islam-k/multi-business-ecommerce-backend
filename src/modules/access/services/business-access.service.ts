@@ -6,13 +6,14 @@ import {
   SystemUserType,
 } from "@prisma/client";
 
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { RequestContextService } from "../../../common/request-context/request-context.service";
 import {
   BusinessAccessContext,
   getBusinessAccessCacheKey,
 } from "../../../common/request-context/request-context.types";
+
 import { PrismaService } from "../../../prisma/prisma.service";
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 const ACCESSIBLE_BUSINESS_STATUSES = [
   BusinessStatus.TRIAL,

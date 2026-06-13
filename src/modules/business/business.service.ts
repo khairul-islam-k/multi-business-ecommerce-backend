@@ -89,8 +89,8 @@ export class BusinessService {
           email: dto.email ? this.normalizeEmail(dto.email) : null,
           phone: dto.phone?.trim() || null,
           country: dto.country?.trim() || null,
-          currencyCode: dto.currencyCode?.trim().toUpperCase() || "BDT",
-          timezone: dto.timezone?.trim() || "Asia/Dhaka",
+          currencyCode: dto.currencyCode?.trim().toUpperCase(),
+          timezone: dto.timezone?.trim(),
           status: dto.status ?? BusinessStatus.TRIAL,
 
           ownerUser: {
