@@ -1,3 +1,5 @@
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import { ProductSimpleStatus } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
@@ -11,8 +13,7 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { ProductSimpleStatus } from "@prisma/client";
+
 import { CatalogSortOrder } from "../../common/dto/query-catalog.dto";
 
 export class CreateProductAttributeValueDto {

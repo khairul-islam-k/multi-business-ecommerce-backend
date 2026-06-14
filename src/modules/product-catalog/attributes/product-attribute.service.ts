@@ -5,13 +5,7 @@ import {
 } from "@nestjs/common";
 import { Prisma, ProductSimpleStatus } from "@prisma/client";
 
-import { PrismaService } from "../../../prisma/prisma.service";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
 import {
   CreateProductAttributeDto,
   CreateProductAttributeValueDto,
@@ -19,6 +13,12 @@ import {
   UpdateProductAttributeDto,
   UpdateProductAttributeValueDto,
 } from "./dto/product-attribute.dto";
+import { PrismaService } from "../../../prisma/prisma.service";
+import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
 
 const ATTRIBUTE_INCLUDE = {
   values: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } },
@@ -119,7 +119,9 @@ export class ProductAttributeService {
   }
 
   async findOne(businessId: string, attributeId: string) {
-    return apiResponse(await this.findAttributeOrThrow(businessId, attributeId));
+    return apiResponse(
+      await this.findAttributeOrThrow(businessId, attributeId),
+    );
   }
 
   async update(
@@ -266,10 +268,7 @@ export class ProductAttributeService {
     return apiResponse(null, "Product attribute value deleted successfully");
   }
 
-  private async findAttributeOrThrow(
-    businessId: string,
-    attributeId: string,
-  ) {
+  private async findAttributeOrThrow(businessId: string, attributeId: string) {
     const attribute = await this.prisma.productAttribute.findFirst({
       where: { id: attributeId, businessId, deletedAt: null },
       include: ATTRIBUTE_INCLUDE,

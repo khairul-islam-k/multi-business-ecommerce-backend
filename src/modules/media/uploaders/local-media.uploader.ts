@@ -1,7 +1,7 @@
+import { Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { extname, join, normalize, relative } from "node:path";
-import { Injectable } from "@nestjs/common";
 
 import { AppConfigService } from "../../../common/config/app-config.service";
 import {

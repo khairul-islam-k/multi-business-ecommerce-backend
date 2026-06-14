@@ -1,3 +1,5 @@
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { SystemUserStatus } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsBoolean,
@@ -9,9 +11,6 @@ import {
   Max,
   Min,
 } from "class-validator";
-
-import { ApiPropertyOptional } from "@nestjs/swagger";
-import { SystemUserStatus } from "@prisma/client";
 
 export class QueryEmployeesDto {
   @ApiPropertyOptional({ example: 1 })

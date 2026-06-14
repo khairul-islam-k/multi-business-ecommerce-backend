@@ -5,18 +5,18 @@ import {
 } from "@nestjs/common";
 import { Prisma, ProductSimpleStatus } from "@prisma/client";
 
-import { PrismaService } from "../../../prisma/prisma.service";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { QueryCatalogDto } from "../common/dto/query-catalog.dto";
-import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
 import {
   CreateProductCategoryDto,
   UpdateProductCategoryDto,
 } from "./dto/product-category.dto";
+import { PrismaService } from "../../../prisma/prisma.service";
+import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
 
 const CATEGORY_INCLUDE = {
   parent: true,

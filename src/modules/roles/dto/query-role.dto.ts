@@ -1,6 +1,6 @@
-import { Type } from "class-transformer";
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { CommonStatus } from "@prisma/client";
+import { Type } from "class-transformer";
 import {
   IsBoolean,
   IsEnum,

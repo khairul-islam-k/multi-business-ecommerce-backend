@@ -1,3 +1,4 @@
+import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
   IsArray,
@@ -8,7 +9,6 @@ import {
   MaxLength,
   ValidateNested,
 } from "class-validator";
-import { ApiPropertyOptional } from "@nestjs/swagger";
 
 export class ProductImageInputDto {
   @ApiPropertyOptional({ example: "https://cdn.example.com/product.jpg" })

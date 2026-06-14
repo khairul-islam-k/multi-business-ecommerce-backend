@@ -17,7 +17,7 @@ export type PaginatedApiResponse<T> = {
 
 export const apiResponse = <T>(data: T, message?: string): ApiResponse<T> => ({
   data,
-  ...(message ? { message } : {}),
+  message,
 });
 
 export const paginatedResponse = <T>(

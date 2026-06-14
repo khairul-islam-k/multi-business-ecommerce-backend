@@ -1,3 +1,11 @@
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import {
+  SupplierProductMapStatus,
+  SupplierInvoiceStatus,
+  SupplierPurchaseOrderStatus,
+  SupplierPurchaseReturnStatus,
+  SupplierStatus,
+} from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsArray,
@@ -12,14 +20,6 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import {
-  SupplierProductMapStatus,
-  SupplierInvoiceStatus,
-  SupplierPurchaseOrderStatus,
-  SupplierPurchaseReturnStatus,
-  SupplierStatus,
-} from "@prisma/client";
 
 import { CatalogSortOrder } from "../../product-catalog/common/dto/query-catalog.dto";
 

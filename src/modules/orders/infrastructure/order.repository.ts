@@ -1,8 +1,8 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
-import { PrismaService } from "../../../prisma/prisma.service";
 import type { QueryOrderDto } from "../dto/order.dto";
+import { PrismaService } from "../../../prisma/prisma.service";
 import { ORDER_INCLUDE } from "./order.selects";
 
 @Injectable()

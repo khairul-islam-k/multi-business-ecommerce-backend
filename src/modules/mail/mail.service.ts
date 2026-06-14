@@ -1,5 +1,5 @@
-import * as nodemailer from "nodemailer";
 import { Injectable } from "@nestjs/common";
+import * as nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 
 import { AppConfigService } from "../../common/config/app-config.service";

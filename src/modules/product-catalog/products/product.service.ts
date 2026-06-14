@@ -5,21 +5,21 @@ import {
 } from "@nestjs/common";
 import { CatalogProductStatus, Prisma } from "@prisma/client";
 
-import { PrismaService } from "../../../prisma/prisma.service";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import { ProductImageInputDto } from "../common/dto/product-media.dto";
 import {
   CreateProductDto,
   QueryProductDto,
   UpdateProductDto,
 } from "./dto/product.dto";
-import { ProductImageInputDto } from "../common/dto/product-media.dto";
 import { buildStockItemKey } from "../../inventory/domain/stock-item-key";
 import { PRODUCT_INCLUDE } from "./infrastructure/product.selects";
+import { PrismaService } from "../../../prisma/prisma.service";
+import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
 
 @Injectable()
 export class ProductService {

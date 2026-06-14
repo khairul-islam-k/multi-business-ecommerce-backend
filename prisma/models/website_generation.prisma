@@ -39,9 +39,9 @@ model Website {
   businessId       String  @map("business_id") @db.Uuid
   currentVersionId String? @unique @map("current_version_id") @db.Uuid
 
-  name   String        @db.VarChar(150)
-  slug   String        @db.VarChar(180)
-  status WebsiteStatus @default(DRAFT)
+  name     String          @db.VarChar(150)
+  slug     String          @db.VarChar(180)
+  status   WebsiteStatus   @default(DRAFT)
   template WebsiteTemplate
 
   createdBy String?   @map("created_by") @db.Uuid
@@ -143,8 +143,7 @@ model WebsiteSeoSetting {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  website Website      @relation(fields: [websiteId], references: [id], onDelete: Cascade)
-  page    WebsitePage? @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
 
   @@index([websiteId])
   @@map("website_seo_settings")

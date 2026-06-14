@@ -5,17 +5,7 @@ import {
 } from "@nestjs/common";
 import { Prisma, ProductVariantStatus } from "@prisma/client";
 
-import { PrismaService } from "../../../prisma/prisma.service";
-import { apiResponse } from "../../../common/utils/api-response.util";
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { buildStockItemKey } from "../../inventory/domain/stock-item-key";
-import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
-import {
-  assertBulkUpdateAttributeCombinations,
-  assertUniqueAttributeCombinations,
-  buildAttributeCombinationKey,
-  variantMatchesAttributes,
-} from "./domain/variant-combination.policy";
 import {
   BulkCreateProductVariantsDto,
   BulkUpdateProductVariantsDto,
@@ -25,7 +15,17 @@ import {
   QueryProductVariantDto,
   UpdateProductVariantDto,
 } from "./dto/product-variant.dto";
+import { buildStockItemKey } from "../../inventory/domain/stock-item-key";
+import {
+  assertBulkUpdateAttributeCombinations,
+  assertUniqueAttributeCombinations,
+  buildAttributeCombinationKey,
+  variantMatchesAttributes,
+} from "./domain/variant-combination.policy";
 import { VARIANT_INCLUDE } from "./infrastructure/product-variant.selects";
+import { PrismaService } from "../../../prisma/prisma.service";
+import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import { apiResponse } from "../../../common/utils/api-response.util";
 
 type ProductVariantWithInclude = Prisma.ProductVariantGetPayload<{
   include: typeof VARIANT_INCLUDE;

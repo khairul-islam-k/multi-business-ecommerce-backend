@@ -79,8 +79,8 @@ model SystemUser {
   userRoleMaps     RbacUserRoleMap[] @relation("UserRoleMapUser")
   assignedRoleMaps RbacUserRoleMap[] @relation("UserRoleMapAssignedBy")
 
-  packageSubscriptions PackageSubscription[] @relation("TenantPackageSubscriptions")
-  packageMockPayments  PackageMockPayment[]  @relation("TenantPackageMockPayments")
+  packageSubscriptions PackageSubscription[]       @relation("TenantPackageSubscriptions")
+  packageMockPayments  PackageMockPayment[]        @relation("TenantPackageMockPayments")
   packageCreditEntries PackageTenantCreditLedger[] @relation("TenantPackageCreditEntries")
 
   @@index([type])

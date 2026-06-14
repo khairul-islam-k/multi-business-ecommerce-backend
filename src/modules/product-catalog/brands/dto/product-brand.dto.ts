@@ -1,3 +1,5 @@
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import { ProductSimpleStatus } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsEnum,
@@ -7,8 +9,6 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { ProductSimpleStatus } from "@prisma/client";
 
 export class CreateProductBrandDto {
   @ApiProperty({ example: "Nike" })

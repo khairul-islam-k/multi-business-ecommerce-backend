@@ -149,12 +149,12 @@ model Product {
   brand    ProductBrand?    @relation(fields: [brandId], references: [id], onDelete: SetNull)
   unit     ProductUnit?     @relation(fields: [unitId], references: [id], onDelete: SetNull)
 
-  variants   ProductVariant[]
-  images     ProductImage[]
-  tags       ProductTagMap[]
+  variants                   ProductVariant[]
+  images                     ProductImage[]
+  tags                       ProductTagMap[]
   supplierPurchaseOrderItems SupplierPurchaseOrderItem[] @relation("SupplierPurchaseOrderItemProduct")
-  productStocks InventoryStock[] @relation("StockProduct")
-  stockMovementProducts InventoryStockMovement[] @relation("StockMovementProduct")
+  productStocks              InventoryStock[]            @relation("StockProduct")
+  stockMovementProducts      InventoryStockMovement[]    @relation("StockMovementProduct")
 
   @@unique([businessId, sku])
   @@unique([businessId, barcode])
@@ -172,26 +172,26 @@ model ProductVariant {
   businessId String @map("business_id") @db.Uuid
   productId  String @map("product_id") @db.Uuid
 
-  sku     String               @db.VarChar(100)
-  barcode String               @db.VarChar(100)
-  title   String               @db.VarChar(200)
-  priceOverride Decimal?       @map("price_override") @db.Decimal(12, 2)
-  weight  Decimal?             @db.Decimal(10, 2)
-  status  ProductVariantStatus @default(ACTIVE)
+  sku           String               @db.VarChar(100)
+  barcode       String               @db.VarChar(100)
+  title         String               @db.VarChar(200)
+  priceOverride Decimal?             @map("price_override") @db.Decimal(12, 2)
+  weight        Decimal?             @db.Decimal(10, 2)
+  status        ProductVariantStatus @default(ACTIVE)
 
   createdBy String?   @map("created_by") @db.Uuid
   updatedBy String?   @map("updated_by") @db.Uuid
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
- 
-  business   Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  product    Product                   @relation(fields: [productId], references: [id], onDelete: Cascade)
-  images     ProductImage[]
-  attributes ProductVariantAttribute[]
+
+  business                   Business                    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  product                    Product                     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  images                     ProductImage[]
+  attributes                 ProductVariantAttribute[]
   supplierPurchaseOrderItems SupplierPurchaseOrderItem[] @relation("SupplierPurchaseOrderItemVariant")
-  variantStocks InventoryStock[] @relation("StockVariant")
-  stockMovementVariants InventoryStockMovement[] @relation("StockMovementVariant")
+  variantStocks              InventoryStock[]            @relation("StockVariant")
+  stockMovementVariants      InventoryStockMovement[]    @relation("StockMovementVariant")
 
   @@unique([businessId, sku])
   @@unique([businessId, barcode])

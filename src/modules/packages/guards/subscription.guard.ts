@@ -6,8 +6,8 @@ import {
 } from "@nestjs/common";
 import { SystemUserType } from "@prisma/client";
 
-import { PackageSubscriptionService } from "../package-subscription.service";
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import { PackageSubscriptionService } from "../package-subscription.service";
 
 @Injectable()
 export class SubscriptionGuard implements CanActivate {

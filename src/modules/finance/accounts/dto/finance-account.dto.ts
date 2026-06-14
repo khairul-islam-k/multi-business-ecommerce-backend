@@ -1,3 +1,5 @@
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import { FinanceAccountStatus, FinanceAccountType } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsEnum,
@@ -8,9 +10,6 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
-
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { FinanceAccountStatus, FinanceAccountType } from "@prisma/client";
 
 export class CreateFinanceAccountDto {
   @ApiProperty({ example: "Main Cash" })

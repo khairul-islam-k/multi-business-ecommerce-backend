@@ -1,11 +1,11 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 
+import type { QueryOrderDto } from "../dto/order.dto";
+import { OrderRepository } from "../infrastructure/order.repository";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
-import type { QueryOrderDto } from "../dto/order.dto";
-import { OrderRepository } from "../infrastructure/order.repository";
 
 @Injectable()
 export class OrderQueryService {

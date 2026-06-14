@@ -12,6 +12,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor, FilesInterceptor } from "@nestjs/platform-express";
 import {
   ApiBearerAuth,
   ApiBody,
@@ -19,21 +20,20 @@ import {
   ApiOperation,
   ApiTags,
 } from "@nestjs/swagger";
-import { FileInterceptor, FilesInterceptor } from "@nestjs/platform-express";
 import { PermissionAction, RbacFeature } from "@prisma/client";
 
-import { MediaService } from "./media.service";
-import { QueryMediaDto } from "./dto/query-media.dto";
-import { UploadMediaDto } from "./dto/upload-media.dto";
-import { DeleteMediaBulkDto } from "./dto/delete-media.dto";
+import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
+import { RequirePermission } from "../permissions/decorators/require-permission.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { BusinessGuard } from "../business/guards/business.guard";
-import { PermissionGuard } from "../permissions/guards/permission.guard";
-import { CurrentUser } from "../auth/decorators/current-user.decorator";
-import { RequirePermission } from "../permissions/decorators/require-permission.decorator";
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
-import type { UploadableMediaFile } from "./uploaders/media-uploader.types";
 import { SubscriptionGuard } from "../packages/guards/subscription.guard";
+import { PermissionGuard } from "../permissions/guards/permission.guard";
+import { DeleteMediaBulkDto } from "./dto/delete-media.dto";
+import { QueryMediaDto } from "./dto/query-media.dto";
+import { UploadMediaDto } from "./dto/upload-media.dto";
+import { MediaService } from "./media.service";
+import type { UploadableMediaFile } from "./uploaders/media-uploader.types";
 
 @ApiTags("Media")
 @ApiBearerAuth()
@@ -46,7 +46,11 @@ export class MediaController {
   @RequirePermission(RbacFeature.MEDIA_MANAGEMENT, PermissionAction.CREATE)
   @UseInterceptors(FileInterceptor("file"))
   @ApiConsumes("multipart/form-data")
-  @ApiOperation({ summary: "Upload image" })
+  @ApiOperation({
+    summary: "Upload image",
+    description:
+      "Upload image. Use this endpoint when staff need this business action from the API.",
+  })
   @ApiBody({
     schema: {
       type: "object",
@@ -80,7 +84,11 @@ export class MediaController {
   @RequirePermission(RbacFeature.MEDIA_MANAGEMENT, PermissionAction.CREATE)
   @UseInterceptors(FilesInterceptor("files"))
   @ApiConsumes("multipart/form-data")
-  @ApiOperation({ summary: "Bulk upload images" })
+  @ApiOperation({
+    summary: "Bulk upload images",
+    description:
+      "Uploads several images at once and returns the saved media records so they can be attached to products, categories, or other business content.",
+  })
   @ApiBody({
     schema: {
       type: "object",
@@ -115,7 +123,11 @@ export class MediaController {
 
   @Get("images")
   @RequirePermission(RbacFeature.MEDIA_MANAGEMENT, PermissionAction.READ)
-  @ApiOperation({ summary: "Get business images" })
+  @ApiOperation({
+    summary: "Get business images",
+    description:
+      "Shows business images that the current user is allowed to view. Use this to review saved information before making a decision or change.",
+  })
   findImages(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Query() query: QueryMediaDto,
@@ -125,7 +137,11 @@ export class MediaController {
 
   @Delete("images/bulk")
   @RequirePermission(RbacFeature.MEDIA_MANAGEMENT, PermissionAction.DELETE)
-  @ApiOperation({ summary: "Bulk delete images" })
+  @ApiOperation({
+    summary: "Bulk delete images",
+    description:
+      "Deletes several selected records in one request. Use this when cleaning up items that are no longer needed.",
+  })
   deleteImages(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Body() dto: DeleteMediaBulkDto,
@@ -135,7 +151,11 @@ export class MediaController {
 
   @Delete("images/:mediaAssetId")
   @RequirePermission(RbacFeature.MEDIA_MANAGEMENT, PermissionAction.DELETE)
-  @ApiOperation({ summary: "Delete image" })
+  @ApiOperation({
+    summary: "Delete image",
+    description:
+      "Deletes image from normal day-to-day use. Records may be kept internally when the system needs history for reporting or auditing.",
+  })
   deleteImage(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("mediaAssetId", ParseUUIDPipe) mediaAssetId: string,

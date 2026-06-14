@@ -1,3 +1,10 @@
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import {
+  OrderAddressType,
+  OrderCustomerStatus,
+  OrderPaymentStatus,
+  OrderStatus,
+} from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsEmail,
@@ -10,13 +17,6 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import {
-  OrderAddressType,
-  OrderCustomerStatus,
-  OrderPaymentStatus,
-  OrderStatus,
-} from "@prisma/client";
 
 export enum CustomerSortBy {
   NAME = "name",

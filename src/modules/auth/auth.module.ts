@@ -1,20 +1,17 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { PassportModule } from "@nestjs/passport";
 import { JwtModule, JwtSignOptions } from "@nestjs/jwt";
+import { PassportModule } from "@nestjs/passport";
 
 import { OtpPolicy } from "./domain/otp.policy";
-import { JwtStrategy } from "./strategies/jwt.strategy";
-
+import { SessionService } from "./application/session.service";
+import { TokenService } from "./application/token.service";
+import { AuthService } from "./auth.service";
+import { AuthController } from "./auth.controller";
+import { BusinessModule } from "../business/business.module";
 import { MailModule } from "../mail/mail.module";
 import { PackageModule } from "../packages/package.module";
-import { BusinessModule } from "../business/business.module";
-
-import { AuthController } from "./auth.controller";
-
-import { AuthService } from "./auth.service";
-import { TokenService } from "./application/token.service";
-import { SessionService } from "./application/session.service";
+import { JwtStrategy } from "./strategies/jwt.strategy";
 
 @Module({
   imports: [

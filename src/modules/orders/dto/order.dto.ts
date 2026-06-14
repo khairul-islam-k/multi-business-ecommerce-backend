@@ -1,3 +1,11 @@
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import {
+  OrderPaymentMethod,
+  OrderPaymentStatus,
+  OrderSource,
+  OrderStatus,
+  OrderType,
+} from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsArray,
@@ -12,14 +20,6 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import {
-  OrderPaymentMethod,
-  OrderPaymentStatus,
-  OrderSource,
-  OrderStatus,
-  OrderType,
-} from "@prisma/client";
 
 export class OrderItemInputDto {
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
@@ -54,7 +54,6 @@ export class OrderPaymentInputDto {
   @IsOptional()
   @IsUUID()
   financeAccountId?: string;
-
 }
 
 export class OrderCourierInputDto {

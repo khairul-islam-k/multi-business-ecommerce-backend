@@ -5,18 +5,18 @@ import {
 } from "@nestjs/common";
 import { Prisma, WarehouseStatus } from "@prisma/client";
 
-import { PrismaService } from "../../../prisma/prisma.service";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { InventoryLookupService } from "../common/inventory-lookup.service";
 import {
   CreateWarehouseDto,
   QueryWarehouseDto,
   UpdateWarehouseDto,
 } from "./dto/warehouse.dto";
+import { PrismaService } from "../../../prisma/prisma.service";
+import { InventoryLookupService } from "../common/inventory-lookup.service";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
 
 const WAREHOUSE_INCLUDE = {
   _count: {

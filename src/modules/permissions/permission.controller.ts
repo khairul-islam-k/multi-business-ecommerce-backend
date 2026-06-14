@@ -1,11 +1,4 @@
 import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiParam,
-  ApiTags,
-} from "@nestjs/swagger";
-import { PermissionAction, RbacFeature } from "@prisma/client";
-import {
   Body,
   Controller,
   Delete,
@@ -18,23 +11,29 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from "@nestjs/swagger";
+import { PermissionAction, RbacFeature } from "@prisma/client";
 
-import { PermissionGuard } from "./guards/permission.guard";
-import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import { BusinessGuard } from "../business/guards/business.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
-import { RequirePermission } from "./decorators/require-permission.decorator";
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { CurrentBusiness } from "../business/decorators/current-business.decorator";
 import { SkipBusinessGuard } from "../business/decorators/skip-business-guard.decorator";
-import type { BusinessAccessContext } from "../../common/request-context/request-context.types";
+import { RequirePermission } from "./decorators/require-permission.decorator";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { BusinessGuard } from "../business/guards/business.guard";
 import { SubscriptionGuard } from "../packages/guards/subscription.guard";
-
+import { PermissionGuard } from "./guards/permission.guard";
 import { AddPermissionDto } from "./dto/add-permission";
-import { PermissionService } from "./permission.service";
+import { PermissionItemDto } from "./dto/permission-item.dto";
 import { QueryPermissionDto } from "./dto/query-permission.dto";
 import { UpdatePermissionDto } from "./dto/update-permission.dto";
-import { PermissionItemDto } from "./dto/permission-item.dto";
+import { PermissionService } from "./permission.service";
+import type { BusinessAccessContext } from "../../common/request-context/request-context.types";
 import { apiResponse } from "../../common/utils/api-response.util";
 
 @ApiTags("Permissions")
@@ -48,6 +47,8 @@ export class PermissionController {
   @SkipBusinessGuard()
   @ApiOperation({
     summary: "Get all available RBAC features and actions",
+    description:
+      "Shows every permission feature and action that the system understands. Use this to build permission screens or explain what access can be granted.",
   })
   getAvailablePermissions() {
     return this.permissionsService.getAvailablePermissions();
@@ -56,6 +57,8 @@ export class PermissionController {
   @Post("has/businesses/:businessId")
   @ApiOperation({
     summary: "Check for permission",
+    description:
+      "Checks whether the current user has one specific permission for the selected business. The response clearly says whether the action is allowed.",
   })
   async hasPermission(
     @CurrentUser() user: CurrentUserPayload,
@@ -86,6 +89,8 @@ export class PermissionController {
   )
   @ApiOperation({
     summary: "Get all role permissions for a business",
+    description:
+      "Shows the permission settings assigned to roles in the selected business. Use this to review who can perform important business actions.",
   })
   findAll(
     @Param("businessId", ParseUUIDPipe) businessId: string,
@@ -101,6 +106,8 @@ export class PermissionController {
   )
   @ApiOperation({
     summary: "Get permissions of a specific role",
+    description:
+      "Shows the full permission list for one role in the selected business. Use this before changing a role or explaining what that role can do.",
   })
   findByRole(
     @Param("businessId", ParseUUIDPipe) businessId: string,
@@ -116,6 +123,8 @@ export class PermissionController {
   )
   @ApiOperation({
     summary: "Add permissions to a role",
+    description:
+      "Adds new permissions to an existing role without removing its current permissions. Use this when a role needs a few additional abilities.",
   })
   addToRole(
     @Param("businessId", ParseUUIDPipe) businessId: string,
@@ -154,6 +163,8 @@ export class PermissionController {
   )
   @ApiOperation({
     summary: "Remove a single permission from a role",
+    description:
+      "Removes one selected permission from a role. Use this when a role should keep most of its access but lose one specific ability.",
   })
   @ApiParam({
     name: "feature",

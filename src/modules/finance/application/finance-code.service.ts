@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 
-import { generateRandomCode } from "../../../common/utils/code-generator.util";
 import { PrismaService } from "../../../prisma/prisma.service";
+import { generateRandomCode } from "../../../common/utils/code-generator.util";
 
 const FINANCE_CODE_RETRY_LIMIT = 5;
 

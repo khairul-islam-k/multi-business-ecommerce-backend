@@ -1,3 +1,5 @@
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { BusinessStatus } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsBoolean,
@@ -13,9 +15,6 @@ import {
   MinLength,
   ValidateNested,
 } from "class-validator";
-
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { BusinessStatus } from "@prisma/client";
 
 export class CreateBusinessSettingDto {
   @ApiPropertyOptional({ example: "ORD" })

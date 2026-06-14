@@ -15,9 +15,8 @@ import {
   SystemUserType,
 } from "@prisma/client";
 
-import { PrismaService } from "../../prisma/prisma.service";
-
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
+import { PrismaService } from "../../prisma/prisma.service";
 
 const ACTIVE_SUBSCRIPTION_STATUSES = [
   PackageSubscriptionStatus.TRIALING,

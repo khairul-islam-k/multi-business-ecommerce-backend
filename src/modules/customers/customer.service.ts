@@ -1,24 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { OrderCustomerStatus, Prisma } from "@prisma/client";
 
-import { getPagination } from "../../common/http/pagination.util";
-import { resolveSort, resolveSortDirection } from "../../common/http/sort.util";
-import {
-  normalizeOptionalText,
-  normalizeRequiredText,
-} from "../../common/text/normalizers";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../common/utils/api-response.util";
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
-import { CustomerAddressService } from "./application/customer-address.service";
-import { CustomerOrderQueryService } from "./application/customer-order-query.service";
-import {
-  assertCustomerContactAvailable,
-  normalizeCustomerContact,
-  normalizeCustomerContactUpdate,
-} from "./domain/customer-contact.policy";
 import {
   CreateCustomerDto,
   CustomerAddressDto,
@@ -29,7 +12,24 @@ import {
   UpdateCustomerAddressDto,
   UpdateCustomerDto,
 } from "./dto/customer.dto";
+import {
+  assertCustomerContactAvailable,
+  normalizeCustomerContact,
+  normalizeCustomerContactUpdate,
+} from "./domain/customer-contact.policy";
+import { CustomerAddressService } from "./application/customer-address.service";
+import { CustomerOrderQueryService } from "./application/customer-order-query.service";
 import { CustomerRepository } from "./infrastructure/customer.repository";
+import { getPagination } from "../../common/http/pagination.util";
+import { resolveSort, resolveSortDirection } from "../../common/http/sort.util";
+import {
+  normalizeOptionalText,
+  normalizeRequiredText,
+} from "../../common/text/normalizers";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../common/utils/api-response.util";
 
 const CUSTOMER_SORTS = Object.values(CustomerSortBy);
 

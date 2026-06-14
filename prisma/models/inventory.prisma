@@ -94,11 +94,11 @@ model Warehouse {
 }
 
 model InventoryStock {
-  id         String @id @default(uuid()) @db.Uuid
-  businessId String @map("business_id") @db.Uuid
-  productId  String @map("product_id") @db.Uuid
-  variantId  String? @map("variant_id") @db.Uuid
-  stockItemKey String @map("stock_item_key") @db.VarChar(80)
+  id           String  @id @default(uuid()) @db.Uuid
+  businessId   String  @map("business_id") @db.Uuid
+  productId    String  @map("product_id") @db.Uuid
+  variantId    String? @map("variant_id") @db.Uuid
+  stockItemKey String  @map("stock_item_key") @db.VarChar(80)
 
   totalQuantity    Decimal @default(0) @map("total_quantity") @db.Decimal(14, 3)
   quantityReserved Decimal @default(0) @map("quantity_reserved") @db.Decimal(14, 3)
@@ -107,8 +107,8 @@ model InventoryStock {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  product       Product               @relation("StockProduct", fields: [productId], references: [id], onDelete: Restrict)
-  variant       ProductVariant?       @relation("StockVariant", fields: [variantId], references: [id], onDelete: SetNull)
+  product Product         @relation("StockProduct", fields: [productId], references: [id], onDelete: Restrict)
+  variant ProductVariant? @relation("StockVariant", fields: [variantId], references: [id], onDelete: SetNull)
 
   warehouseStocks InventoryWarehouseStock[]
   movements       InventoryStockMovement[]
@@ -122,13 +122,13 @@ model InventoryStock {
 }
 
 model InventoryWarehouseStock {
-  id          String @id @default(uuid()) @db.Uuid
-  businessId  String @map("business_id") @db.Uuid
-  stockId     String @map("stock_id") @db.Uuid
-  warehouseId String @map("warehouse_id") @db.Uuid
-  productId   String @map("product_id") @db.Uuid
-  variantId   String? @map("variant_id") @db.Uuid
-  stockItemKey String @map("stock_item_key") @db.VarChar(80)
+  id           String  @id @default(uuid()) @db.Uuid
+  businessId   String  @map("business_id") @db.Uuid
+  stockId      String  @map("stock_id") @db.Uuid
+  warehouseId  String  @map("warehouse_id") @db.Uuid
+  productId    String  @map("product_id") @db.Uuid
+  variantId    String? @map("variant_id") @db.Uuid
+  stockItemKey String  @map("stock_item_key") @db.VarChar(80)
 
   totalQuantity    Decimal @default(0) @map("total_quantity") @db.Decimal(14, 3)
   quantityReserved Decimal @default(0) @map("quantity_reserved") @db.Decimal(14, 3)
@@ -150,13 +150,13 @@ model InventoryWarehouseStock {
 }
 
 model InventoryStockMovement {
-  id          String @id @default(uuid()) @db.Uuid
-  businessId  String @map("business_id") @db.Uuid
-  stockId     String @map("stock_id") @db.Uuid
-  warehouseId String @map("warehouse_id") @db.Uuid
-  productId   String @map("product_id") @db.Uuid
-  variantId   String? @map("variant_id") @db.Uuid
-  stockItemKey String @map("stock_item_key") @db.VarChar(80)
+  id           String  @id @default(uuid()) @db.Uuid
+  businessId   String  @map("business_id") @db.Uuid
+  stockId      String  @map("stock_id") @db.Uuid
+  warehouseId  String  @map("warehouse_id") @db.Uuid
+  productId    String  @map("product_id") @db.Uuid
+  variantId    String? @map("variant_id") @db.Uuid
+  stockItemKey String  @map("stock_item_key") @db.VarChar(80)
 
   movementType InventoryMovementType @map("movement_type")
   quantity     Decimal               @db.Decimal(14, 3)
@@ -168,10 +168,10 @@ model InventoryStockMovement {
   createdBy String?  @map("created_by") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at")
 
-  stock     InventoryStock @relation(fields: [stockId], references: [id], onDelete: Cascade)
-  warehouse Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  product   Product        @relation("StockMovementProduct", fields: [productId], references: [id], onDelete: Restrict)
-  variant ProductVariant? @relation("StockMovementVariant", fields: [variantId], references: [id], onDelete: Cascade)
+  stock     InventoryStock  @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  warehouse Warehouse       @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  product   Product         @relation("StockMovementProduct", fields: [productId], references: [id], onDelete: Restrict)
+  variant   ProductVariant? @relation("StockMovementVariant", fields: [variantId], references: [id], onDelete: Cascade)
 
   @@index([businessId])
   @@index([stockId])
@@ -186,15 +186,15 @@ model InventoryStockMovement {
 }
 
 model InventoryOrderAllocation {
-  id          String @id @default(uuid()) @db.Uuid
-  businessId  String @map("business_id") @db.Uuid
-  orderId     String @map("order_id") @db.Uuid
-  orderItemId String @map("order_item_id") @db.Uuid
-  stockId     String @map("stock_id") @db.Uuid
-  warehouseId String @map("warehouse_id") @db.Uuid
-  productId   String @map("product_id") @db.Uuid
-  variantId   String? @map("variant_id") @db.Uuid
-  stockItemKey String @map("stock_item_key") @db.VarChar(80)
+  id           String  @id @default(uuid()) @db.Uuid
+  businessId   String  @map("business_id") @db.Uuid
+  orderId      String  @map("order_id") @db.Uuid
+  orderItemId  String  @map("order_item_id") @db.Uuid
+  stockId      String  @map("stock_id") @db.Uuid
+  warehouseId  String  @map("warehouse_id") @db.Uuid
+  productId    String  @map("product_id") @db.Uuid
+  variantId    String? @map("variant_id") @db.Uuid
+  stockItemKey String  @map("stock_item_key") @db.VarChar(80)
 
   quantity Decimal                        @db.Decimal(14, 3)
   status   InventoryOrderAllocationStatus @default(RESERVED)
@@ -250,9 +250,9 @@ model InventoryStockAdjustment {
 }
 
 model InventoryStockAdjustmentItem {
-  id           String @id @default(uuid()) @db.Uuid
-  adjustmentId String @map("adjustment_id") @db.Uuid
-  productId    String @map("product_id") @db.Uuid
+  id           String  @id @default(uuid()) @db.Uuid
+  adjustmentId String  @map("adjustment_id") @db.Uuid
+  productId    String  @map("product_id") @db.Uuid
   variantId    String? @map("variant_id") @db.Uuid
 
   oldQuantity   Decimal @map("old_quantity") @db.Decimal(14, 3)
@@ -305,9 +305,9 @@ model InventoryStockTransfer {
 }
 
 model InventoryStockTransferItem {
-  id         String @id @default(uuid()) @db.Uuid
-  transferId String @map("transfer_id") @db.Uuid
-  productId  String @map("product_id") @db.Uuid
+  id         String  @id @default(uuid()) @db.Uuid
+  transferId String  @map("transfer_id") @db.Uuid
+  productId  String  @map("product_id") @db.Uuid
   variantId  String? @map("variant_id") @db.Uuid
 
   requestedQuantity   Decimal @default(0) @map("requested_quantity") @db.Decimal(14, 3)

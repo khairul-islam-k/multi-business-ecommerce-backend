@@ -1,3 +1,5 @@
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { InventoryAdjustmentType } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsArray,
@@ -10,8 +12,6 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { InventoryAdjustmentType } from "@prisma/client";
 
 export class StockAdjustmentItemDto {
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })

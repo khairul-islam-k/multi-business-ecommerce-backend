@@ -1,10 +1,5 @@
 import { Module } from "@nestjs/common";
 
-import { BusinessModule } from "../business/business.module";
-import { FinanceModule } from "../finance/finance.module";
-import { InventoryModule } from "../inventory/inventory.module";
-import { PackageModule } from "../packages/package.module";
-import { PermissionModule } from "../permissions/permission.module";
 import { PurchaseOrderReceivingService } from "./application/purchase-order-receiving.service";
 import { PurchaseOrderService } from "./application/purchase-order.service";
 import { PurchaseReturnService } from "./application/purchase-return.service";
@@ -16,11 +11,18 @@ import { SupplierCodeRepository } from "./infrastructure/supplier-code.repositor
 import { SupplierInvoiceRepository } from "./infrastructure/supplier-invoice.repository";
 import { SupplierProductRepository } from "./infrastructure/supplier-product.repository";
 import { SupplierRepository } from "./infrastructure/supplier.repository";
-import { SupplierController } from "./supplier.controller";
 import { SupplierService } from "./supplier.service";
+import { SupplierController } from "./supplier.controller";
+import { AccessModule } from "../access/access.module";
+import { BusinessModule } from "../business/business.module";
+import { FinanceModule } from "../finance/finance.module";
+import { InventoryModule } from "../inventory/inventory.module";
+import { PackageModule } from "../packages/package.module";
+import { PermissionModule } from "../permissions/permission.module";
 
 @Module({
   imports: [
+    AccessModule,
     BusinessModule,
     PermissionModule,
     PackageModule,

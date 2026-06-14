@@ -1,3 +1,5 @@
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import { CatalogProductStatus } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsArray,
@@ -10,8 +12,7 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { CatalogProductStatus } from "@prisma/client";
+
 import { ProductImagesDto } from "../../common/dto/product-media.dto";
 import { CatalogSortOrder } from "../../common/dto/query-catalog.dto";
 

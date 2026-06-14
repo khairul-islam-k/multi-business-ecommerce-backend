@@ -1,3 +1,5 @@
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { OrderPaymentMethod } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsArray,
@@ -8,8 +10,6 @@ import {
   MaxLength,
   ValidateNested,
 } from "class-validator";
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { OrderPaymentMethod } from "@prisma/client";
 
 import { OrderItemInputDto } from "../../orders/dto/order.dto";
 

@@ -16,7 +16,6 @@ import { SecuredBusinessRoute } from "../access/decorators/secured-business-rout
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { RequirePermission } from "../permissions/decorators/require-permission.decorator";
-import { CustomerService } from "./customer.service";
 import {
   CreateCustomerDto,
   CustomerAddressDto,
@@ -25,6 +24,7 @@ import {
   UpdateCustomerAddressDto,
   UpdateCustomerDto,
 } from "./dto/customer.dto";
+import { CustomerService } from "./customer.service";
 
 @ApiTags("Customers")
 @ApiBearerAuth()
@@ -35,7 +35,11 @@ export class CustomerController {
 
   @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.CREATE)
   @Post()
-  @ApiOperation({ summary: "Create customer" })
+  @ApiOperation({
+    summary: "Create customer",
+    description:
+      "Creates customer using the information in the request. Use this when a staff member wants to add a new record and receive the saved details back.",
+  })
   create(
     @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
@@ -46,7 +50,11 @@ export class CustomerController {
 
   @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.READ)
   @Get()
-  @ApiOperation({ summary: "Get customers" })
+  @ApiOperation({
+    summary: "Get customers",
+    description:
+      "Shows customers that the current user is allowed to view. Use this to review saved information before making a decision or change.",
+  })
   findAll(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Query() query: QueryCustomerDto,
@@ -56,7 +64,11 @@ export class CustomerController {
 
   @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.READ)
   @Get(":customerId")
-  @ApiOperation({ summary: "Get customer" })
+  @ApiOperation({
+    summary: "Get customer",
+    description:
+      "Shows customer that the current user is allowed to view. Use this to review saved information before making a decision or change.",
+  })
   findOne(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("customerId", ParseUUIDPipe) customerId: string,
@@ -66,7 +78,11 @@ export class CustomerController {
 
   @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.UPDATE)
   @Patch(":customerId")
-  @ApiOperation({ summary: "Update customer" })
+  @ApiOperation({
+    summary: "Update customer",
+    description:
+      "Updates customer with the new information provided. Only the fields sent in the request are changed.",
+  })
   update(
     @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
@@ -78,7 +94,11 @@ export class CustomerController {
 
   @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.DELETE)
   @Delete(":customerId")
-  @ApiOperation({ summary: "Delete customer" })
+  @ApiOperation({
+    summary: "Delete customer",
+    description:
+      "Deletes customer from normal day-to-day use. Records may be kept internally when the system needs history for reporting or auditing.",
+  })
   remove(
     @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
@@ -89,7 +109,11 @@ export class CustomerController {
 
   @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.CREATE)
   @Post(":customerId/addresses")
-  @ApiOperation({ summary: "Create customer address" })
+  @ApiOperation({
+    summary: "Create customer address",
+    description:
+      "Creates customer address using the information in the request. Use this when a staff member wants to add a new record and receive the saved details back.",
+  })
   createAddress(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("customerId", ParseUUIDPipe) customerId: string,
@@ -100,7 +124,11 @@ export class CustomerController {
 
   @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.READ)
   @Get(":customerId/addresses")
-  @ApiOperation({ summary: "Get customer addresses" })
+  @ApiOperation({
+    summary: "Get customer addresses",
+    description:
+      "Shows customer addresses that the current user is allowed to view. Use this to review saved information before making a decision or change.",
+  })
   findAddresses(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("customerId", ParseUUIDPipe) customerId: string,
@@ -110,7 +138,11 @@ export class CustomerController {
 
   @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.UPDATE)
   @Patch(":customerId/addresses/:addressId")
-  @ApiOperation({ summary: "Update customer address" })
+  @ApiOperation({
+    summary: "Update customer address",
+    description:
+      "Updates customer address with the new information provided. Only the fields sent in the request are changed.",
+  })
   updateAddress(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("customerId", ParseUUIDPipe) customerId: string,
@@ -122,7 +154,11 @@ export class CustomerController {
 
   @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.DELETE)
   @Delete(":customerId/addresses/:addressId")
-  @ApiOperation({ summary: "Delete customer address" })
+  @ApiOperation({
+    summary: "Delete customer address",
+    description:
+      "Deletes customer address from normal day-to-day use. Records may be kept internally when the system needs history for reporting or auditing.",
+  })
   removeAddress(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("customerId", ParseUUIDPipe) customerId: string,
@@ -133,7 +169,11 @@ export class CustomerController {
 
   @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.READ)
   @Get(":customerId/orders")
-  @ApiOperation({ summary: "Get customer orders" })
+  @ApiOperation({
+    summary: "Get customer orders",
+    description:
+      "Shows customer orders that the current user is allowed to view. Use this to review saved information before making a decision or change.",
+  })
   findOrders(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("customerId", ParseUUIDPipe) customerId: string,

@@ -15,20 +15,19 @@ import {
   UserRoleMapStatus,
 } from "@prisma/client";
 
-import { PrismaService } from "../../prisma/prisma.service";
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../common/utils/api-response.util";
-
 import { AssignRoleDto } from "./dto/assign-role.dto";
 import { CreateRoleDto } from "./dto/create-role.dto";
 import { QueryRoleAssignmentsDto } from "./dto/query-role-assignment.dto";
 import { QueryRoleDto } from "./dto/query-role.dto";
 import { RolePermissionDto } from "./dto/role-permission.dto";
-import { UpdateRoleDto } from "./dto/update-role.dto";
 import { UpdateRoleAssignmentDto } from "./dto/update-role-assignment.dto";
+import { UpdateRoleDto } from "./dto/update-role.dto";
+import { PrismaService } from "../../prisma/prisma.service";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../common/utils/api-response.util";
 
 const ACCESSIBLE_BUSINESS_STATUSES = [
   BusinessStatus.TRIAL,

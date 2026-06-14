@@ -10,7 +10,6 @@ import {
 } from "@prisma/client";
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
-
 import { PrismaService } from "../../prisma/prisma.service";
 import { PackageSubscriptionService } from "./package-subscription.service";
 

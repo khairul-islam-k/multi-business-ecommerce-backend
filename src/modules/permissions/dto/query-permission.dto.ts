@@ -1,6 +1,6 @@
-import { Type } from "class-transformer";
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { PermissionAction, RbacFeature } from "@prisma/client";
+import { Type } from "class-transformer";
 import { IsEnum, IsInt, IsOptional, IsUUID, Max, Min } from "class-validator";
 
 export class QueryPermissionDto {

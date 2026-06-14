@@ -15,12 +15,13 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { PackageLimitKey, PermissionAction, RbacFeature } from "@prisma/client";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
+import { RequirePackageLimit } from "../packages/decorators/require-package-limit.decorator";
+import { RequirePermission } from "../permissions/decorators/require-permission.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { BusinessGuard } from "../business/guards/business.guard";
-import { RequirePackageLimit } from "../packages/decorators/require-package-limit.decorator";
 import { PackageLimitGuard } from "../packages/guards/package-limit.guard";
 import { SubscriptionGuard } from "../packages/guards/subscription.guard";
-import { RequirePermission } from "../permissions/decorators/require-permission.decorator";
 import { PermissionGuard } from "../permissions/guards/permission.guard";
 import { AssignEmployeeRolesDto } from "./dto/assign-employee-roles.dto";
 import { CreateEmployeeDto } from "./dto/create-employee.dto";
@@ -28,8 +29,6 @@ import { QueryEmployeesDto } from "./dto/query-employees.dto";
 import { UpdateEmployeeStatusDto } from "./dto/update-employee-status.dto";
 import { UpdateEmployeeDto } from "./dto/update-employee.dto";
 import { EmployeeService } from "./employee.service";
-
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 @ApiTags("Employees")
 @ApiBearerAuth()
@@ -49,6 +48,8 @@ export class EmployeeController {
   @Post()
   @ApiOperation({
     summary: "Create employee for a business",
+    description:
+      "Adds a new employee to the selected business. Use this when a staff member needs access to the business account and should appear in employee records.",
   })
   create(
     @CurrentUser() currentUser: CurrentUserPayload,
@@ -62,6 +63,8 @@ export class EmployeeController {
   @Get()
   @ApiOperation({
     summary: "Get business employees",
+    description:
+      "Shows the employees that belong to the selected business. The list can be filtered or paged so an administrator can quickly find the right person.",
   })
   findAll(
     @Param("businessId", ParseUUIDPipe) businessId: string,
@@ -74,6 +77,8 @@ export class EmployeeController {
   @Get(":employeeId")
   @ApiOperation({
     summary: "Get single employee",
+    description:
+      "Shows the saved profile and business access information for one employee. Use this before reviewing, editing, or changing that employee's access.",
   })
   findOne(
     @Param("businessId", ParseUUIDPipe) businessId: string,
@@ -86,6 +91,8 @@ export class EmployeeController {
   @Patch(":employeeId")
   @ApiOperation({
     summary: "Update employee",
+    description:
+      "Updates the selected employee's saved details. Use this when correcting profile information or changing business-specific employee data.",
   })
   update(
     @CurrentUser() currentUser: CurrentUserPayload,
@@ -105,6 +112,8 @@ export class EmployeeController {
   @Patch(":employeeId/status")
   @ApiOperation({
     summary: "Update employee status",
+    description:
+      "Changes whether the selected employee is active for the business. Use this when temporarily disabling or restoring an employee's access.",
   })
   updateStatus(
     @CurrentUser() currentUser: CurrentUserPayload,
@@ -124,6 +133,8 @@ export class EmployeeController {
   @Put(":employeeId/roles")
   @ApiOperation({
     summary: "Replace employee roles for this business",
+    description:
+      "Replaces the employee's current roles for this business with the new role list in the request. Use this when an employee's responsibilities or access level changes.",
   })
   replaceRoles(
     @CurrentUser() currentUser: CurrentUserPayload,
@@ -143,6 +154,8 @@ export class EmployeeController {
   @Delete(":employeeId")
   @ApiOperation({
     summary: "Delete employee",
+    description:
+      "Removes the selected employee from the business records. Use this when the person should no longer be managed as an employee of this business.",
   })
   remove(
     @CurrentUser() currentUser: CurrentUserPayload,

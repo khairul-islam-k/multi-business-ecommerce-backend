@@ -1,5 +1,5 @@
-import { BadRequestException } from "@nestjs/common";
 import { describe, expect, it } from "@jest/globals";
+import { BadRequestException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
 import {

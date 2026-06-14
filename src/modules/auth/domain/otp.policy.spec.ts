@@ -1,5 +1,5 @@
-import { BadRequestException } from "@nestjs/common";
 import { describe, expect, it, jest } from "@jest/globals";
+import { BadRequestException } from "@nestjs/common";
 
 import { OtpPolicy } from "./otp.policy";
 

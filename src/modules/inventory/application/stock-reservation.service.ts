@@ -11,9 +11,9 @@ import {
   WarehouseStatus,
 } from "@prisma/client";
 
+import { buildStockItemKey } from "../domain/stock-item-key";
 import { normalizeOptionalText } from "../../../common/text/normalizers";
 import { StockItemRef } from "../common/inventory.types";
-import { buildStockItemKey } from "../domain/stock-item-key";
 
 @Injectable()
 export class StockReservationService {

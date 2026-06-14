@@ -80,12 +80,12 @@ model Supplier {
 }
 
 model SupplierProductMap {
-  id         String @id @default(uuid()) @db.Uuid
-  businessId String @map("business_id") @db.Uuid
-  supplierId String @map("supplier_id") @db.Uuid
-  productId  String @map("product_id") @db.Uuid
+  id         String  @id @default(uuid()) @db.Uuid
+  businessId String  @map("business_id") @db.Uuid
+  supplierId String  @map("supplier_id") @db.Uuid
+  productId  String  @map("product_id") @db.Uuid
   variantId  String? @map("variant_id") @db.Uuid
-  itemKey    String @map("item_key") @db.VarChar(80)
+  itemKey    String  @map("item_key") @db.VarChar(80)
 
   supplierSku       String?                  @map("supplier_sku") @db.VarChar(100)
   lastPurchasePrice Decimal?                 @map("last_purchase_price") @db.Decimal(12, 2)
@@ -152,9 +152,9 @@ model SupplierPurchaseOrder {
 }
 
 model SupplierPurchaseOrderItem {
-  id              String @id @default(uuid()) @db.Uuid
-  purchaseOrderId String @map("purchase_order_id") @db.Uuid
-  productId       String @map("product_id") @db.Uuid
+  id              String  @id @default(uuid()) @db.Uuid
+  purchaseOrderId String  @map("purchase_order_id") @db.Uuid
+  productId       String  @map("product_id") @db.Uuid
   variantId       String? @map("variant_id") @db.Uuid
 
   quantityOrdered  Decimal @map("quantity_ordered") @db.Decimal(14, 3)
@@ -224,9 +224,9 @@ model SupplierInvoice {
 }
 
 model SupplierInvoiceItem {
-  id                String @id @default(uuid()) @db.Uuid
-  supplierInvoiceId String @map("supplier_invoice_id") @db.Uuid
-  productId         String @map("product_id") @db.Uuid
+  id                String  @id @default(uuid()) @db.Uuid
+  supplierInvoiceId String  @map("supplier_invoice_id") @db.Uuid
+  productId         String  @map("product_id") @db.Uuid
   variantId         String? @map("variant_id") @db.Uuid
 
   quantity       Decimal @db.Decimal(14, 3)
@@ -318,9 +318,9 @@ model SupplierPurchaseReturn {
 }
 
 model SupplierPurchaseReturnItem {
-  id               String @id @default(uuid()) @db.Uuid
-  purchaseReturnId String @map("purchase_return_id") @db.Uuid
-  productId        String @map("product_id") @db.Uuid
+  id               String  @id @default(uuid()) @db.Uuid
+  purchaseReturnId String  @map("purchase_return_id") @db.Uuid
+  productId        String  @map("product_id") @db.Uuid
   variantId        String? @map("variant_id") @db.Uuid
 
   quantity       Decimal @db.Decimal(14, 3)

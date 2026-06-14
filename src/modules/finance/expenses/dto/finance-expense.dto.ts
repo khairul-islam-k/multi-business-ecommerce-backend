@@ -1,3 +1,8 @@
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import {
+  FinanceExpenseCategoryStatus,
+  FinanceExpenseStatus,
+} from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsDate,
@@ -10,12 +15,6 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
-
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import {
-  FinanceExpenseCategoryStatus,
-  FinanceExpenseStatus,
-} from "@prisma/client";
 
 export class CreateExpenseCategoryDto {
   @ApiProperty({ example: "Office Rent" })

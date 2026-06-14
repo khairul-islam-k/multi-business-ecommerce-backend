@@ -1,12 +1,3 @@
-import * as argon2 from "argon2";
-import {
-  BusinessMemberStatus,
-  BusinessStatus,
-  OtpPurpose,
-  SystemUser,
-  SystemUserStatus,
-  SystemUserType,
-} from "@prisma/client";
 import {
   BadRequestException,
   ConflictException,
@@ -16,34 +7,39 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-
-import { normalizeEmail } from "../../common/text/normalizers";
-import { apiResponse } from "../../common/utils/api-response.util";
+import {
+  BusinessMemberStatus,
+  BusinessStatus,
+  OtpPurpose,
+  SystemUser,
+  SystemUserStatus,
+  SystemUserType,
+} from "@prisma/client";
+import * as argon2 from "argon2";
 
 import type { CurrentUserPayload } from "./decorators/current-user.decorator";
-
+import { ForgotPasswordDto } from "./dto/forgot-password.dto";
+import { LoginDto } from "./dto/login.dto";
+import { LogoutDto } from "./dto/logout.dto";
+import { RefreshTokenDto } from "./dto/refresh-token.dto";
+import { RegisterDto } from "./dto/register.dto";
+import { RequestEmailChangeOrVerificationDto } from "./dto/request-email-change-or-verification.dto";
+import { ResetForgotPasswordDto } from "./dto/reset-forgot-password.dto";
+import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { SelectBusinessDto } from "./dto/select-business.dto";
+import { UpdateUserDto } from "./dto/update-user.dto";
+import { VerifyChangeEmailDto } from "./dto/verify-email-change.dto";
+import { VerifyEmailDto } from "./dto/verify-email.dto";
+import { VerifyResetOtpDto } from "./dto/verify-reset-email.dto";
 import { OtpPolicy } from "./domain/otp.policy";
-
-import { MailService } from "../mail/mail.service";
+import { SessionService } from "./application/session.service";
 import { TokenService } from "./application/token.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { BusinessService } from "../business/business.service";
-import { SessionService } from "./application/session.service";
+import { MailService } from "../mail/mail.service";
 import { PackageSubscriptionService } from "../packages/package-subscription.service";
-
-import { LoginDto } from "./dto/login.dto";
-import { LogoutDto } from "./dto/logout.dto";
-import { RegisterDto } from "./dto/register.dto";
-import { UpdateUserDto } from "./dto/update-user.dto";
-import { VerifyEmailDto } from "./dto/verify-email.dto";
-import { RefreshTokenDto } from "./dto/refresh-token.dto";
-import { ResetPasswordDto } from "./dto/reset-password.dto";
-import { ForgotPasswordDto } from "./dto/forgot-password.dto";
-import { SelectBusinessDto } from "./dto/select-business.dto";
-import { VerifyResetOtpDto } from "./dto/verify-reset-email.dto";
-import { VerifyChangeEmailDto } from "./dto/verify-email-change.dto";
-import { ResetForgotPasswordDto } from "./dto/reset-forgot-password.dto";
-import { RequestEmailChangeOrVerificationDto } from "./dto/request-email-change-or-verification.dto";
+import { normalizeEmail } from "../../common/text/normalizers";
+import { apiResponse } from "../../common/utils/api-response.util";
 
 type AuthBusiness = {
   id: string;
@@ -84,7 +80,9 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new ConflictException("Email already exists.");
+      throw new ConflictException(
+        "This email address is already linked to an account. Please sign in or use another email address.",
+      );
     }
 
     const otp = this.otpPolicy.generateOtp();
@@ -171,7 +169,10 @@ export class AuthService {
     }
 
     if (user.emailVerifiedAt) {
-      return apiResponse(null, "Email is already verified.");
+      return apiResponse(
+        null,
+        "This email address is already verified. No additional verification step is needed.",
+      );
     }
 
     const verification = await this.prisma.systemEmailVerification.findFirst({
@@ -189,7 +190,9 @@ export class AuthService {
     });
 
     if (!verification) {
-      throw new BadRequestException("OTP is invalid or has been expired.");
+      throw new BadRequestException(
+        "The one-time password is invalid or has expired. Please request a new code and try again.",
+      );
     }
 
     this.otpPolicy.assertCanAttempt(verification.attemptCount);
@@ -211,7 +214,9 @@ export class AuthService {
         },
       });
 
-      throw new BadRequestException("Invalid OTP.");
+      throw new BadRequestException(
+        "The one-time password is incorrect. Please check the code and try again.",
+      );
     }
 
     await this.prisma.$transaction([
@@ -287,7 +292,7 @@ export class AuthService {
         email,
         expiresAt: verification.expiresAt,
       },
-      "A new OTP has been sent to email address.",
+      "A new one-time password has been sent to this email address. Please use it before it expires.",
     );
   }
 
@@ -309,7 +314,9 @@ export class AuthService {
         exists: Boolean(user),
         available: !user,
       },
-      user ? "Email already exists." : "Email is available.",
+      user
+        ? "This email address is already linked to an account. Please sign in or use another email address."
+        : "This email address is available and can be used for a new account.",
     );
   }
 
@@ -333,12 +340,14 @@ export class AuthService {
     );
 
     if (!isPasswordMatched) {
-      throw new UnauthorizedException("Invalid email or password.");
+      throw new UnauthorizedException(
+        "The email address or password is incorrect. Please check your details and try again.",
+      );
     }
 
     if (!user.emailVerifiedAt) {
       throw new UnauthorizedException(
-        "Unverified account. Verify your account to access.",
+        "This account has not verified its email address yet. Please verify the email before signing in.",
       );
     }
 
@@ -360,7 +369,7 @@ export class AuthService {
           activeSubscription: null,
           user: safeUser,
         },
-        "Authenticated.",
+        "You have signed in successfully. Your administrator session is ready to use.",
       );
     }
 
@@ -393,7 +402,7 @@ export class AuthService {
         activeSubscription,
         user: safeUser,
       },
-      "Authenticated.",
+      "You have signed in successfully. Your workspace is ready with the selected business and subscription details.",
     );
   }
 
@@ -437,7 +446,9 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new ConflictException("Email already exists.");
+      throw new ConflictException(
+        "This email address is already linked to another account. Please choose a different email address.",
+      );
     }
 
     const otp = this.otpPolicy.generateOtp();
@@ -473,7 +484,7 @@ export class AuthService {
         email: newEmail,
         expiresAt: verification.expiresAt,
       },
-      "An OPT has been sent to your email address.",
+      "A one-time password has been sent to your new email address. Please verify it before the email change can be completed.",
     );
   }
 
@@ -512,7 +523,9 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new ConflictException("Email already exists.");
+      throw new ConflictException(
+        "This email address is already linked to another account. Please choose a different email address.",
+      );
     }
 
     const verification = await this.prisma.systemEmailVerification.findFirst({
@@ -537,13 +550,17 @@ export class AuthService {
     });
 
     if (!verification) {
-      throw new BadRequestException("OTP is invalid or has been expired.");
+      throw new BadRequestException(
+        "The one-time password is invalid or has expired. Please request a new code and try again.",
+      );
     }
 
     const isOtpValid = await this.verifyPassword(verification.otpHash, dto.otp);
 
     if (!isOtpValid) {
-      throw new BadRequestException("Invalid OTP.");
+      throw new BadRequestException(
+        "The one-time password is incorrect. Please check the code and try again.",
+      );
     }
 
     const updatedUser = await this.prisma.$transaction(async (tx) => {
@@ -579,7 +596,10 @@ export class AuthService {
       return updated;
     });
 
-    return apiResponse(updatedUser, "Email has been updated.");
+    return apiResponse(
+      updatedUser,
+      "Your email address has been updated successfully and is now verified for this account.",
+    );
   }
 
   async requestForgotPasswordOtp(dto: ForgotPasswordDto) {
@@ -625,7 +645,7 @@ export class AuthService {
 
     return apiResponse(
       { success: true },
-      "An OPT has been sent to your email.",
+      "A password reset one-time password has been sent to your email address. Please use it before it expires.",
     );
   }
 
@@ -664,7 +684,9 @@ export class AuthService {
     });
 
     if (!verification) {
-      throw new BadRequestException("OTP is invalid or has been expired.");
+      throw new BadRequestException(
+        "The one-time password is invalid or has expired. Please request a new code and try again.",
+      );
     }
 
     const resetRecord = await this.prisma.systemPasswordReset.findFirst({
@@ -769,7 +791,9 @@ export class AuthService {
     });
 
     if (!resetRecord) {
-      throw new BadRequestException("OTP is invalid or has been expired.");
+      throw new BadRequestException(
+        "The one-time password is invalid or has expired. Please request a new password reset code.",
+      );
     }
 
     this.otpPolicy.assertCanAttempt(
@@ -794,7 +818,9 @@ export class AuthService {
         },
       });
 
-      throw new BadRequestException("Invalid OTP.");
+      throw new BadRequestException(
+        "The one-time password is incorrect. Please check the code and try again.",
+      );
     }
 
     const verification = await this.prisma.systemEmailVerification.create({
@@ -865,7 +891,10 @@ export class AuthService {
       },
     });
 
-    return apiResponse(updatedUser, "Password has been reset successfully.");
+    return apiResponse(
+      updatedUser,
+      "Your password has been changed successfully. Please use the new password the next time you sign in.",
+    );
   }
 
   async refresh(dto: RefreshTokenDto) {
@@ -874,19 +903,25 @@ export class AuthService {
     const session = await this.sessions.findByRefreshToken(dto.refreshToken);
 
     if (!session) {
-      throw new UnauthorizedException("Invalid refresh token");
+      throw new UnauthorizedException(
+        "This session could not be refreshed. Please sign in again.",
+      );
     }
 
     if (session.revokedAt) {
       await this.sessions.revokeAllUserSessions(session.userId);
 
-      throw new UnauthorizedException("Refresh token reuse detected");
+      throw new UnauthorizedException(
+        "This session token was already used. For your safety, all sessions have been signed out. Please sign in again.",
+      );
     }
 
     if (session.expiresAt <= now) {
       await this.sessions.revokeSession(session.id, now);
 
-      throw new UnauthorizedException("Refresh token has expired");
+      throw new UnauthorizedException(
+        "This session has expired. Please sign in again to continue.",
+      );
     }
 
     const user = session.user;
@@ -919,12 +954,15 @@ export class AuthService {
 
     const { passwordHash, ...safeUser } = user;
 
-    return apiResponse({
-      accessToken,
-      refreshToken: newRefreshToken,
-      selectedBusiness,
-      user: safeUser,
-    });
+    return apiResponse(
+      {
+        accessToken,
+        refreshToken: newRefreshToken,
+        selectedBusiness,
+        user: safeUser,
+      },
+      "Your session has been refreshed successfully. You can continue using the app without signing in again.",
+    );
   }
 
   async selectBusiness(userId: string, dto: SelectBusinessDto) {
@@ -962,11 +1000,14 @@ export class AuthService {
       business.id,
     );
 
-    return apiResponse({
-      accessToken,
-      selectedBusiness: business,
-      user,
-    });
+    return apiResponse(
+      {
+        accessToken,
+        selectedBusiness: business,
+        user,
+      },
+      "The selected business is now active for your session. Future requests will use this business context.",
+    );
   }
 
   async getUser(currentUserPayload: CurrentUserPayload) {
@@ -986,12 +1027,15 @@ export class AuthService {
     const { passwordHash: _, ...safeUser } = user;
 
     if (user.type === SystemUserType.ADMIN) {
-      return apiResponse({
-        user: safeUser,
-        activeSubscription: null,
-        selectedBusiness: null,
-        businesses: [],
-      });
+      return apiResponse(
+        {
+          user: safeUser,
+          activeSubscription: null,
+          selectedBusiness: null,
+          businesses: [],
+        },
+        "Your administrator profile has been loaded successfully.",
+      );
     }
 
     const businesses = await this.findAccessibleBusinesses(user.id);
@@ -1020,12 +1064,15 @@ export class AuthService {
       }
     }
 
-    return apiResponse({
-      user: safeUser,
-      activeSubscription,
-      selectedBusiness,
-      businesses,
-    });
+    return apiResponse(
+      {
+        user: safeUser,
+        activeSubscription,
+        selectedBusiness,
+        businesses,
+      },
+      "Your profile and business access details have been loaded successfully.",
+    );
   }
 
   async updateUser(userId: string, dto: UpdateUserDto) {
@@ -1059,7 +1106,9 @@ export class AuthService {
       });
 
       if (phoneExists) {
-        throw new ConflictException("Phone already exists.");
+        throw new ConflictException(
+          "This phone number is already linked to another account. Please use a different phone number.",
+        );
       }
     }
 
@@ -1093,19 +1142,28 @@ export class AuthService {
       },
     });
 
-    return apiResponse(updatedUser, "Profile has been updated successfully.");
+    return apiResponse(
+      updatedUser,
+      "Your profile has been updated successfully. The latest saved profile information is included in this response.",
+    );
   }
 
   async logout(dto: LogoutDto, userId?: string) {
     await this.sessions.revokeByRefreshToken(dto.refreshToken, userId);
 
-    return apiResponse(null, "Logged out successfully");
+    return apiResponse(
+      null,
+      "You have been signed out from this session successfully.",
+    );
   }
 
   async logoutAll(userId: string) {
     await this.sessions.revokeAllUserSessions(userId);
 
-    return apiResponse(null, "Logged out from all devices successfully");
+    return apiResponse(
+      null,
+      "You have been signed out from all devices successfully. Any device will need to sign in again before using the account.",
+    );
   }
 
   private async resolveSelectedBusiness(
@@ -1217,15 +1275,21 @@ export class AuthService {
 
   private assertActiveUser(user: Pick<SystemUser, "status">) {
     if (user.status === SystemUserStatus.SUSPENDED) {
-      throw new ForbiddenException("Your account has been suspended");
+      throw new ForbiddenException(
+        "Your account has been suspended. Please contact support or an administrator for help.",
+      );
     }
 
     if (user.status === SystemUserStatus.INACTIVE) {
-      throw new ForbiddenException("Your account is inactive");
+      throw new ForbiddenException(
+        "Your account is inactive. Please complete the required activation steps before signing in.",
+      );
     }
 
     if (user.status !== SystemUserStatus.ACTIVE) {
-      throw new ForbiddenException("User account is not active");
+      throw new ForbiddenException(
+        "This user account is not active and cannot access the application yet.",
+      );
     }
   }
 

@@ -2,15 +2,15 @@ import { Injectable } from "@nestjs/common";
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { CreatePosSaleDto } from "../pos/dto/pos-sale.dto";
-import { CreateOrderService } from "./application/create-order.service";
-import { OrderPaymentService } from "./application/order-payment.service";
-import { OrderQueryService } from "./application/order-query.service";
-import { OrderStatusService } from "./application/order-status.service";
 import {
   AddOrderPaymentDto,
   CreateOrderDto,
   QueryOrderDto,
 } from "./dto/order.dto";
+import { CreateOrderService } from "./application/create-order.service";
+import { OrderPaymentService } from "./application/order-payment.service";
+import { OrderQueryService } from "./application/order-query.service";
+import { OrderStatusService } from "./application/order-status.service";
 
 @Injectable()
 export class OrderService {

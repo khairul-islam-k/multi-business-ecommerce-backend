@@ -1,10 +1,10 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-
-import { PrismaService } from "../../prisma/prisma.service";
 import { BusinessStatus, Prisma, SystemUserType } from "@prisma/client";
+
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { QueryTenantDto } from "./dto/query-tenant.dto";
 import { UpdateTenantStatusDto } from "./dto/update-tenant-status.dto";
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
+import { PrismaService } from "../../prisma/prisma.service";
 import {
   apiResponse,
   paginatedResponse,

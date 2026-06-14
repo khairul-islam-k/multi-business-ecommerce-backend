@@ -1,5 +1,5 @@
-import { Type } from "class-transformer";
 import { ApiProperty } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 import { IsArray, ValidateNested } from "class-validator";
 
 import { PermissionItemDto } from "./permission-item.dto";

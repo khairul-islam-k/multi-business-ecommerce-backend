@@ -1,5 +1,3 @@
-import { Reflector } from "@nestjs/core";
-import { isUUID } from "class-validator";
 import {
   BadRequestException,
   CanActivate,
@@ -8,14 +6,16 @@ import {
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+import { SystemUserType } from "@prisma/client";
+import { isUUID } from "class-validator";
 
-import { PermissionService } from "../permission.service";
-import type { AuthenticatedRequest } from "../../auth/strategies/jwt.strategy";
 import {
   REQUIRED_PERMISSION_KEY,
   RequiredPermissionMeta,
 } from "../decorators/require-permission.decorator";
-import { SystemUserType } from "@prisma/client";
+import { PermissionService } from "../permission.service";
+import type { AuthenticatedRequest } from "../../auth/strategies/jwt.strategy";
 
 @Injectable()
 export class PermissionGuard implements CanActivate {

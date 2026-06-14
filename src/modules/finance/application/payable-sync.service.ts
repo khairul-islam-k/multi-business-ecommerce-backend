@@ -10,10 +10,10 @@ import {
   Prisma,
 } from "@prisma/client";
 
-import { normalizeOptionalText } from "../../../common/text/normalizers";
 import { toMoney } from "../domain/money";
 import { getPayableStatus } from "../domain/payable-status.policy";
 import { FinanceCodeService } from "./finance-code.service";
+import { normalizeOptionalText } from "../../../common/text/normalizers";
 
 @Injectable()
 export class PayableSyncService {

@@ -1,3 +1,5 @@
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import { WarehouseStatus } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsEnum,
@@ -7,8 +9,6 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { WarehouseStatus } from "@prisma/client";
 
 import { CatalogSortOrder } from "../../../product-catalog/common/dto/query-catalog.dto";
 

@@ -1,8 +1,8 @@
 import { Injectable, UnauthorizedException } from "@nestjs/common";
 
+import { PrismaService } from "../../../prisma/prisma.service";
 import { TokenService } from "./token.service";
 import { JwtPayload } from "../strategies/jwt.strategy";
-import { PrismaService } from "../../../prisma/prisma.service";
 
 @Injectable()
 export class SessionService {
@@ -69,7 +69,9 @@ export class SessionService {
       });
 
       if (revokedSession.count !== 1) {
-        throw new UnauthorizedException("Refresh token has already been used");
+        throw new UnauthorizedException(
+          "This session token has already been used. Please sign in again to continue safely.",
+        );
       }
 
       await tx.systemSession.create({
@@ -105,7 +107,9 @@ export class SessionService {
     });
 
     if (result.count !== 1) {
-      throw new UnauthorizedException("Invalid refresh token");
+      throw new UnauthorizedException(
+        "This session could not be matched to an active sign-in. Please sign in again before switching businesses.",
+      );
     }
   }
 

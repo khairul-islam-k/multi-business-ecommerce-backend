@@ -1,3 +1,5 @@
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import { ProductVariantStatus } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
@@ -13,8 +15,7 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { ProductVariantStatus } from "@prisma/client";
+
 import { ProductImagesDto } from "../../common/dto/product-media.dto";
 
 export class ProductVariantAttributeInputDto {

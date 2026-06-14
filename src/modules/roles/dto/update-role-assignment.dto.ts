@@ -1,6 +1,6 @@
-import { Type } from "class-transformer";
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { UserRoleMapStatus } from "@prisma/client";
+import { Type } from "class-transformer";
 import { IsDate, IsEnum, IsOptional } from "class-validator";
 
 export class UpdateRoleAssignmentDto {

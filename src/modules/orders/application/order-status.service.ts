@@ -8,10 +8,7 @@ import {
   Prisma,
 } from "@prisma/client";
 
-import { apiResponse } from "../../../common/utils/api-response.util";
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
-import { PrismaService } from "../../../prisma/prisma.service";
 import {
   assertCanCancelOrder,
   assertCanDeliverOrder,
@@ -19,6 +16,9 @@ import {
 } from "../domain/order-status-machine";
 import { OrderRepository } from "../infrastructure/order.repository";
 import { ORDER_INCLUDE } from "../infrastructure/order.selects";
+import { PrismaService } from "../../../prisma/prisma.service";
+import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
+import { apiResponse } from "../../../common/utils/api-response.util";
 
 @Injectable()
 export class OrderStatusService {

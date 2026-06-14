@@ -14,10 +14,11 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { PermissionAction, RbacFeature } from "@prisma/client";
 
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import { RequirePermission } from "../../permissions/decorators/require-permission.decorator";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard";
 import { BusinessGuard } from "../../business/guards/business.guard";
 import { SubscriptionGuard } from "../../packages/guards/subscription.guard";
-import { RequirePermission } from "../../permissions/decorators/require-permission.decorator";
 import { PermissionGuard } from "../../permissions/guards/permission.guard";
 import {
   AddFinanceAccountMoneyDto,
@@ -28,8 +29,6 @@ import {
 } from "./dto/finance-account.dto";
 import { FinanceAccountService } from "./finance-account.service";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-
 @ApiTags("Finance Accounts")
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, SubscriptionGuard, BusinessGuard, PermissionGuard)
@@ -39,7 +38,11 @@ export class FinanceAccountController {
 
   @RequirePermission(RbacFeature.FINANCE_MANAGEMENT, PermissionAction.CREATE)
   @Post()
-  @ApiOperation({ summary: "Create finance account" })
+  @ApiOperation({
+    summary: "Create finance account",
+    description:
+      "Creates finance account using the information in the request. Use this when a staff member wants to add a new record and receive the saved details back.",
+  })
   create(
     @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
@@ -50,7 +53,11 @@ export class FinanceAccountController {
 
   @RequirePermission(RbacFeature.FINANCE_MANAGEMENT, PermissionAction.READ)
   @Get()
-  @ApiOperation({ summary: "Get finance accounts" })
+  @ApiOperation({
+    summary: "Get finance accounts",
+    description:
+      "Shows finance accounts that the current user is allowed to view. Use this to review saved information before making a decision or change.",
+  })
   findAll(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Query() query: QueryFinanceAccountDto,
@@ -60,7 +67,11 @@ export class FinanceAccountController {
 
   @RequirePermission(RbacFeature.FINANCE_MANAGEMENT, PermissionAction.READ)
   @Get(":accountId")
-  @ApiOperation({ summary: "Get finance account" })
+  @ApiOperation({
+    summary: "Get finance account",
+    description:
+      "Shows finance account that the current user is allowed to view. Use this to review saved information before making a decision or change.",
+  })
   findOne(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("accountId", ParseUUIDPipe) accountId: string,
@@ -70,7 +81,11 @@ export class FinanceAccountController {
 
   @RequirePermission(RbacFeature.FINANCE_MANAGEMENT, PermissionAction.READ)
   @Get(":accountId/transactions")
-  @ApiOperation({ summary: "Get finance account transactions" })
+  @ApiOperation({
+    summary: "Get finance account transactions",
+    description:
+      "Shows finance account transactions that the current user is allowed to view. Use this to review saved information before making a decision or change.",
+  })
   findTransactions(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("accountId", ParseUUIDPipe) accountId: string,
@@ -81,7 +96,11 @@ export class FinanceAccountController {
 
   @RequirePermission(RbacFeature.FINANCE_MANAGEMENT, PermissionAction.UPDATE)
   @Post(":accountId/add-money")
-  @ApiOperation({ summary: "Add money to finance account" })
+  @ApiOperation({
+    summary: "Add money to finance account",
+    description:
+      "Adds money to finance account to the selected record and returns the updated information.",
+  })
   addMoney(
     @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
@@ -93,7 +112,11 @@ export class FinanceAccountController {
 
   @RequirePermission(RbacFeature.FINANCE_MANAGEMENT, PermissionAction.UPDATE)
   @Patch(":accountId")
-  @ApiOperation({ summary: "Update finance account" })
+  @ApiOperation({
+    summary: "Update finance account",
+    description:
+      "Updates finance account with the new information provided. Only the fields sent in the request are changed.",
+  })
   update(
     @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
@@ -105,7 +128,11 @@ export class FinanceAccountController {
 
   @RequirePermission(RbacFeature.FINANCE_MANAGEMENT, PermissionAction.DELETE)
   @Delete(":accountId")
-  @ApiOperation({ summary: "Delete finance account" })
+  @ApiOperation({
+    summary: "Delete finance account",
+    description:
+      "Deletes finance account from normal day-to-day use. Records may be kept internally when the system needs history for reporting or auditing.",
+  })
   remove(
     @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,

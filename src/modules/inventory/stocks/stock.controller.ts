@@ -13,10 +13,10 @@ import { PermissionAction, RbacFeature } from "@prisma/client";
 
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import { RequirePermission } from "../../permissions/decorators/require-permission.decorator";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard";
 import { BusinessGuard } from "../../business/guards/business.guard";
 import { SubscriptionGuard } from "../../packages/guards/subscription.guard";
-import { RequirePermission } from "../../permissions/decorators/require-permission.decorator";
 import { PermissionGuard } from "../../permissions/guards/permission.guard";
 import {
   FulfillOrderAllocationDto,
@@ -36,7 +36,11 @@ export class StockController {
 
   @RequirePermission(RbacFeature.INVENTORY_MANAGEMENT, PermissionAction.READ)
   @Get()
-  @ApiOperation({ summary: "Get stocks" })
+  @ApiOperation({
+    summary: "Get stocks",
+    description:
+      "Shows stocks that the current user is allowed to view. Use this to review saved information before making a decision or change.",
+  })
   findAll(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Query() query: QueryStockDto,
@@ -46,7 +50,11 @@ export class StockController {
 
   @RequirePermission(RbacFeature.INVENTORY_MANAGEMENT, PermissionAction.READ)
   @Get("movements")
-  @ApiOperation({ summary: "Get stock movements" })
+  @ApiOperation({
+    summary: "Get stock movements",
+    description:
+      "Shows stock movements that the current user is allowed to view. Use this to review saved information before making a decision or change.",
+  })
   findMovements(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Query() query: QueryStockDto,
@@ -56,7 +64,11 @@ export class StockController {
 
   @RequirePermission(RbacFeature.INVENTORY_MANAGEMENT, PermissionAction.READ)
   @Get(":stockId")
-  @ApiOperation({ summary: "Get stock" })
+  @ApiOperation({
+    summary: "Get stock",
+    description:
+      "Shows stock that the current user is allowed to view. Use this to review saved information before making a decision or change.",
+  })
   findOne(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("stockId", ParseUUIDPipe) stockId: string,
@@ -66,7 +78,11 @@ export class StockController {
 
   @RequirePermission(RbacFeature.INVENTORY_MANAGEMENT, PermissionAction.UPDATE)
   @Patch("orders/reserve")
-  @ApiOperation({ summary: "Reserve stock for order item" })
+  @ApiOperation({
+    summary: "Reserve stock for order item",
+    description:
+      "Reserve stock for order item. Use this endpoint when staff need this business action from the API.",
+  })
   reserveForOrder(
     @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
@@ -77,7 +93,11 @@ export class StockController {
 
   @RequirePermission(RbacFeature.INVENTORY_MANAGEMENT, PermissionAction.UPDATE)
   @Patch("orders/release")
-  @ApiOperation({ summary: "Release order stock reservation" })
+  @ApiOperation({
+    summary: "Release order stock reservation",
+    description:
+      "Release order stock reservation. Use this endpoint when staff need this business action from the API.",
+  })
   releaseOrderAllocation(
     @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
@@ -88,7 +108,11 @@ export class StockController {
 
   @RequirePermission(RbacFeature.INVENTORY_MANAGEMENT, PermissionAction.UPDATE)
   @Patch("orders/fulfill")
-  @ApiOperation({ summary: "Fulfill order stock allocation" })
+  @ApiOperation({
+    summary: "Fulfill order stock allocation",
+    description:
+      "Fulfill order stock allocation. Use this endpoint when staff need this business action from the API.",
+  })
   fulfillOrderAllocation(
     @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
@@ -99,7 +123,11 @@ export class StockController {
 
   @RequirePermission(RbacFeature.INVENTORY_MANAGEMENT, PermissionAction.UPDATE)
   @Patch(":stockId/alert")
-  @ApiOperation({ summary: "Update low stock alert" })
+  @ApiOperation({
+    summary: "Update low stock alert",
+    description:
+      "Updates low stock alert with the new information provided. Only the fields sent in the request are changed.",
+  })
   updateAlert(
     @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,

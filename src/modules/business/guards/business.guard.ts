@@ -1,5 +1,3 @@
-import { isUUID } from "class-validator";
-
 import {
   BadRequestException,
   CanActivate,
@@ -10,14 +8,14 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { SystemUserType } from "@prisma/client";
+import { isUUID } from "class-validator";
 
 import {
   REQUIRED_PERMISSION_KEY,
   RequiredPermissionMeta,
 } from "../../permissions/decorators/require-permission.decorator";
-import { BusinessAccessService } from "../../access/services/business-access.service";
 import { SKIP_BUSINESS_GUARD_KEY } from "../decorators/skip-business-guard.decorator";
-
+import { BusinessAccessService } from "../../access/services/business-access.service";
 import type { AuthenticatedRequest } from "../../auth/strategies/jwt.strategy";
 
 @Injectable()

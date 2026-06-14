@@ -1,3 +1,5 @@
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { SystemUserStatus } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   ArrayUnique,
@@ -12,9 +14,6 @@ import {
   MinLength,
   ValidateNested,
 } from "class-validator";
-
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { SystemUserStatus } from "@prisma/client";
 
 import { EmployeeProfileDto } from "./employee-profile.dto";
 

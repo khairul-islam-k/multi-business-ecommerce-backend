@@ -1,3 +1,10 @@
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import {
+  FinancePartyType,
+  FinancePayableStatus,
+  FinanceSourceType,
+  SupplierPaymentMethod,
+} from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsEnum,
@@ -9,14 +16,6 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
-
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import {
-  FinancePartyType,
-  FinancePayableStatus,
-  FinanceSourceType,
-  SupplierPaymentMethod,
-} from "@prisma/client";
 
 export class QueryFinancePayableDto {
   @ApiPropertyOptional({ example: 1 })

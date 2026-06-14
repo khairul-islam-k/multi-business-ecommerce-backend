@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
-import { SystemUserType } from "@prisma/client";
 import { describe, expect, it, jest } from "@jest/globals";
+import { SystemUserType } from "@prisma/client";
+import { createHash } from "node:crypto";
 
 import { TokenService } from "./token.service";
 

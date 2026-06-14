@@ -1,5 +1,5 @@
-import { Prisma } from "@prisma/client";
 import { ConflictException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 
 export function isUniqueConstraintError(error: unknown) {
   return (

@@ -1,6 +1,6 @@
-import { IsEnum } from "class-validator";
 import { ApiProperty } from "@nestjs/swagger";
 import { PermissionAction, RbacFeature } from "@prisma/client";
+import { IsEnum } from "class-validator";
 
 export class PermissionItemDto {
   @ApiProperty({

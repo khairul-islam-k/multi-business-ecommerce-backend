@@ -1,3 +1,5 @@
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import { FinanceTaxStatus } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsEnum,
@@ -8,9 +10,6 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
-
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { FinanceTaxStatus } from "@prisma/client";
 
 export class CreateFinanceTaxDto {
   @ApiProperty({ example: "VAT 5%" })

@@ -10,9 +10,9 @@ import {
   Prisma,
 } from "@prisma/client";
 
-import { normalizeOptionalText } from "../../../common/text/normalizers";
-import { FinanceCodeService } from "./finance-code.service";
 import { assertPositiveMoney, toMoney } from "../domain/money";
+import { FinanceCodeService } from "./finance-code.service";
+import { normalizeOptionalText } from "../../../common/text/normalizers";
 
 @Injectable()
 export class AccountBalanceService {

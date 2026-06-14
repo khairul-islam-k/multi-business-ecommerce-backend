@@ -1,18 +1,18 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
-import { getPagination } from "../../../common/http/pagination.util";
-import {
-  resolveSort,
-  resolveSortDirection,
-} from "../../../common/http/sort.util";
-import { paginatedResponse } from "../../../common/utils/api-response.util";
 import {
   CustomerOrderSortBy,
   CustomerSortOrder,
   QueryCustomerOrderDto,
 } from "../dto/customer.dto";
 import { CustomerRepository } from "../infrastructure/customer.repository";
+import { getPagination } from "../../../common/http/pagination.util";
+import {
+  resolveSort,
+  resolveSortDirection,
+} from "../../../common/http/sort.util";
+import { paginatedResponse } from "../../../common/utils/api-response.util";
 
 const CUSTOMER_ORDER_SORTS = Object.values(CustomerOrderSortBy);
 

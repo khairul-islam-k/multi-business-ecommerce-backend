@@ -13,10 +13,10 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { PermissionAction, RbacFeature } from "@prisma/client";
 
+import { RequirePermission } from "../../permissions/decorators/require-permission.decorator";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard";
 import { BusinessGuard } from "../../business/guards/business.guard";
 import { SubscriptionGuard } from "../../packages/guards/subscription.guard";
-import { RequirePermission } from "../../permissions/decorators/require-permission.decorator";
 import { PermissionGuard } from "../../permissions/guards/permission.guard";
 import {
   CreateExpenseCategoryDto,
@@ -34,7 +34,11 @@ export class ExpenseCategoryController {
 
   @RequirePermission(RbacFeature.FINANCE_MANAGEMENT, PermissionAction.CREATE)
   @Post()
-  @ApiOperation({ summary: "Create expense category" })
+  @ApiOperation({
+    summary: "Create expense category",
+    description:
+      "Creates expense category using the information in the request. Use this when a staff member wants to add a new record and receive the saved details back.",
+  })
   create(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Body() dto: CreateExpenseCategoryDto,
@@ -44,7 +48,11 @@ export class ExpenseCategoryController {
 
   @RequirePermission(RbacFeature.FINANCE_MANAGEMENT, PermissionAction.READ)
   @Get()
-  @ApiOperation({ summary: "Get expense categories" })
+  @ApiOperation({
+    summary: "Get expense categories",
+    description:
+      "Shows expense categories that the current user is allowed to view. Use this to review saved information before making a decision or change.",
+  })
   findAll(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Query() query: QueryExpenseCategoryDto,
@@ -54,7 +62,11 @@ export class ExpenseCategoryController {
 
   @RequirePermission(RbacFeature.FINANCE_MANAGEMENT, PermissionAction.UPDATE)
   @Patch(":categoryId")
-  @ApiOperation({ summary: "Update expense category" })
+  @ApiOperation({
+    summary: "Update expense category",
+    description:
+      "Updates expense category with the new information provided. Only the fields sent in the request are changed.",
+  })
   update(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("categoryId", ParseUUIDPipe) categoryId: string,
@@ -65,7 +77,11 @@ export class ExpenseCategoryController {
 
   @RequirePermission(RbacFeature.FINANCE_MANAGEMENT, PermissionAction.DELETE)
   @Delete(":categoryId")
-  @ApiOperation({ summary: "Delete expense category" })
+  @ApiOperation({
+    summary: "Delete expense category",
+    description:
+      "Deletes expense category from normal day-to-day use. Records may be kept internally when the system needs history for reporting or auditing.",
+  })
   remove(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("categoryId", ParseUUIDPipe) categoryId: string,

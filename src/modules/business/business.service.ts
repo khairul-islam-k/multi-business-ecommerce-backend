@@ -11,20 +11,19 @@ import {
   SystemUserType,
 } from "@prisma/client";
 
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
+import { CreateBusinessDto } from "./dto/create-business.dto";
+import { QueryBusinessDto } from "./dto/query-business.dto";
+import { UpdateBusinessDto } from "./dto/update-business.dto";
+import { PrismaService } from "../../prisma/prisma.service";
+import { BusinessAccessService } from "../access/services/business-access.service";
+import { throwConflictOnUnique } from "../../common/database/prisma-error.util";
 import { BusinessAccessContext } from "../../common/request-context/request-context.types";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
-import { throwConflictOnUnique } from "../../common/database/prisma-error.util";
 import { generateRandomSlug } from "../../common/utils/slug-generator.util";
-import { PrismaService } from "../../prisma/prisma.service";
-import { BusinessAccessService } from "../access/services/business-access.service";
-import { CreateBusinessDto } from "./dto/create-business.dto";
-import { QueryBusinessDto } from "./dto/query-business.dto";
-import { UpdateBusinessDto } from "./dto/update-business.dto";
-
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 const BUSINESS_INCLUDE = {
   ownerUser: {

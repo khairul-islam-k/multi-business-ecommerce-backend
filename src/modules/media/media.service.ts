@@ -12,25 +12,25 @@ import {
   Prisma,
 } from "@prisma/client";
 
-import { PrismaService } from "../../prisma/prisma.service";
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
+import { DeleteMediaBulkDto } from "./dto/delete-media.dto";
+import { QueryMediaDto } from "./dto/query-media.dto";
+import { UploadMediaDto } from "./dto/upload-media.dto";
+import { PrismaService } from "../../prisma/prisma.service";
+import { PackageLimitService } from "../packages/package-limit.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
-import { QueryMediaDto } from "./dto/query-media.dto";
-import { UploadMediaDto } from "./dto/upload-media.dto";
-import { DeleteMediaBulkDto } from "./dto/delete-media.dto";
+import type { MediaLimits } from "./media.config";
 import {
   MEDIA_LIMITS,
   MEDIA_UPLOADER,
 } from "./uploaders/media-uploader.constants";
-import type { MediaLimits } from "./media.config";
 import type {
   MediaUploader,
   UploadableMediaFile,
 } from "./uploaders/media-uploader.types";
-import { PackageLimitService } from "../packages/package-limit.service";
 
 const SUPPORTED_IMAGE_MIME_TYPES = new Set([
   "image/gif",

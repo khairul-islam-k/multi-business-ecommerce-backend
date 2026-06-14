@@ -2,16 +2,16 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { OrderAddressType } from "@prisma/client";
 
 import {
+  CustomerAddressDto,
+  UpdateCustomerAddressDto,
+} from "../dto/customer.dto";
+import { shouldUseDefaultAddress } from "../domain/customer-address.policy";
+import { CustomerRepository } from "../infrastructure/customer.repository";
+import {
   normalizeOptionalText,
   normalizeRequiredText,
 } from "../../../common/text/normalizers";
 import { apiResponse } from "../../../common/utils/api-response.util";
-import { shouldUseDefaultAddress } from "../domain/customer-address.policy";
-import {
-  CustomerAddressDto,
-  UpdateCustomerAddressDto,
-} from "../dto/customer.dto";
-import { CustomerRepository } from "../infrastructure/customer.repository";
 
 @Injectable()
 export class CustomerAddressService {

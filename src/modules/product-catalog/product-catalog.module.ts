@@ -1,26 +1,27 @@
 import { Module } from "@nestjs/common";
 
+import { ProductAttributeService } from "./attributes/product-attribute.service";
+import { ProductBrandService } from "./brands/product-brand.service";
+import { ProductCategoryService } from "./categories/product-category.service";
+import { ProductCatalogLookupService } from "./common/product-catalog-lookup.service";
+import { ProductService } from "./products/product.service";
+import { ProductTagService } from "./tags/product-tag.service";
+import { ProductUnitService } from "./units/product-unit.service";
+import { ProductVariantService } from "./variants/product-variant.service";
+import { ProductAttributeController } from "./attributes/product-attribute.controller";
+import { ProductBrandController } from "./brands/product-brand.controller";
+import { ProductCategoryController } from "./categories/product-category.controller";
+import { ProductController } from "./products/product.controller";
+import { ProductTagController } from "./tags/product-tag.controller";
+import { ProductUnitController } from "./units/product-unit.controller";
+import { ProductVariantController } from "./variants/product-variant.controller";
+import { AccessModule } from "../access/access.module";
 import { BusinessModule } from "../business/business.module";
 import { PackageModule } from "../packages/package.module";
 import { PermissionModule } from "../permissions/permission.module";
-import { ProductAttributeController } from "./attributes/product-attribute.controller";
-import { ProductAttributeService } from "./attributes/product-attribute.service";
-import { ProductBrandController } from "./brands/product-brand.controller";
-import { ProductBrandService } from "./brands/product-brand.service";
-import { ProductCategoryController } from "./categories/product-category.controller";
-import { ProductCategoryService } from "./categories/product-category.service";
-import { ProductCatalogLookupService } from "./common/product-catalog-lookup.service";
-import { ProductController } from "./products/product.controller";
-import { ProductService } from "./products/product.service";
-import { ProductTagController } from "./tags/product-tag.controller";
-import { ProductTagService } from "./tags/product-tag.service";
-import { ProductUnitController } from "./units/product-unit.controller";
-import { ProductUnitService } from "./units/product-unit.service";
-import { ProductVariantController } from "./variants/product-variant.controller";
-import { ProductVariantService } from "./variants/product-variant.service";
 
 @Module({
-  imports: [BusinessModule, PermissionModule, PackageModule],
+  imports: [AccessModule, BusinessModule, PermissionModule, PackageModule],
   controllers: [
     ProductCategoryController,
     ProductBrandController,

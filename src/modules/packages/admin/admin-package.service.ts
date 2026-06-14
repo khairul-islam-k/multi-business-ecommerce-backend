@@ -10,7 +10,6 @@ import {
   Prisma,
 } from "@prisma/client";
 
-import { PrismaService } from "../../../prisma/prisma.service";
 import { QueryPackageDto } from "../dto/query-package.dto";
 import {
   CreatePackagePlanDto,
@@ -22,11 +21,12 @@ import {
   CreateTenantSubscriptionDto,
   QueryPackageSubscriptionDto,
 } from "./dto/package-subscription.dto";
+import { PrismaService } from "../../../prisma/prisma.service";
+import { PackageSubscriptionService } from "../package-subscription.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
-import { PackageSubscriptionService } from "../package-subscription.service";
 
 const PACKAGE_PLAN_INCLUDE = {
   limits: true,

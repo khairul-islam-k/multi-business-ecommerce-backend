@@ -1,3 +1,5 @@
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { PackageSubscriptionStatus } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsEnum,
@@ -9,8 +11,6 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { PackageSubscriptionStatus } from "@prisma/client";
 
 export class QueryPackageSubscriptionDto {
   @ApiPropertyOptional({ example: 1 })

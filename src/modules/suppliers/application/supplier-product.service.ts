@@ -1,9 +1,6 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { Prisma, SupplierProductMapStatus } from "@prisma/client";
 
-import { apiResponse } from "../../../common/utils/api-response.util";
-import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
-import { PrismaService } from "../../../prisma/prisma.service";
 import {
   SupplierProductMapDto,
   UpdateSupplierProductMapDto,
@@ -11,6 +8,9 @@ import {
 import { normalizeNullableText } from "../domain/supplier-contact.policy";
 import { SupplierProductRepository } from "../infrastructure/supplier-product.repository";
 import { SupplierRepository } from "../infrastructure/supplier.repository";
+import { PrismaService } from "../../../prisma/prisma.service";
+import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
+import { apiResponse } from "../../../common/utils/api-response.util";
 
 @Injectable()
 export class SupplierProductService {

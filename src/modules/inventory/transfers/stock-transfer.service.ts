@@ -10,17 +10,17 @@ import {
   Prisma,
 } from "@prisma/client";
 
-import { PrismaService } from "../../../prisma/prisma.service";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { InventoryLookupService } from "../common/inventory-lookup.service";
 import {
   CreateStockTransferDto,
   QueryStockTransferDto,
 } from "./dto/stock-transfer.dto";
+import { PrismaService } from "../../../prisma/prisma.service";
+import { InventoryLookupService } from "../common/inventory-lookup.service";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
 
 const TRANSFER_INCLUDE = {
   fromWarehouse: true,
@@ -280,7 +280,9 @@ export class StockTransferService {
     return transfer;
   }
 
-  private assertItems(items: { productId: string; variantId?: string | null }[]) {
+  private assertItems(
+    items: { productId: string; variantId?: string | null }[],
+  ) {
     if (items.length === 0) {
       throw new BadRequestException(
         "At least one stock transfer item is required",

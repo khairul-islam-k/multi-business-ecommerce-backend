@@ -140,8 +140,8 @@ model PackageSubscription {
   createdAt          DateTime                  @default(now()) @map("created_at")
   updatedAt          DateTime                  @updatedAt @map("updated_at")
 
-  package       PackagePlan           @relation(fields: [packageId], references: [id])
-  tenant        SystemUser            @relation("TenantPackageSubscriptions", fields: [tenantId], references: [id], onDelete: Cascade)
+  package       PackagePlan                 @relation(fields: [packageId], references: [id])
+  tenant        SystemUser                  @relation("TenantPackageSubscriptions", fields: [tenantId], references: [id], onDelete: Cascade)
   usageCounters PackageUsageCounter[]
   mockPayments  PackageMockPayment[]
   creditEntries PackageTenantCreditLedger[]
@@ -165,9 +165,9 @@ model PackageTenantCreditLedger {
   metadata       Json?
   createdAt      DateTime               @default(now()) @map("created_at")
 
-  tenant       SystemUser            @relation("TenantPackageCreditEntries", fields: [tenantId], references: [id], onDelete: Cascade)
-  subscription PackageSubscription?  @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  payment      PackageMockPayment?   @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  tenant       SystemUser           @relation("TenantPackageCreditEntries", fields: [tenantId], references: [id], onDelete: Cascade)
+  subscription PackageSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  payment      PackageMockPayment?  @relation(fields: [paymentId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
   @@index([subscriptionId])
@@ -208,9 +208,9 @@ model PackageMockPayment {
   createdAt      DateTime             @default(now()) @map("created_at")
   updatedAt      DateTime             @updatedAt @map("updated_at")
 
-  tenant       SystemUser           @relation("TenantPackageMockPayments", fields: [tenantId], references: [id], onDelete: Cascade)
-  subscription PackageSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  plan         PackagePlan?         @relation(fields: [planId], references: [id], onDelete: SetNull)
+  tenant        SystemUser                  @relation("TenantPackageMockPayments", fields: [tenantId], references: [id], onDelete: Cascade)
+  subscription  PackageSubscription?        @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  plan          PackagePlan?                @relation(fields: [planId], references: [id], onDelete: SetNull)
   creditEntries PackageTenantCreditLedger[]
 
   @@index([tenantId])

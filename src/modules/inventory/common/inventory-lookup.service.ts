@@ -11,13 +11,13 @@ import {
   WarehouseStatus,
 } from "@prisma/client";
 
-import { normalizeOptionalText } from "../../../common/text/normalizers";
-import { generateRandomCode } from "../../../common/utils/code-generator.util";
-import { PrismaService } from "../../../prisma/prisma.service";
-import { ProductCatalogLookupService } from "../../product-catalog/common/product-catalog-lookup.service";
+import { buildStockItemKey } from "../domain/stock-item-key";
 import { StockMutationService } from "../application/stock-mutation.service";
 import { StockReservationService } from "../application/stock-reservation.service";
-import { buildStockItemKey } from "../domain/stock-item-key";
+import { PrismaService } from "../../../prisma/prisma.service";
+import { ProductCatalogLookupService } from "../../product-catalog/common/product-catalog-lookup.service";
+import { normalizeOptionalText } from "../../../common/text/normalizers";
+import { generateRandomCode } from "../../../common/utils/code-generator.util";
 import { StockItemRef } from "./inventory.types";
 
 const INVENTORY_CODE_RETRY_LIMIT = 5;

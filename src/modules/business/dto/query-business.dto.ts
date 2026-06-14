@@ -1,3 +1,5 @@
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { BusinessStatus } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsBoolean,
@@ -9,9 +11,6 @@ import {
   Max,
   Min,
 } from "class-validator";
-
-import { ApiPropertyOptional } from "@nestjs/swagger";
-import { BusinessStatus } from "@prisma/client";
 
 export class QueryBusinessDto {
   @ApiPropertyOptional({ example: "business" })

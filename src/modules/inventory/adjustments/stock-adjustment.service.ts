@@ -11,17 +11,17 @@ import {
   Prisma,
 } from "@prisma/client";
 
-import { PrismaService } from "../../../prisma/prisma.service";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { InventoryLookupService } from "../common/inventory-lookup.service";
 import {
   CreateStockAdjustmentDto,
   QueryStockAdjustmentDto,
 } from "./dto/stock-adjustment.dto";
+import { PrismaService } from "../../../prisma/prisma.service";
+import { InventoryLookupService } from "../common/inventory-lookup.service";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
 
 const ADJUSTMENT_INCLUDE = {
   warehouse: true,
@@ -237,7 +237,9 @@ export class StockAdjustmentService {
     return adjustment;
   }
 
-  private assertItems(items: { productId: string; variantId?: string | null }[]) {
+  private assertItems(
+    items: { productId: string; variantId?: string | null }[],
+  ) {
     if (items.length === 0) {
       throw new BadRequestException(
         "At least one stock adjustment item is required",

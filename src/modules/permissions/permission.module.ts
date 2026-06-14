@@ -1,8 +1,8 @@
 import { forwardRef, Module } from "@nestjs/common";
 
+import { PermissionGuard } from "./guards/permission.guard";
 import { PermissionService } from "./permission.service";
 import { PermissionController } from "./permission.controller";
-import { PermissionGuard } from "./guards/permission.guard";
 import { AccessModule } from "../access/access.module";
 import { BusinessModule } from "../business/business.module";
 import { PackageModule } from "../packages/package.module";

@@ -1,10 +1,4 @@
 import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiParam,
-  ApiTags,
-} from "@nestjs/swagger";
-import {
   Body,
   Controller,
   Get,
@@ -14,14 +8,20 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from "@nestjs/swagger";
 
-import { TenantService } from "./tenant.service";
-import { QueryTenantDto } from "./dto/query-tenant.dto";
+import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { AdminGuard } from "../auth/guards/admin.guard";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import { QueryTenantDto } from "./dto/query-tenant.dto";
 import { UpdateTenantStatusDto } from "./dto/update-tenant-status.dto";
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
+import { TenantService } from "./tenant.service";
 
 @ApiTags("Tenants")
 @ApiBearerAuth()
@@ -31,7 +31,11 @@ export class TenantController {
   constructor(private readonly tenantService: TenantService) {}
 
   @Get(":tenantId")
-  @ApiOperation({ summary: "Get a tenant" })
+  @ApiOperation({
+    summary: "Get a tenant",
+    description:
+      "Shows a tenant that the current user is allowed to view. Use this to review saved information before making a decision or change.",
+  })
   @ApiParam({
     name: "tenantId",
     example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913",
@@ -41,13 +45,21 @@ export class TenantController {
   }
 
   @Get()
-  @ApiOperation({ summary: "Get tenants" })
+  @ApiOperation({
+    summary: "Get tenants",
+    description:
+      "Shows tenants that the current user is allowed to view. Use this to review saved information before making a decision or change.",
+  })
   findAll(@Query() query: QueryTenantDto) {
     return this.tenantService.findAll(query);
   }
 
   @Patch(":tenantId/status")
-  @ApiOperation({ summary: "Update tenant status" })
+  @ApiOperation({
+    summary: "Update tenant status",
+    description:
+      "Updates tenant status with the new information provided. Only the fields sent in the request are changed.",
+  })
   @ApiParam({
     name: "tenantId",
     example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913",

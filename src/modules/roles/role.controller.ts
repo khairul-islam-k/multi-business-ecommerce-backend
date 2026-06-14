@@ -1,5 +1,3 @@
-import { PermissionAction, RbacFeature } from "@prisma/client";
-import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import {
   Body,
   Controller,
@@ -12,21 +10,22 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
+import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { PermissionAction, RbacFeature } from "@prisma/client";
 
-import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
-import { BusinessGuard } from "../business/guards/business.guard";
-import { PermissionGuard } from "../permissions/guards/permission.guard";
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { RequirePermission } from "../permissions/decorators/require-permission.decorator";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { BusinessGuard } from "../business/guards/business.guard";
 import { SubscriptionGuard } from "../packages/guards/subscription.guard";
-
+import { PermissionGuard } from "../permissions/guards/permission.guard";
 import { AssignRoleDto } from "./dto/assign-role.dto";
 import { CreateRoleDto } from "./dto/create-role.dto";
 import { QueryRoleAssignmentsDto } from "./dto/query-role-assignment.dto";
 import { QueryRoleDto } from "./dto/query-role.dto";
-import { UpdateRoleDto } from "./dto/update-role.dto";
 import { UpdateRoleAssignmentDto } from "./dto/update-role-assignment.dto";
+import { UpdateRoleDto } from "./dto/update-role.dto";
 import { RoleService } from "./role.service";
 
 @ApiTags("Roles")
@@ -43,6 +42,8 @@ export class RoleController {
   @Post("businesses/:businessId")
   @ApiOperation({
     summary: "Create a role for a business",
+    description:
+      "Creates a new role inside the selected business. Use this when people need a reusable set of responsibilities and access permissions.",
   })
   create(
     @CurrentUser() currentUser: CurrentUserPayload,
@@ -59,6 +60,8 @@ export class RoleController {
   @Get("businesses/:businessId")
   @ApiOperation({
     summary: "Get business roles",
+    description:
+      "Shows the roles created for the selected business. Use this to review available access levels before assigning people to a role.",
   })
   findAll(
     @CurrentUser() currentUser: CurrentUserPayload,
@@ -75,6 +78,8 @@ export class RoleController {
   @Get("businesses/:businessId/assignments")
   @ApiOperation({
     summary: "Get role assignments of a business",
+    description:
+      "Shows which users have been assigned to roles in the selected business. Use this to audit access and understand who has each responsibility.",
   })
   findAssignments(
     @Param("businessId", ParseUUIDPipe) businessId: string,
@@ -90,6 +95,8 @@ export class RoleController {
   @Get("businesses/:businessId/:roleId")
   @ApiOperation({
     summary: "Get single business role",
+    description:
+      "Shows the saved details for one role in the selected business. Use this before editing the role or reviewing its purpose.",
   })
   findOne(
     @Param("businessId", ParseUUIDPipe) businessId: string,
@@ -105,6 +112,8 @@ export class RoleController {
   @Patch("businesses/:businessId/:roleId")
   @ApiOperation({
     summary: "Update a business role",
+    description:
+      "Updates the selected role's saved details. Use this when a role name, description, or related setup needs to change.",
   })
   update(
     @CurrentUser() currentUser: CurrentUserPayload,
@@ -122,6 +131,8 @@ export class RoleController {
   @Delete("businesses/:businessId/:roleId")
   @ApiOperation({
     summary: "Delete a business role",
+    description:
+      "Deletes the selected role from the business. Use this when the role is no longer needed and should not be assigned going forward.",
   })
   remove(
     @CurrentUser() currentUser: CurrentUserPayload,
@@ -138,6 +149,8 @@ export class RoleController {
   @Post("businesses/:businessId/:roleId/assign")
   @ApiOperation({
     summary: "Assign role to user",
+    description:
+      "Assigns the selected role to a user in the business. Use this when a person needs the access and responsibilities provided by that role.",
   })
   assignRole(
     @CurrentUser() currentUser: CurrentUserPayload,
@@ -155,6 +168,8 @@ export class RoleController {
   @Patch("businesses/:businessId/assignments/:assignmentId")
   @ApiOperation({
     summary: "Update role assignment",
+    description:
+      "Updates an existing role assignment for a user. Use this when the assignment details need to be corrected or adjusted.",
   })
   updateAssignment(
     @Param("businessId", ParseUUIDPipe) businessId: string,
@@ -171,6 +186,8 @@ export class RoleController {
   @Delete("businesses/:businessId/assignments/:assignmentId")
   @ApiOperation({
     summary: "Revoke role assignment",
+    description:
+      "Removes a user's role assignment from the selected business. Use this when the person should no longer have that role's access.",
   })
   revokeAssignment(
     @Param("businessId", ParseUUIDPipe) businessId: string,

@@ -1,12 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import { FinanceSourceType, Prisma } from "@prisma/client";
 
-import { PrismaService } from "../../../prisma/prisma.service";
 import { AccountBalanceService } from "../application/account-balance.service";
 import { FinanceCodeService } from "../application/finance-code.service";
 import { PayableSyncService } from "../application/payable-sync.service";
 import { ReceivableSyncService } from "../application/receivable-sync.service";
 import { TaxLookupService } from "../application/tax-lookup.service";
+import { PrismaService } from "../../../prisma/prisma.service";
 
 @Injectable()
 export class FinanceLedgerService {

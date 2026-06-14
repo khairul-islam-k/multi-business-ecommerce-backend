@@ -1,3 +1,4 @@
+import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
   IsEmail,
@@ -8,8 +9,6 @@ import {
   MinLength,
   ValidateNested,
 } from "class-validator";
-
-import { ApiPropertyOptional } from "@nestjs/swagger";
 
 import { EmployeeProfileDto } from "./employee-profile.dto";
 

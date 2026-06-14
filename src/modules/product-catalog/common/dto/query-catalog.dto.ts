@@ -1,7 +1,7 @@
-import { Type } from "class-transformer";
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { ProductSimpleStatus } from "@prisma/client";
+import { Type } from "class-transformer";
+import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
 
 export enum CatalogSortOrder {
   ASC = "asc",

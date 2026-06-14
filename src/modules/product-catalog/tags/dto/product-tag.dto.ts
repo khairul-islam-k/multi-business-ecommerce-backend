@@ -1,6 +1,6 @@
-import { IsEnum, IsOptional, IsString, MaxLength } from "class-validator";
 import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 import { ProductSimpleStatus } from "@prisma/client";
+import { IsEnum, IsOptional, IsString, MaxLength } from "class-validator";
 
 export class CreateProductTagDto {
   @ApiProperty({ example: "summer" })
