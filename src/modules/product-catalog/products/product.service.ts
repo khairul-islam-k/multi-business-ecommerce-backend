@@ -175,7 +175,7 @@ export class ProductService {
         "Product created successfully",
       );
     } catch (error) {
-      this.lookup.handleUniqueError(error, "Product slug already exists");
+      this.lookup.handleUniqueError(error, "Product name already exists");
     }
   }
 

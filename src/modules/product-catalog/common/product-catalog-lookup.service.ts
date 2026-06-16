@@ -15,14 +15,7 @@ import {
   productUnit,
   productVariant,
 } from "@/database/schema";
-import {
-  and,
-  count,
-  eq,
-  inArray,
-  isNull,
-  ne,
-} from "drizzle-orm";
+import { and, count, eq, inArray, isNull, ne } from "drizzle-orm";
 
 import { isUniqueConstraintError } from "../../../common/database/db-error.util";
 import { generateRandomCode } from "../../../common/utils/code-generator.util";
@@ -58,7 +51,9 @@ export class ProductCatalogLookupService {
             ? isNull(productCategory.parentId)
             : eq(productCategory.parentId, parentId),
           isNull(productCategory.deletedAt),
-          excludeCategoryId ? ne(productCategory.id, excludeCategoryId) : undefined,
+          excludeCategoryId
+            ? ne(productCategory.id, excludeCategoryId)
+            : undefined,
         ),
       )
       .limit(1);
@@ -509,7 +504,9 @@ export class ProductCatalogLookupService {
           .where(
             and(
               eq(product.businessId, businessId),
-              field === "sku" ? eq(product.sku, code) : eq(product.barcode, code),
+              field === "sku"
+                ? eq(product.sku, code)
+                : eq(product.barcode, code),
               isNull(product.deletedAt),
             ),
           )
