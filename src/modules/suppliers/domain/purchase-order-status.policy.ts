@@ -1,5 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
-import { SupplierPurchaseOrderStatus } from "@prisma/client";
+import { SupplierPurchaseOrderStatus } from "@/database/schema";
 
 const ORDER_MANUAL_STATUSES: SupplierPurchaseOrderStatus[] = [
   SupplierPurchaseOrderStatus.DRAFT,

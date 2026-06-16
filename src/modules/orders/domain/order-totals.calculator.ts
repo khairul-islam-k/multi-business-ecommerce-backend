@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import Decimal from "decimal.js";
 
 import type { OrderItemWithPrice } from "./order.types";
 
@@ -8,18 +8,18 @@ export function calculateOrderTotals(
 ) {
   const subtotal = items.reduce(
     (total, item) =>
-      total.plus(new Prisma.Decimal(item.quantity).mul(item.unitPrice)),
-    new Prisma.Decimal(0),
+      total.plus(new Decimal(item.quantity).mul(item.unitPrice)),
+    new Decimal(0),
   );
   const discountTotal = items.reduce(
     (total, item) => total.plus(item.discountAmount ?? 0),
-    new Prisma.Decimal(0),
+    new Decimal(0),
   );
   const taxTotal = items.reduce(
     (total, item) => total.plus(item.taxAmount),
-    new Prisma.Decimal(0),
+    new Decimal(0),
   );
-  const shipping = new Prisma.Decimal(shippingCharge);
+  const shipping = new Decimal(shippingCharge);
 
   return {
     subtotal,
@@ -29,3 +29,4 @@ export function calculateOrderTotals(
     totalAmount: subtotal.minus(discountTotal).plus(taxTotal).plus(shipping),
   };
 }
+

@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { OrderCustomerStatus, Prisma } from "@prisma/client";
+import { OrderCustomerStatus } from "@/database/schema";
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import {
@@ -78,47 +78,15 @@ export class CustomerService {
       CustomerSortOrder.DESC,
     );
 
-    const where: Prisma.OrderCustomerWhereInput = {
+    const where = {
       businessId,
-      deletedAt: null,
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { name: { contains: query.search, mode: "insensitive" } },
-              { email: { contains: query.search, mode: "insensitive" } },
-              { phone: { contains: query.search, mode: "insensitive" } },
-              { note: { contains: query.search, mode: "insensitive" } },
-              {
-                addresses: {
-                  some: {
-                    deletedAt: null,
-                    OR: [
-                      {
-                        address: {
-                          contains: query.search,
-                          mode: "insensitive",
-                        },
-                      },
-                      { city: { contains: query.search, mode: "insensitive" } },
-                      {
-                        country: {
-                          contains: query.search,
-                          mode: "insensitive",
-                        },
-                      },
-                    ],
-                  },
-                },
-              },
-            ],
-          }
-        : {}),
+      status: query.status,
+      search: query.search,
     };
 
-    const orderBy: Prisma.OrderCustomerOrderByWithRelationInput[] = [
-      { [sortBy]: sortOrder },
-      { createdAt: "desc" },
+    const orderBy = [
+      { field: sortBy, direction: sortOrder },
+      { field: CustomerSortBy.CREATED_AT, direction: CustomerSortOrder.DESC },
     ];
 
     const [items, total] = await this.customers.findPage({

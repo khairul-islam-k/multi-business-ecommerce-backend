@@ -4,6 +4,9 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  type JsonValue,
+  type OrderOrder,
+  type OrderOrderItem,
   CatalogProductStatus,
   InvoiceStatus,
   OrderPaymentMethod,
@@ -11,9 +14,20 @@ import {
   OrderSource,
   OrderStatus,
   OrderType,
-  Prisma,
   ProductVariantStatus,
-} from "@prisma/client";
+  courierShipment,
+  courierShipmentItem,
+  invoice,
+  invoiceItem,
+  orderCustomer,
+  orderOrder,
+  orderOrderItem,
+  orderStatusLog,
+  product,
+  productVariant,
+} from "@/database/schema";
+import Decimal from "decimal.js";
+import { and, count, eq, isNull } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { CreatePosSaleDto } from "../../pos/dto/pos-sale.dto";
@@ -23,7 +37,10 @@ import { assertOrderPaymentInput } from "../domain/order-payment.policy";
 import { calculateOrderTotals } from "../domain/order-totals.calculator";
 import type { OrderItemWithPrice } from "../domain/order.types";
 import { OrderCodeRepository } from "../infrastructure/order-code.repository";
-import { PrismaService } from "../../../prisma/prisma.service";
+import {
+  DatabaseService,
+  type DatabaseTransaction,
+} from "../../../database/database.service";
 import { FinanceLedgerService } from "../../finance/common/finance-ledger.service";
 import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
 import { OrderPaymentService } from "./order-payment.service";
@@ -32,12 +49,16 @@ import { apiResponse } from "../../../common/utils/api-response.util";
 @Injectable()
 export class CreateOrderService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly inventory: InventoryLookupService,
     private readonly finance: FinanceLedgerService,
     private readonly codes: OrderCodeRepository,
     private readonly payments: OrderPaymentService,
   ) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async create(
     currentUser: CurrentUserPayload,
@@ -97,14 +118,15 @@ export class CreateOrderService {
     const [orderNo, invoiceNo, tax] = await Promise.all([
       this.codes.generateUniqueOrderNo(businessId),
       this.codes.generateUniqueInvoiceNo(businessId),
-      this.finance.assertActiveTax(this.prisma, businessId, params.taxId),
+      this.finance.assertActiveTax(this.db, businessId, params.taxId),
     ]);
     const items = await this.buildItems(businessId, params.items, tax.rate);
     const totals = calculateOrderTotals(items, params.shippingCharge ?? 0);
 
-    const order = await this.prisma.$transaction(async (tx) => {
-      const createdOrder = await tx.orderOrder.create({
-        data: {
+    const order = await this.db.transaction(async (tx) => {
+      const [createdOrder] = await tx
+        .insert(orderOrder)
+        .values({
           businessId,
           customerId: params.customerId,
           warehouseId: params.warehouseId,
@@ -120,7 +142,7 @@ export class CreateOrderService {
           customerPhone: this.normalizeNullableText(params.customerPhone),
           customerEmail: this.normalizeNullableText(params.customerEmail),
           shippingAddressSnapshot: params.shippingAddressSnapshot as
-            | Prisma.InputJsonValue
+            | JsonValue
             | undefined,
           subtotal: totals.subtotal,
           discountTotal: totals.discountTotal,
@@ -130,32 +152,34 @@ export class CreateOrderService {
           totalAmount: totals.totalAmount,
           note: this.normalizeNullableText(params.note),
           createdBy: currentUser.id,
-          statusLogs: {
-            create: {
-              toStatus: params.fulfillImmediately
-                ? OrderStatus.DELIVERED
-                : OrderStatus.CONFIRMED,
-              changedBy: currentUser.id,
-            },
-          },
-        },
+          paidAmount: new Decimal(0),
+        })
+        .returning();
+
+      await tx.insert(orderStatusLog).values({
+        orderId: createdOrder.id,
+        toStatus: params.fulfillImmediately
+          ? OrderStatus.DELIVERED
+          : OrderStatus.CONFIRMED,
+        changedBy: currentUser.id,
       });
 
-      const createdItems: Prisma.OrderOrderItemGetPayload<object>[] = [];
+      const createdItems: OrderOrderItem[] = [];
 
       for (const item of items) {
-        const createdItem = await tx.orderOrderItem.create({
-          data: {
+        const [createdItem] = await tx
+          .insert(orderOrderItem)
+          .values({
             orderId: createdOrder.id,
             productId: item.productId,
             variantId: item.variantId ?? null,
-            quantity: item.quantity,
+            quantity: new Decimal(item.quantity),
             unitPrice: item.unitPrice,
-            discountAmount: item.discountAmount ?? 0,
+            discountAmount: new Decimal(item.discountAmount ?? 0),
             taxAmount: item.taxAmount,
             lineTotal: item.lineTotal,
-          },
-        });
+          })
+          .returning();
 
         createdItems.push(createdItem);
 
@@ -221,42 +245,20 @@ export class CreateOrderService {
   }
 
   private async createInvoice(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
-      order: {
-        id: string;
-        customerId: string | null;
-        customerName: string | null;
-        customerPhone: string | null;
-        customerEmail: string | null;
-        shippingAddressSnapshot: Prisma.JsonValue | null;
-        subtotal: Prisma.Decimal;
-        discountTotal: Prisma.Decimal;
-        taxTotal: Prisma.Decimal;
-        shippingCharge: Prisma.Decimal;
-        totalAmount: Prisma.Decimal;
-        paidAmount: Prisma.Decimal;
-        note: string | null;
-      };
-      items: {
-        id: string;
-        productId: string;
-        variantId: string | null;
-        quantity: Prisma.Decimal;
-        unitPrice: Prisma.Decimal;
-        discountAmount: Prisma.Decimal;
-        taxAmount: Prisma.Decimal;
-        lineTotal: Prisma.Decimal;
-      }[];
+      order: OrderOrder;
+      items: OrderOrderItem[];
       invoiceNo: string;
       taxId: string;
-      taxRate: Prisma.Decimal;
+      taxRate: Decimal.Value;
       currentUserId: string;
     },
   ) {
-    await tx.invoice.create({
-      data: {
+    const [createdInvoice] = await tx
+      .insert(invoice)
+      .values({
         businessId: params.businessId,
         orderId: params.order.id,
         customerId: params.order.customerId,
@@ -267,53 +269,41 @@ export class CreateOrderService {
         customerName: params.order.customerName,
         customerPhone: params.order.customerPhone,
         customerEmail: params.order.customerEmail,
-        billingAddressSnapshot: params.order.shippingAddressSnapshot as
-          | Prisma.InputJsonValue
-          | undefined,
+        billingAddressSnapshot:
+          params.order.shippingAddressSnapshot ?? undefined,
         subtotal: params.order.subtotal,
         discountTotal: params.order.discountTotal,
         taxTotal: params.order.taxTotal,
-        taxRate: params.taxRate,
+        taxRate: new Decimal(params.taxRate),
         shippingCharge: params.order.shippingCharge,
         totalAmount: params.order.totalAmount,
         paidAmount: params.order.paidAmount,
         note: params.order.note,
         createdBy: params.currentUserId,
-        items: {
-          create: params.items.map((item) => ({
-            orderItemId: item.id,
-            productId: item.productId,
-            variantId: item.variantId,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            discountAmount: item.discountAmount,
-            taxAmount: item.taxAmount,
-            lineTotal: item.lineTotal,
-          })),
-        },
-      },
-    });
+      })
+      .returning();
+
+    await tx.insert(invoiceItem).values(
+      params.items.map((item) => ({
+        invoiceId: createdInvoice.id,
+        orderItemId: item.id,
+        productId: item.productId,
+        variantId: item.variantId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        discountAmount: item.discountAmount,
+        taxAmount: item.taxAmount,
+        lineTotal: item.lineTotal,
+      })),
+    );
   }
 
   private async createCourierShipment(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
-      order: {
-        id: string;
-        totalAmount: Prisma.Decimal;
-        paidAmount: Prisma.Decimal;
-        shippingCharge: Prisma.Decimal;
-        customerName: string | null;
-        customerPhone: string | null;
-        shippingAddressSnapshot: Prisma.JsonValue | null;
-      };
-      items: {
-        id: string;
-        productId: string;
-        variantId: string | null;
-        quantity: Prisma.Decimal;
-      }[];
+      order: OrderOrder;
+      items: OrderOrderItem[];
       courier: NonNullable<CreateOrderDto["courier"]>;
       isCod: boolean;
       currentUserId: string;
@@ -323,13 +313,12 @@ export class CreateOrderService {
       params.businessId,
     );
     const codAmount = params.isCod
-      ? new Prisma.Decimal(params.order.totalAmount).minus(
-          params.order.paidAmount,
-        )
-      : new Prisma.Decimal(0);
+      ? new Decimal(params.order.totalAmount).minus(params.order.paidAmount)
+      : new Decimal(0);
 
-    await tx.courierShipment.create({
-      data: {
+    const [shipment] = await tx
+      .insert(courierShipment)
+      .values({
         businessId: params.businessId,
         orderId: params.order.id,
         courierId: params.courier.courierId,
@@ -337,7 +326,7 @@ export class CreateOrderService {
         shipmentNo,
         shippingCharge: params.order.shippingCharge,
         codAmount,
-        courierFee: params.courier.courierFee ?? 0,
+        courierFee: new Decimal(params.courier.courierFee ?? 0),
         recipientName:
           this.normalizeNullableText(params.courier.recipientName) ??
           params.order.customerName,
@@ -345,80 +334,95 @@ export class CreateOrderService {
           this.normalizeNullableText(params.courier.recipientPhone) ??
           params.order.customerPhone,
         deliveryAddressSnapshot:
-          (params.courier.deliveryAddressSnapshot as Prisma.InputJsonValue) ??
-          (params.order.shippingAddressSnapshot as Prisma.InputJsonValue),
+          (params.courier.deliveryAddressSnapshot as JsonValue | undefined) ??
+          params.order.shippingAddressSnapshot ??
+          undefined,
         createdBy: params.currentUserId,
-        items: {
-          create: params.items.map((item) => ({
-            orderItemId: item.id,
-            productId: item.productId,
-            variantId: item.variantId,
-            quantity: item.quantity,
-          })),
-        },
-      },
-    });
+      })
+      .returning();
+
+    await tx.insert(courierShipmentItem).values(
+      params.items.map((item) => ({
+        shipmentId: shipment.id,
+        orderItemId: item.id,
+        productId: item.productId,
+        variantId: item.variantId,
+        quantity: item.quantity,
+      })),
+    );
   }
 
   private async buildItems(
     businessId: string,
     items: OrderItemInputDto[],
-    taxRate: Prisma.Decimal.Value,
+    taxRate: Decimal.Value,
   ) {
     const builtItems: OrderItemWithPrice[] = [];
-    const rate = new Prisma.Decimal(taxRate);
+    const rate = new Decimal(taxRate);
 
     for (const item of items) {
-      const product = await this.prisma.product.findFirst({
-        where: {
-          id: item.productId,
-          businessId,
-          deletedAt: null,
-          status: CatalogProductStatus.ACTIVE,
-        },
-        select: {
-          id: true,
-          price: true,
-          _count: {
-            select: {
-              variants: {
-                where: { deletedAt: null },
-              },
-            },
-          },
-        },
-      });
+      const [productRow] = await this.db
+        .select({
+          id: product.id,
+          price: product.price,
+        })
+        .from(product)
+        .where(
+          and(
+            eq(product.id, item.productId),
+            eq(product.businessId, businessId),
+            isNull(product.deletedAt),
+            eq(product.status, CatalogProductStatus.ACTIVE),
+          ),
+        );
 
-      if (!product) {
+      if (!productRow) {
         throw new BadRequestException("One or more order items are invalid");
       }
 
+      const [{ value: variantCount }] = await this.db
+        .select({ value: count() })
+        .from(productVariant)
+        .where(
+          and(
+            eq(productVariant.businessId, businessId),
+            eq(productVariant.productId, item.productId),
+            isNull(productVariant.deletedAt),
+          ),
+        );
+
       const selectedVariant = item.variantId
-        ? await this.prisma.productVariant.findFirst({
-            where: {
-              id: item.variantId,
-              productId: item.productId,
-              businessId,
-              deletedAt: null,
-              status: ProductVariantStatus.ACTIVE,
-            },
-            select: { id: true, priceOverride: true },
-          })
+        ? await this.db
+            .select({
+              id: productVariant.id,
+              priceOverride: productVariant.priceOverride,
+            })
+            .from(productVariant)
+            .where(
+              and(
+                eq(productVariant.id, item.variantId),
+                eq(productVariant.productId, item.productId),
+                eq(productVariant.businessId, businessId),
+                isNull(productVariant.deletedAt),
+                eq(productVariant.status, ProductVariantStatus.ACTIVE),
+              ),
+            )
+            .then(([row]) => row ?? null)
         : null;
 
       if (item.variantId && !selectedVariant) {
         throw new BadRequestException("One or more order items are invalid");
       }
 
-      if (!item.variantId && product._count.variants > 0) {
+      if (!item.variantId && variantCount > 0) {
         throw new BadRequestException(
           "Variant must be selected for a product that has variants",
         );
       }
 
-      const quantity = new Prisma.Decimal(item.quantity);
-      const discountAmount = new Prisma.Decimal(item.discountAmount ?? 0);
-      const unitPrice = selectedVariant?.priceOverride ?? product.price;
+      const quantity = new Decimal(item.quantity);
+      const discountAmount = new Decimal(item.discountAmount ?? 0);
+      const unitPrice = selectedVariant?.priceOverride ?? productRow.price;
       const lineSubtotal = quantity.mul(unitPrice);
       const taxableAmount = lineSubtotal.minus(discountAmount);
       const taxAmount = taxableAmount.mul(rate).div(100).toDecimalPlaces(2);
@@ -443,10 +447,16 @@ export class CreateOrderService {
   }
 
   private async assertCustomerExists(businessId: string, customerId: string) {
-    const customer = await this.prisma.orderCustomer.findFirst({
-      where: { id: customerId, businessId, deletedAt: null },
-      select: { id: true },
-    });
+    const [customer] = await this.db
+      .select({ id: orderCustomer.id })
+      .from(orderCustomer)
+      .where(
+        and(
+          eq(orderCustomer.id, customerId),
+          eq(orderCustomer.businessId, businessId),
+          isNull(orderCustomer.deletedAt),
+        ),
+      );
 
     if (!customer) {
       throw new NotFoundException("Customer not found");

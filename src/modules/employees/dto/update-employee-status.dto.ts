@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { SystemUserStatus } from "@prisma/client";
+import { SystemUserStatus } from "@/database/schema";
 import { IsEnum } from "class-validator";
 
 export class UpdateEmployeeStatusDto {

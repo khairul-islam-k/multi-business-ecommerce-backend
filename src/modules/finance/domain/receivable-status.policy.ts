@@ -1,10 +1,11 @@
-import { FinanceReceivableStatus, Prisma } from "@prisma/client";
+import Decimal from "decimal.js";
+import { FinanceReceivableStatus } from "@/database/schema";
 
 import { toMoney } from "./money";
 
 export function getReceivableStatus(
-  totalAmount: Prisma.Decimal.Value,
-  receivedAmount: Prisma.Decimal.Value,
+  totalAmount: Decimal.Value,
+  receivedAmount: Decimal.Value,
 ) {
   const total = toMoney(totalAmount);
   const received = toMoney(receivedAmount);
@@ -17,3 +18,4 @@ export function getReceivableStatus(
     ? FinanceReceivableStatus.PENDING
     : FinanceReceivableStatus.PARTIALLY_RECEIVED;
 }
+

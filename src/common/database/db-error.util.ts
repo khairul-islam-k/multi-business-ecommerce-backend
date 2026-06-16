@@ -1,10 +1,14 @@
 import { ConflictException } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+
+type PostgresError = {
+  code?: string;
+};
 
 export function isUniqueConstraintError(error: unknown) {
   return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === "P2002"
+    typeof error === "object" &&
+    error !== null &&
+    (error as PostgresError).code === "23505"
   );
 }
 

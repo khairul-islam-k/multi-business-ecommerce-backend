@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { ProductSimpleStatus } from "@prisma/client";
+import { ProductSimpleStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   ArrayMaxSize,

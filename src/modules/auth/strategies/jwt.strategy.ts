@@ -1,12 +1,13 @@
 import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PassportStrategy } from "@nestjs/passport";
-import { SystemUserStatus, SystemUserType } from "@prisma/client";
+import { eq } from "drizzle-orm";
+import { systemUser, SystemUserStatus, SystemUserType } from "@/database/schema";
 import { Request } from "express";
 import { ExtractJwt, Strategy } from "passport-jwt";
 
 import type { CurrentUserPayload } from "../decorators/current-user.decorator";
-import { PrismaService } from "../../../prisma/prisma.service";
+import { DatabaseService } from "../../../database/database.service";
 import type { BusinessAccessContext } from "../../../common/request-context/request-context.types";
 
 export type JwtPayload = {
@@ -24,7 +25,7 @@ export type AuthenticatedRequest = Request & {
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     configService: ConfigService,
   ) {
     super({
@@ -35,19 +36,18 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
   }
 
   async validate(payload: JwtPayload): Promise<CurrentUserPayload> {
-    const user = await this.prisma.systemUser.findUnique({
-      where: {
-        id: payload.sub,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        type: true,
-        status: true,
-        tenantId: true,
-      },
-    });
+    const [user] = await this.database.db
+      .select({
+        id: systemUser.id,
+        name: systemUser.name,
+        email: systemUser.email,
+        type: systemUser.type,
+        status: systemUser.status,
+        tenantId: systemUser.tenantId,
+      })
+      .from(systemUser)
+      .where(eq(systemUser.id, payload.sub))
+      .limit(1);
 
     if (!user) {
       throw new UnauthorizedException("Invalid token");

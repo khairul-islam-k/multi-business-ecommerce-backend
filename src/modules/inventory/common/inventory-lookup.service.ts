@@ -7,17 +7,26 @@ import {
   CatalogProductStatus,
   InventoryMovementType,
   InventoryReferenceType,
-  Prisma,
   WarehouseStatus,
-} from "@prisma/client";
+  inventoryStock,
+  inventoryStockAdjustment,
+  inventoryStockTransfer,
+  inventoryWarehouseStock,
+  productVariant,
+  warehouse,
+} from "@/database/schema";
+import Decimal from "decimal.js";
+import { and, count, eq, isNull } from "drizzle-orm";
 
+import type { DatabaseTransaction } from "../../../database/database.service";
+import { DatabaseService } from "../../../database/database.service";
 import { buildStockItemKey } from "../domain/stock-item-key";
 import { StockMutationService } from "../application/stock-mutation.service";
 import { StockReservationService } from "../application/stock-reservation.service";
-import { PrismaService } from "../../../prisma/prisma.service";
 import { ProductCatalogLookupService } from "../../product-catalog/common/product-catalog-lookup.service";
 import { normalizeOptionalText } from "../../../common/text/normalizers";
 import { generateRandomCode } from "../../../common/utils/code-generator.util";
+import { isUniqueConstraintError } from "../../../common/database/db-error.util";
 import { StockItemRef } from "./inventory.types";
 
 const INVENTORY_CODE_RETRY_LIMIT = 5;
@@ -25,27 +34,34 @@ const INVENTORY_CODE_RETRY_LIMIT = 5;
 @Injectable()
 export class InventoryLookupService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly catalogLookup: ProductCatalogLookupService,
     private readonly stockMutation: StockMutationService,
     private readonly stockReservation: StockReservationService,
   ) {}
 
-  async assertWarehouseExists(businessId: string, warehouseId: string) {
-    const warehouse = await this.prisma.warehouse.findFirst({
-      where: {
-        id: warehouseId,
-        businessId,
-        deletedAt: null,
-        status: WarehouseStatus.ACTIVE,
-      },
-    });
+  private get db() {
+    return this.database.db;
+  }
 
-    if (!warehouse) {
+  async assertWarehouseExists(businessId: string, warehouseId: string) {
+    const [warehouseRow] = await this.db
+      .select()
+      .from(warehouse)
+      .where(
+        and(
+          eq(warehouse.id, warehouseId),
+          eq(warehouse.businessId, businessId),
+          isNull(warehouse.deletedAt),
+          eq(warehouse.status, WarehouseStatus.ACTIVE),
+        ),
+      );
+
+    if (!warehouseRow) {
       throw new NotFoundException("Warehouse not found");
     }
 
-    return warehouse;
+    return warehouseRow;
   }
 
   async assertStockItem(
@@ -70,13 +86,16 @@ export class InventoryLookupService {
       );
     }
 
-    const variantCount = await this.prisma.productVariant.count({
-      where: {
-        businessId,
-        productId,
-        deletedAt: null,
-      },
-    });
+    const [{ value: variantCount }] = await this.db
+      .select({ value: count() })
+      .from(productVariant)
+      .where(
+        and(
+          eq(productVariant.businessId, businessId),
+          eq(productVariant.productId, productId),
+          isNull(productVariant.deletedAt),
+        ),
+      );
 
     if (variantCount > 0) {
       throw new BadRequestException(
@@ -104,17 +123,29 @@ export class InventoryLookupService {
     const itemVariantId =
       variantId === undefined ? productIdOrVariantId : variantId;
 
-    return this.prisma.inventoryStock.findFirst({
-      where:
+    const [stock] = await this.db
+      .select()
+      .from(inventoryStock)
+      .where(
         variantId === undefined
-          ? { businessId, variantId: itemVariantId }
-          : {
-              businessId,
-              productId,
-              variantId: itemVariantId ?? null,
-              stockItemKey: buildStockItemKey(productId, itemVariantId),
-            },
-    });
+          ? and(
+              eq(inventoryStock.businessId, businessId),
+              eq(inventoryStock.variantId, productIdOrVariantId),
+            )
+          : and(
+              eq(inventoryStock.businessId, businessId),
+              eq(inventoryStock.productId, productId),
+              itemVariantId
+                ? eq(inventoryStock.variantId, itemVariantId)
+                : isNull(inventoryStock.variantId),
+              eq(
+                inventoryStock.stockItemKey,
+                buildStockItemKey(productId, itemVariantId),
+              ),
+            ),
+      );
+
+    return stock ?? null;
   }
 
   async getWarehouseStock(
@@ -127,22 +158,35 @@ export class InventoryLookupService {
     const itemVariantId =
       variantId === undefined ? productIdOrVariantId : variantId;
 
-    return this.prisma.inventoryWarehouseStock.findFirst({
-      where:
+    const [warehouseStock] = await this.db
+      .select()
+      .from(inventoryWarehouseStock)
+      .where(
         variantId === undefined
-          ? { businessId, warehouseId, variantId: itemVariantId }
-          : {
-              businessId,
-              warehouseId,
-              productId,
-              variantId: itemVariantId ?? null,
-              stockItemKey: buildStockItemKey(productId, itemVariantId),
-            },
-    });
+          ? and(
+              eq(inventoryWarehouseStock.businessId, businessId),
+              eq(inventoryWarehouseStock.warehouseId, warehouseId),
+              eq(inventoryWarehouseStock.variantId, productIdOrVariantId),
+            )
+          : and(
+              eq(inventoryWarehouseStock.businessId, businessId),
+              eq(inventoryWarehouseStock.warehouseId, warehouseId),
+              eq(inventoryWarehouseStock.productId, productId),
+              itemVariantId
+                ? eq(inventoryWarehouseStock.variantId, itemVariantId)
+                : isNull(inventoryWarehouseStock.variantId),
+              eq(
+                inventoryWarehouseStock.stockItemKey,
+                buildStockItemKey(productId, itemVariantId),
+              ),
+            ),
+      );
+
+    return warehouseStock ?? null;
   }
 
   async createZeroStock(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
       productId: string;
@@ -150,33 +194,38 @@ export class InventoryLookupService {
     },
   ) {
     const stockItemKey = buildStockItemKey(params.productId, params.variantId);
-
-    return tx.inventoryStock.upsert({
-      where: {
-        businessId_stockItemKey: {
-          businessId: params.businessId,
-          stockItemKey,
-        },
-      },
-      update: {},
-      create: {
+    const [stock] = await tx
+      .insert(inventoryStock)
+      .values({
         businessId: params.businessId,
         productId: params.productId,
         variantId: params.variantId ?? null,
         stockItemKey,
-      },
-    });
+        lowStockAlertQty: new Decimal(0),
+        quantityReserved: new Decimal(0),
+        totalQuantity: new Decimal(0),
+      })
+      .onConflictDoUpdate({
+        target: [inventoryStock.businessId, inventoryStock.stockItemKey],
+        set: { stockItemKey },
+      })
+      .returning();
+
+    return stock;
   }
 
   async generateUniqueAdjustmentNo(businessId: string) {
     for (let attempt = 0; attempt < INVENTORY_CODE_RETRY_LIMIT; attempt++) {
       const adjustmentNo = generateRandomCode("ADJ");
-
-      const existingAdjustment =
-        await this.prisma.inventoryStockAdjustment.findFirst({
-          where: { businessId, adjustmentNo },
-          select: { id: true },
-        });
+      const [existingAdjustment] = await this.db
+        .select({ id: inventoryStockAdjustment.id })
+        .from(inventoryStockAdjustment)
+        .where(
+          and(
+            eq(inventoryStockAdjustment.businessId, businessId),
+            eq(inventoryStockAdjustment.adjustmentNo, adjustmentNo),
+          ),
+        );
 
       if (!existingAdjustment) {
         return adjustmentNo;
@@ -189,12 +238,15 @@ export class InventoryLookupService {
   async generateUniqueTransferNo(businessId: string) {
     for (let attempt = 0; attempt < INVENTORY_CODE_RETRY_LIMIT; attempt++) {
       const transferNo = generateRandomCode("TRF");
-
-      const existingTransfer =
-        await this.prisma.inventoryStockTransfer.findFirst({
-          where: { businessId, transferNo },
-          select: { id: true },
-        });
+      const [existingTransfer] = await this.db
+        .select({ id: inventoryStockTransfer.id })
+        .from(inventoryStockTransfer)
+        .where(
+          and(
+            eq(inventoryStockTransfer.businessId, businessId),
+            eq(inventoryStockTransfer.transferNo, transferNo),
+          ),
+        );
 
       if (!existingTransfer) {
         return transferNo;
@@ -205,10 +257,10 @@ export class InventoryLookupService {
   }
 
   async applyStockDelta(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: StockItemRef & {
       warehouseId: string;
-      quantityDelta: Prisma.Decimal.Value;
+      quantityDelta: Decimal.Value;
       movementType: InventoryMovementType;
       referenceType?: InventoryReferenceType;
       referenceId?: string;
@@ -220,11 +272,11 @@ export class InventoryLookupService {
   }
 
   async reserveForOrder(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: StockItemRef & {
       orderId: string;
       orderItemId: string;
-      quantity: Prisma.Decimal.Value;
+      quantity: Decimal.Value;
       warehouseId?: string | null;
       createdBy?: string;
     },
@@ -233,10 +285,10 @@ export class InventoryLookupService {
   }
 
   async reserveStock(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: StockItemRef & {
       warehouseId: string;
-      quantity: Prisma.Decimal.Value;
+      quantity: Decimal.Value;
       referenceType: InventoryReferenceType;
       referenceId: string;
       note?: string | null;
@@ -247,10 +299,10 @@ export class InventoryLookupService {
   }
 
   async releaseStockReservation(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: StockItemRef & {
       warehouseId: string;
-      quantity: Prisma.Decimal.Value;
+      quantity: Decimal.Value;
       referenceType: InventoryReferenceType;
       referenceId: string;
       note?: string | null;
@@ -261,10 +313,10 @@ export class InventoryLookupService {
   }
 
   async deductReservedStock(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: StockItemRef & {
       warehouseId: string;
-      quantity: Prisma.Decimal.Value;
+      quantity: Decimal.Value;
       movementType: InventoryMovementType;
       referenceType: InventoryReferenceType;
       referenceId: string;
@@ -276,7 +328,7 @@ export class InventoryLookupService {
   }
 
   async releaseOrderReservation(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
       allocationId: string;
@@ -287,7 +339,7 @@ export class InventoryLookupService {
   }
 
   async fulfillOrderAllocation(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
       allocationId: string;
@@ -310,10 +362,7 @@ export class InventoryLookupService {
   }
 
   handleUniqueError(error: unknown, message: string): never {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
+    if (isUniqueConstraintError(error)) {
       throw new BadRequestException(message);
     }
 

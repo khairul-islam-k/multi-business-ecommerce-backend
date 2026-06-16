@@ -1,5 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus } from "@/database/schema";
 
 export function assertCanShipOrder(status: OrderStatus) {
   const shippableStatuses: OrderStatus[] = [

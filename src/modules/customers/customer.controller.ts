@@ -10,7 +10,7 @@ import {
   Query,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { PermissionAction, RbacFeature } from "@prisma/client";
+import { PermissionAction, RbacFeature } from "@/database/schema";
 
 import { SecuredBusinessRoute } from "../access/decorators/secured-business-route.decorator";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";

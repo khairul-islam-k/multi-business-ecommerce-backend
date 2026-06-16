@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import Decimal from "decimal.js";
 
 export type PurchaseOrderTotalItem = {
   quantityOrdered: number;
@@ -9,7 +9,7 @@ export type PurchaseOrderTotalItem = {
 export function calculatePurchaseOrderTotals(
   items: PurchaseOrderTotalItem[],
   shippingCost: number,
-  taxRate: Prisma.Decimal.Value,
+  taxRate: Decimal.Value,
 ) {
   const subtotal = items.reduce(
     (total, item) => total + item.quantityOrdered * item.unitCost,
@@ -35,21 +35,22 @@ export function calculatePurchaseOrderTotals(
 
 export function calculateLineTotal(
   item: PurchaseOrderTotalItem,
-  taxRate: Prisma.Decimal.Value,
+  taxRate: Decimal.Value,
 ) {
-  const subtotal = new Prisma.Decimal(item.quantityOrdered).mul(item.unitCost);
-  const discountAmount = new Prisma.Decimal(item.discountAmount ?? 0);
+  const subtotal = new Decimal(item.quantityOrdered).mul(item.unitCost);
+  const discountAmount = new Decimal(item.discountAmount ?? 0);
 
   return subtotal.minus(discountAmount).plus(calculateLineTax(item, taxRate));
 }
 
 export function calculateLineTax(
   item: PurchaseOrderTotalItem,
-  taxRate: Prisma.Decimal.Value,
+  taxRate: Decimal.Value,
 ) {
-  const subtotal = new Prisma.Decimal(item.quantityOrdered).mul(item.unitCost);
-  const discountAmount = new Prisma.Decimal(item.discountAmount ?? 0);
+  const subtotal = new Decimal(item.quantityOrdered).mul(item.unitCost);
+  const discountAmount = new Decimal(item.discountAmount ?? 0);
   const taxableAmount = subtotal.minus(discountAmount);
 
   return taxableAmount.mul(taxRate).div(100).toDecimalPlaces(2);
 }
+

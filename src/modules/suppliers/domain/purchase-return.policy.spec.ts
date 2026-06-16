@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@jest/globals";
 import { BadRequestException } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import Decimal from "decimal.js";
 
 import {
   assertPurchaseOrderItems,
@@ -22,11 +22,11 @@ describe("purchase return policy", () => {
   it("calculates return totals", () => {
     const totals = calculatePurchaseReturnTotals([
       {
-        quantity: new Prisma.Decimal(2),
-        unitCost: new Prisma.Decimal(100),
-        discountAmount: new Prisma.Decimal(10),
-        taxAmount: new Prisma.Decimal(19),
-        lineTotal: new Prisma.Decimal(209),
+        quantity: new Decimal(2),
+        unitCost: new Decimal(100),
+        discountAmount: new Decimal(10),
+        taxAmount: new Decimal(19),
+        lineTotal: new Decimal(209),
       },
     ]);
 
@@ -36,3 +36,4 @@ describe("purchase return policy", () => {
     expect(totals.totalAmount.toString()).toBe("209");
   });
 });
+

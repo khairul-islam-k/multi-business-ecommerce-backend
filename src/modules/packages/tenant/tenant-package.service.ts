@@ -4,15 +4,30 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  type JsonValue,
+  type PackagePlan,
+  type PackagePlanFeature,
+  type PackagePlanLimit,
   PackageCreditEntryType,
   PackagePaymentStatus,
   PackagePaymentType,
   PackageStatus,
-  Prisma,
-} from "@prisma/client";
+  PackagePayment,
+  packagePlan,
+  packagePlanFeature,
+  packagePlanLimit,
+  packageSubscription,
+  packageTenantCreditLedger,
+  packagePayment,
+} from "@/database/schema";
+import Decimal from "decimal.js";
+import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
 import { QueryPackageDto } from "../dto/query-package.dto";
-import { PrismaService } from "../../../prisma/prisma.service";
+import {
+  type DatabaseTransaction,
+  DatabaseService,
+} from "../../../database/database.service";
 import { PackageLimitService } from "../package-limit.service";
 import { PackageSubscriptionService } from "../package-subscription.service";
 import type {
@@ -26,63 +41,59 @@ import {
 
 const MOCK_PAYMENT_EXPIRY_MINUTES = 15;
 
+type PackagePlanWithDetails = PackagePlan & {
+  limits: PackagePlanLimit[];
+  features: PackagePlanFeature[];
+};
+
+type PaymentWithPlan = PackagePayment & {
+  plan: PackagePlanWithDetails | null;
+};
+
 @Injectable()
 export class TenantPackageService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly limits: PackageLimitService,
     private readonly subscriptions: PackageSubscriptionService,
   ) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async findAvailablePlans(query: QueryPackageDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const where = and(
+      isNull(packagePlan.deletedAt),
+      eq(packagePlan.status, PackageStatus.ACTIVE),
+      query.search
+        ? or(
+            ilike(packagePlan.name, `%${query.search}%`),
+            ilike(packagePlan.description, `%${query.search}%`),
+          )
+        : undefined,
+    );
 
-    const where: Prisma.PackagePlanWhereInput = {
-      deletedAt: null,
-      status: PackageStatus.ACTIVE,
-      ...(query.search
-        ? {
-            OR: [
-              {
-                name: {
-                  contains: query.search,
-                  mode: "insensitive",
-                },
-              },
-              {
-                description: {
-                  contains: query.search,
-                  mode: "insensitive",
-                },
-              },
-            ],
-          }
-        : {}),
-    };
+    const [plans, total] = await Promise.all([
+      this.db
+        .select()
+        .from(packagePlan)
+        .where(where)
+        .orderBy(asc(packagePlan.sortOrder), desc(packagePlan.createdAt))
+        .limit(limit)
+        .offset(skip)
+        .then((rows) => this.withPlansDetails(rows)),
+      this.db
+        .select({ value: count() })
+        .from(packagePlan)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
+    ]);
 
-    const items = await this.prisma.packagePlan.findMany({
-      where,
-      skip,
-      take: limit,
-      include: {
-        limits: true,
-        features: {
-          where: {
-            isActive: true,
-          },
-          orderBy: {
-            sortOrder: "asc",
-          },
-        },
-      },
-      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
-    });
-
-    const total = await this.prisma.packagePlan.count({ where });
-
-    return paginatedResponse(items, {
+    return paginatedResponse(plans, {
       page,
       limit,
       total,
@@ -106,36 +117,27 @@ export class TenantPackageService {
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.PackageSubscriptionWhereInput = {
-      tenantId,
-    };
-
-    const [items, total] = await Promise.all([
-      this.prisma.packageSubscription.findMany({
-        where,
-        skip,
-        take: limit,
-        include: {
-          package: {
-            include: {
-              limits: true,
-              features: {
-                where: {
-                  isActive: true,
-                },
-                orderBy: {
-                  sortOrder: "asc",
-                },
-              },
-            },
-          },
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      }),
-      this.prisma.packageSubscription.count({ where }),
+    const [subscriptions, total] = await Promise.all([
+      this.db
+        .select()
+        .from(packageSubscription)
+        .where(eq(packageSubscription.tenantId, tenantId))
+        .orderBy(desc(packageSubscription.createdAt))
+        .limit(limit)
+        .offset(skip),
+      this.db
+        .select({ value: count() })
+        .from(packageSubscription)
+        .where(eq(packageSubscription.tenantId, tenantId))
+        .then(([row]) => row?.value ?? 0),
     ]);
+
+    const items = await Promise.all(
+      subscriptions.map(async (subscription) => ({
+        ...subscription,
+        package: await this.getPlanWithDetails(subscription.packageId),
+      })),
+    );
 
     return paginatedResponse(items, {
       page,
@@ -160,8 +162,9 @@ export class TenantPackageService {
       targetPlanSnapshot.limits,
     );
 
-    const payment = await this.prisma.packageMockPayment.create({
-      data: {
+    const [payment] = await this.db
+      .insert(packagePayment)
+      .values({
         tenantId,
         planId: targetPlan.id,
         type:
@@ -169,42 +172,34 @@ export class TenantPackageService {
             ? PackagePaymentType.CREDIT_ONLY_PLAN_CHANGE
             : PackagePaymentType.PLAN_CHANGE,
         status: PackagePaymentStatus.PENDING,
-        amount: charge.amountDue,
+        amount: new Decimal(charge.amountDue),
         currencyCode: charge.currencyCode,
         metadata: {
           calculation: "target_plan_price_minus_current_unused_balance",
           charge,
           targetPlanSnapshot,
-        },
+        } as JsonValue,
         expiresAt: this.getPaymentExpiry(),
-      },
-      include: {
-        plan: {
-          include: {
-            limits: true,
-            features: {
-              where: {
-                isActive: true,
-              },
-              orderBy: {
-                sortOrder: "asc",
-              },
-            },
-          },
-        },
-      },
-    });
+      })
+      .returning();
 
-    return apiResponse(payment, "Package checkout created successfully");
+    return apiResponse(
+      await this.withPaymentPlan(payment),
+      "Package checkout created successfully",
+    );
   }
 
   async confirmMockPayment(tenantId: string, paymentId: string) {
-    const payment = await this.prisma.packageMockPayment.findFirst({
-      where: {
-        id: paymentId,
-        tenantId,
-      },
-    });
+    const [payment] = await this.db
+      .select()
+      .from(packagePayment)
+      .where(
+        and(
+          eq(packagePayment.id, paymentId),
+          eq(packagePayment.tenantId, tenantId),
+        ),
+      )
+      .limit(1);
 
     if (!payment) {
       throw new NotFoundException("Package mock payment not found");
@@ -215,19 +210,15 @@ export class TenantPackageService {
     }
 
     if (payment.expiresAt <= new Date()) {
-      await this.prisma.packageMockPayment.update({
-        where: {
-          id: payment.id,
-        },
-        data: {
-          status: PackagePaymentStatus.EXPIRED,
-        },
-      });
+      await this.db
+        .update(packagePayment)
+        .set({ status: PackagePaymentStatus.EXPIRED })
+        .where(eq(packagePayment.id, payment.id));
 
       throw new ForbiddenException("Package mock payment has expired");
     }
 
-    const result = await this.prisma.$transaction(async (tx) => {
+    const result = await this.db.transaction(async (tx) => {
       if (!payment.planId) {
         throw new ForbiddenException("Payment plan is missing");
       }
@@ -251,16 +242,15 @@ export class TenantPackageService {
         targetPlanSnapshot,
       );
 
-      const confirmedPayment = await tx.packageMockPayment.update({
-        where: {
-          id: payment.id,
-        },
-        data: {
+      const [confirmedPayment] = await tx
+        .update(packagePayment)
+        .set({
           subscriptionId: subscription.id,
           status: PackagePaymentStatus.CONFIRMED,
           confirmedAt: new Date(),
-        },
-      });
+        })
+        .where(eq(packagePayment.id, payment.id))
+        .returning();
 
       if (charge) {
         await this.recordPlanChangeCredits(tx, {
@@ -281,7 +271,7 @@ export class TenantPackageService {
   }
 
   private getPlanSnapshotFromPayment(
-    metadata: Prisma.JsonValue,
+    metadata: JsonValue | null,
   ): PackagePlanSnapshot | undefined {
     if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
       return undefined;
@@ -297,7 +287,7 @@ export class TenantPackageService {
   }
 
   private getChargeFromPayment(
-    metadata: Prisma.JsonValue,
+    metadata: JsonValue | null,
   ): PlanChangeCharge | undefined {
     if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
       return undefined;
@@ -313,7 +303,7 @@ export class TenantPackageService {
   }
 
   private async recordPlanChangeCredits(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       tenantId: string;
       subscriptionId: string;
@@ -322,34 +312,86 @@ export class TenantPackageService {
     },
   ) {
     if (params.charge.creditApplied > 0) {
-      await tx.packageTenantCreditLedger.create({
-        data: {
-          tenantId: params.tenantId,
-          subscriptionId: params.subscriptionId,
-          paymentId: params.paymentId,
-          type: PackageCreditEntryType.CREDIT_APPLIED,
-          amount: new Prisma.Decimal(params.charge.creditApplied).negated(),
-          currencyCode: params.charge.currencyCode,
-          note: "Credit applied to package plan change",
-          metadata: { charge: params.charge },
-        },
+      await tx.insert(packageTenantCreditLedger).values({
+        tenantId: params.tenantId,
+        subscriptionId: params.subscriptionId,
+        paymentId: params.paymentId,
+        type: PackageCreditEntryType.CREDIT_APPLIED,
+        amount: new Decimal(params.charge.creditApplied).negated(),
+        currencyCode: params.charge.currencyCode,
+        note: "Credit applied to package plan change",
+        metadata: { charge: params.charge } as JsonValue,
       });
     }
 
     if (params.charge.creditToAdd > 0) {
-      await tx.packageTenantCreditLedger.create({
-        data: {
-          tenantId: params.tenantId,
-          subscriptionId: params.subscriptionId,
-          paymentId: params.paymentId,
-          type: PackageCreditEntryType.DOWNGRADE_CREDIT,
-          amount: params.charge.creditToAdd,
-          currencyCode: params.charge.currencyCode,
-          note: "Unused package balance carried as tenant credit",
-          metadata: { charge: params.charge },
-        },
+      await tx.insert(packageTenantCreditLedger).values({
+        tenantId: params.tenantId,
+        subscriptionId: params.subscriptionId,
+        paymentId: params.paymentId,
+        type: PackageCreditEntryType.DOWNGRADE_CREDIT,
+        amount: new Decimal(params.charge.creditToAdd),
+        currencyCode: params.charge.currencyCode,
+        note: "Unused package balance carried as tenant credit",
+        metadata: { charge: params.charge } as JsonValue,
       });
     }
+  }
+
+  private async withPlansDetails(plans: PackagePlan[]) {
+    return Promise.all(plans.map((plan) => this.withPlanDetails(plan)));
+  }
+
+  private async getPlanWithDetails(planId: string) {
+    const [plan] = await this.db
+      .select()
+      .from(packagePlan)
+      .where(eq(packagePlan.id, planId))
+      .limit(1);
+
+    if (!plan) {
+      throw new NotFoundException("Package plan not found");
+    }
+
+    return this.withPlanDetails(plan);
+  }
+
+  private async withPlanDetails(
+    plan: PackagePlan,
+  ): Promise<PackagePlanWithDetails> {
+    const [limits, features] = await Promise.all([
+      this.db
+        .select()
+        .from(packagePlanLimit)
+        .where(eq(packagePlanLimit.packageId, plan.id)),
+      this.db
+        .select()
+        .from(packagePlanFeature)
+        .where(
+          and(
+            eq(packagePlanFeature.packageId, plan.id),
+            eq(packagePlanFeature.isActive, true),
+          ),
+        )
+        .orderBy(asc(packagePlanFeature.sortOrder)),
+    ]);
+
+    return {
+      ...plan,
+      limits,
+      features,
+    };
+  }
+
+  private async withPaymentPlan(
+    payment: PackagePayment,
+  ): Promise<PaymentWithPlan> {
+    return {
+      ...payment,
+      plan: payment.planId
+        ? await this.getPlanWithDetails(payment.planId)
+        : null,
+    };
   }
 
   private getPaymentExpiry() {

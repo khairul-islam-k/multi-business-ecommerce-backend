@@ -1,6 +1,6 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import { ExecutionContext, UnauthorizedException } from "@nestjs/common";
-import { SystemUserType } from "@prisma/client";
+import { SystemUserType } from "@/database/schema";
 
 import { SubscriptionGuard } from "../subscription.guard";
 

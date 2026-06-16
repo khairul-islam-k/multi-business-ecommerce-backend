@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { Gender } from "@prisma/client";
+import { Gender } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsDateString,

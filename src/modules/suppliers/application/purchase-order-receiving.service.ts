@@ -2,18 +2,23 @@ import { Injectable } from "@nestjs/common";
 import {
   InventoryMovementType,
   InventoryReferenceType,
-  Prisma,
   SupplierInvoiceStatus,
   SupplierProductMapStatus,
   SupplierPurchaseOrderStatus,
-} from "@prisma/client";
+  supplierInvoice,
+  supplierInvoiceItem,
+  supplierProductMap,
+  supplierPurchaseOrder,
+  supplierPurchaseOrderItem,
+} from "@/database/schema";
+import Decimal from "decimal.js";
+import { eq } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { ReceivePurchaseOrderDto } from "../dto/supplier.dto";
 import { assertPurchaseOrderCanReceive } from "../domain/purchase-order-status.policy";
 import { PurchaseOrderRepository } from "../infrastructure/purchase-order.repository";
-import { PURCHASE_ORDER_INCLUDE } from "../infrastructure/supplier.selects";
-import { PrismaService } from "../../../prisma/prisma.service";
+import { DatabaseService } from "../../../database/database.service";
 import { FinanceLedgerService } from "../../finance/common/finance-ledger.service";
 import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
 import { apiResponse } from "../../../common/utils/api-response.util";
@@ -21,11 +26,15 @@ import { apiResponse } from "../../../common/utils/api-response.util";
 @Injectable()
 export class PurchaseOrderReceivingService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly inventoryLookup: InventoryLookupService,
     private readonly finance: FinanceLedgerService,
     private readonly purchaseOrders: PurchaseOrderRepository,
   ) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async receivePurchaseOrder(
     currentUser: CurrentUserPayload,
@@ -40,16 +49,14 @@ export class PurchaseOrderReceivingService {
 
     assertPurchaseOrderCanReceive(purchaseOrder.status);
 
-    const receivedOrder = await this.prisma.$transaction(async (tx) => {
+    const receivedOrder = await this.db.transaction(async (tx) => {
       for (const orderItem of purchaseOrder.items) {
-        const quantityReceived = new Prisma.Decimal(orderItem.quantityOrdered);
+        const quantityReceived = new Decimal(orderItem.quantityOrdered);
 
-        await tx.supplierPurchaseOrderItem.update({
-          where: { id: orderItem.id },
-          data: {
-            quantityReceived,
-          },
-        });
+        await tx
+          .update(supplierPurchaseOrderItem)
+          .set({ quantityReceived })
+          .where(eq(supplierPurchaseOrderItem.id, orderItem.id));
 
         await this.inventoryLookup.applyStockDelta(tx, {
           businessId,
@@ -64,38 +71,38 @@ export class PurchaseOrderReceivingService {
           createdBy: currentUser.id,
         });
 
-        await tx.supplierProductMap.upsert({
-          where: {
-            businessId_supplierId_itemKey: {
-              businessId,
-              supplierId: purchaseOrder.supplierId,
-              itemKey: this.inventoryLookup.buildStockItemKey(
-                orderItem.productId,
-                orderItem.variantId,
-              ),
-            },
-          },
-          update: {
-            lastPurchasePrice: orderItem.unitCost,
-            status: SupplierProductMapStatus.ACTIVE,
-          },
-          create: {
+        const itemKey = this.inventoryLookup.buildStockItemKey(
+          orderItem.productId,
+          orderItem.variantId,
+        );
+
+        await tx
+          .insert(supplierProductMap)
+          .values({
             businessId,
             supplierId: purchaseOrder.supplierId,
             productId: orderItem.productId,
             variantId: orderItem.variantId,
-            itemKey: this.inventoryLookup.buildStockItemKey(
-              orderItem.productId,
-              orderItem.variantId,
-            ),
+            itemKey,
             lastPurchasePrice: orderItem.unitCost,
             status: SupplierProductMapStatus.ACTIVE,
-          },
-        });
+          })
+          .onConflictDoUpdate({
+            target: [
+              supplierProductMap.businessId,
+              supplierProductMap.supplierId,
+              supplierProductMap.itemKey,
+            ],
+            set: {
+              lastPurchasePrice: orderItem.unitCost,
+              status: SupplierProductMapStatus.ACTIVE,
+            },
+          });
       }
 
-      const supplierInvoice = await tx.supplierInvoice.create({
-        data: {
+      const [createdInvoice] = await tx
+        .insert(supplierInvoice)
+        .values({
           businessId,
           supplierId: purchaseOrder.supplierId,
           purchaseOrderId: purchaseOrder.id,
@@ -110,38 +117,40 @@ export class PurchaseOrderReceivingService {
           taxRate: purchaseOrder.taxRate,
           shippingCost: purchaseOrder.shippingCost,
           totalAmount: purchaseOrder.totalAmount,
-          paidAmount: 0,
+          paidAmount: new Decimal(0),
           note: dto.note,
           createdBy: currentUser.id,
-          items: {
-            create: purchaseOrder.items.map((item) => ({
-              productId: item.productId,
-              variantId: item.variantId,
-              quantity: item.quantityOrdered,
-              unitCost: item.unitCost,
-              discountAmount: item.discountAmount,
-              taxAmount: item.taxAmount,
-              lineTotal: item.lineTotal,
-            })),
-          },
-        },
-      });
+        })
+        .returning();
+
+      await tx.insert(supplierInvoiceItem).values(
+        purchaseOrder.items.map((item) => ({
+          supplierInvoiceId: createdInvoice.id,
+          productId: item.productId,
+          variantId: item.variantId,
+          quantity: item.quantityOrdered,
+          unitCost: item.unitCost,
+          discountAmount: item.discountAmount,
+          taxAmount: item.taxAmount,
+          lineTotal: item.lineTotal,
+        })),
+      );
 
       await this.finance.createSupplierInvoicePayable(tx, {
         businessId,
         supplierId: purchaseOrder.supplierId,
-        supplierInvoiceId: supplierInvoice.id,
-        totalAmount: supplierInvoice.totalAmount,
+        supplierInvoiceId: createdInvoice.id,
+        totalAmount: createdInvoice.totalAmount,
         note: dto.note,
       });
 
-      return tx.supplierPurchaseOrder.update({
-        where: { id: purchaseOrderId },
-        data: {
-          status: SupplierPurchaseOrderStatus.RECEIVED,
-        },
-        include: PURCHASE_ORDER_INCLUDE,
-      });
+      const [updatedOrder] = await tx
+        .update(supplierPurchaseOrder)
+        .set({ status: SupplierPurchaseOrderStatus.RECEIVED })
+        .where(eq(supplierPurchaseOrder.id, purchaseOrderId))
+        .returning();
+
+      return this.purchaseOrders.hydrate(updatedOrder);
     });
 
     return apiResponse(receivedOrder, "Purchase order received successfully");

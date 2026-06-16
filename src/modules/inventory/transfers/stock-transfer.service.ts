@@ -4,36 +4,39 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  type InventoryStockTransfer,
   InventoryMovementType,
   InventoryReferenceType,
   InventoryTransferStatus,
-  Prisma,
-} from "@prisma/client";
+  inventoryStockTransfer,
+  inventoryStockTransferItem,
+  warehouse,
+} from "@/database/schema";
+import Decimal from "decimal.js";
+import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import {
   CreateStockTransferDto,
   QueryStockTransferDto,
 } from "./dto/stock-transfer.dto";
-import { PrismaService } from "../../../prisma/prisma.service";
+import { DatabaseService } from "../../../database/database.service";
 import { InventoryLookupService } from "../common/inventory-lookup.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
 
-const TRANSFER_INCLUDE = {
-  fromWarehouse: true,
-  toWarehouse: true,
-  items: { orderBy: { createdAt: "asc" } },
-} satisfies Prisma.InventoryStockTransferInclude;
-
 @Injectable()
 export class StockTransferService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly lookup: InventoryLookupService,
   ) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async create(
     currentUser: CurrentUserPayload,
@@ -63,24 +66,32 @@ export class StockTransferService {
     const transferNo = await this.lookup.generateUniqueTransferNo(businessId);
 
     try {
-      const transfer = await this.prisma.inventoryStockTransfer.create({
-        data: {
-          businessId,
-          transferNo,
-          fromWarehouseId: dto.fromWarehouseId,
-          toWarehouseId: dto.toWarehouseId,
-          status: InventoryTransferStatus.DRAFT,
-          note: this.lookup.normalizeNullableText(dto.note),
-          createdBy: currentUser.id,
-          items: {
-            create: dto.items.map((item) => ({
-              productId: item.productId,
-              variantId: item.variantId ?? null,
-              requestedQuantity: item.requestedQuantity,
-            })),
-          },
-        },
-        include: TRANSFER_INCLUDE,
+      const transfer = await this.db.transaction(async (tx) => {
+        const [createdTransfer] = await tx
+          .insert(inventoryStockTransfer)
+          .values({
+            businessId,
+            transferNo,
+            fromWarehouseId: dto.fromWarehouseId,
+            toWarehouseId: dto.toWarehouseId,
+            status: InventoryTransferStatus.DRAFT,
+            note: this.lookup.normalizeNullableText(dto.note),
+            createdBy: currentUser.id,
+          })
+          .returning();
+
+        await tx.insert(inventoryStockTransferItem).values(
+          dto.items.map((item) => ({
+            transferId: createdTransfer.id,
+            productId: item.productId,
+            variantId: item.variantId ?? null,
+            requestedQuantity: new Decimal(item.requestedQuantity),
+            transferredQuantity: new Decimal(0),
+            receivedQuantity: new Decimal(0),
+          })),
+        );
+
+        return this.findTransferWithRelations(createdTransfer.id);
       });
 
       return apiResponse(transfer, "Stock transfer created successfully");
@@ -96,35 +107,37 @@ export class StockTransferService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const where = and(
+      eq(inventoryStockTransfer.businessId, businessId),
+      isNull(inventoryStockTransfer.deletedAt),
+      query.warehouseId
+        ? or(
+            eq(inventoryStockTransfer.fromWarehouseId, query.warehouseId),
+            eq(inventoryStockTransfer.toWarehouseId, query.warehouseId),
+          )
+        : undefined,
+      query.search
+        ? ilike(inventoryStockTransfer.transferNo, `%${query.search}%`)
+        : undefined,
+    );
 
-    const where: Prisma.InventoryStockTransferWhereInput = {
-      businessId,
-      deletedAt: null,
-      ...(query.warehouseId
-        ? {
-            OR: [
-              { fromWarehouseId: query.warehouseId },
-              { toWarehouseId: query.warehouseId },
-            ],
-          }
-        : {}),
-      ...(query.search
-        ? {
-            transferNo: { contains: query.search, mode: "insensitive" },
-          }
-        : {}),
-    };
-
-    const [items, total] = await Promise.all([
-      this.prisma.inventoryStockTransfer.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-        include: TRANSFER_INCLUDE,
-      }),
-      this.prisma.inventoryStockTransfer.count({ where }),
+    const [rows, total] = await Promise.all([
+      this.db
+        .select()
+        .from(inventoryStockTransfer)
+        .where(where)
+        .orderBy(desc(inventoryStockTransfer.createdAt))
+        .limit(limit)
+        .offset(skip),
+      this.db
+        .select({ value: count() })
+        .from(inventoryStockTransfer)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
     ]);
+    const items = await Promise.all(
+      rows.map((transfer) => this.withTransferRelations(transfer)),
+    );
 
     return paginatedResponse(items, {
       page,
@@ -135,10 +148,10 @@ export class StockTransferService {
   }
 
   async findOne(businessId: string, transferId: string) {
-    const transfer = await this.prisma.inventoryStockTransfer.findFirst({
-      where: { id: transferId, businessId, deletedAt: null },
-      include: TRANSFER_INCLUDE,
-    });
+    const transfer = await this.findTransferWithRelations(
+      transferId,
+      businessId,
+    );
 
     if (!transfer) {
       throw new NotFoundException("Stock transfer not found");
@@ -158,14 +171,14 @@ export class StockTransferService {
       InventoryTransferStatus.DRAFT,
     );
 
-    const shippedTransfer = await this.prisma.$transaction(async (tx) => {
+    const shippedTransfer = await this.db.transaction(async (tx) => {
       for (const item of transfer.items) {
         await this.lookup.applyStockDelta(tx, {
           businessId,
           warehouseId: transfer.fromWarehouseId,
           productId: item.productId,
           variantId: item.variantId,
-          quantityDelta: new Prisma.Decimal(item.requestedQuantity).negated(),
+          quantityDelta: new Decimal(item.requestedQuantity).negated(),
           movementType: InventoryMovementType.TRANSFER_OUT,
           referenceType: InventoryReferenceType.STOCK_TRANSFER,
           referenceId: transfer.id,
@@ -173,21 +186,23 @@ export class StockTransferService {
           createdBy: currentUser.id,
         });
 
-        await tx.inventoryStockTransferItem.update({
-          where: { id: item.id },
-          data: { transferredQuantity: item.requestedQuantity },
-        });
+        await tx
+          .update(inventoryStockTransferItem)
+          .set({ transferredQuantity: item.requestedQuantity })
+          .where(eq(inventoryStockTransferItem.id, item.id));
       }
 
-      return tx.inventoryStockTransfer.update({
-        where: { id: transferId },
-        data: {
+      const [updatedTransfer] = await tx
+        .update(inventoryStockTransfer)
+        .set({
           status: InventoryTransferStatus.SHIPPED,
           approvedBy: currentUser.id,
           shippedAt: new Date(),
-        },
-        include: TRANSFER_INCLUDE,
-      });
+        })
+        .where(eq(inventoryStockTransfer.id, transferId))
+        .returning();
+
+      return this.withTransferRelations(updatedTransfer);
     });
 
     return apiResponse(shippedTransfer, "Stock transfer shipped");
@@ -204,7 +219,7 @@ export class StockTransferService {
       InventoryTransferStatus.SHIPPED,
     );
 
-    const receivedTransfer = await this.prisma.$transaction(async (tx) => {
+    const receivedTransfer = await this.db.transaction(async (tx) => {
       for (const item of transfer.items) {
         await this.lookup.applyStockDelta(tx, {
           businessId,
@@ -219,20 +234,22 @@ export class StockTransferService {
           createdBy: currentUser.id,
         });
 
-        await tx.inventoryStockTransferItem.update({
-          where: { id: item.id },
-          data: { receivedQuantity: item.transferredQuantity },
-        });
+        await tx
+          .update(inventoryStockTransferItem)
+          .set({ receivedQuantity: item.transferredQuantity })
+          .where(eq(inventoryStockTransferItem.id, item.id));
       }
 
-      return tx.inventoryStockTransfer.update({
-        where: { id: transferId },
-        data: {
+      const [updatedTransfer] = await tx
+        .update(inventoryStockTransfer)
+        .set({
           status: InventoryTransferStatus.RECEIVED,
           receivedAt: new Date(),
-        },
-        include: TRANSFER_INCLUDE,
-      });
+        })
+        .where(eq(inventoryStockTransfer.id, transferId))
+        .returning();
+
+      return this.withTransferRelations(updatedTransfer);
     });
 
     return apiResponse(receivedTransfer, "Stock transfer received");
@@ -249,13 +266,16 @@ export class StockTransferService {
       InventoryTransferStatus.DRAFT,
     );
 
-    const transfer = await this.prisma.inventoryStockTransfer.update({
-      where: { id: transferId },
-      data: { status: InventoryTransferStatus.CANCELLED },
-      include: TRANSFER_INCLUDE,
-    });
+    const [transfer] = await this.db
+      .update(inventoryStockTransfer)
+      .set({ status: InventoryTransferStatus.CANCELLED })
+      .where(eq(inventoryStockTransfer.id, transferId))
+      .returning();
 
-    return apiResponse(transfer, "Stock transfer cancelled");
+    return apiResponse(
+      await this.withTransferRelations(transfer),
+      "Stock transfer cancelled",
+    );
   }
 
   private async getTransferOrThrow(
@@ -263,21 +283,66 @@ export class StockTransferService {
     transferId: string,
     status: InventoryTransferStatus,
   ) {
-    const transfer = await this.prisma.inventoryStockTransfer.findFirst({
-      where: {
-        id: transferId,
-        businessId,
-        deletedAt: null,
-        status,
-      },
-      include: { items: true },
-    });
+    const transfer = await this.findTransferWithRelations(
+      transferId,
+      businessId,
+      status,
+    );
 
     if (!transfer) {
       throw new NotFoundException("Stock transfer not found");
     }
 
     return transfer;
+  }
+
+  private async findTransferWithRelations(
+    transferId: string,
+    businessId?: string,
+    status?: InventoryTransferStatus,
+  ) {
+    const [transfer] = await this.db
+      .select()
+      .from(inventoryStockTransfer)
+      .where(
+        and(
+          eq(inventoryStockTransfer.id, transferId),
+          businessId
+            ? eq(inventoryStockTransfer.businessId, businessId)
+            : undefined,
+          isNull(inventoryStockTransfer.deletedAt),
+          status ? eq(inventoryStockTransfer.status, status) : undefined,
+        ),
+      );
+
+    return transfer ? this.withTransferRelations(transfer) : null;
+  }
+
+  private async withTransferRelations(transfer: InventoryStockTransfer) {
+    const [fromWarehouse, toWarehouse, items] = await Promise.all([
+      this.db
+        .select()
+        .from(warehouse)
+        .where(eq(warehouse.id, transfer.fromWarehouseId))
+        .then(([row]) => row ?? null),
+      this.db
+        .select()
+        .from(warehouse)
+        .where(eq(warehouse.id, transfer.toWarehouseId))
+        .then(([row]) => row ?? null),
+      this.db
+        .select()
+        .from(inventoryStockTransferItem)
+        .where(eq(inventoryStockTransferItem.transferId, transfer.id))
+        .orderBy(asc(inventoryStockTransferItem.createdAt)),
+    ]);
+
+    return {
+      ...transfer,
+      fromWarehouse,
+      toWarehouse,
+      items,
+    };
   }
 
   private assertItems(

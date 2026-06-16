@@ -8,8 +8,12 @@ import {
   FinanceExpenseCategoryStatus,
   FinanceExpenseStatus,
   FinanceSourceType,
-  Prisma,
-} from "@prisma/client";
+  financeAccount,
+  financeExpense,
+  financeExpenseCategory,
+} from "@/database/schema";
+import Decimal from "decimal.js";
+import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import {
@@ -17,24 +21,23 @@ import {
   QueryExpenseDto,
   UpdateExpenseDto,
 } from "./dto/finance-expense.dto";
-import { PrismaService } from "../../../prisma/prisma.service";
+import { DatabaseService } from "../../../database/database.service";
 import { FinanceLedgerService } from "../common/finance-ledger.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
 
-const EXPENSE_INCLUDE = {
-  account: true,
-  category: true,
-} satisfies Prisma.FinanceExpenseInclude;
-
 @Injectable()
 export class ExpenseService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly ledger: FinanceLedgerService,
   ) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async create(
     currentUser: CurrentUserPayload,
@@ -46,21 +49,26 @@ export class ExpenseService {
       this.assertActiveCategory(businessId, dto.expenseCategoryId),
     ]);
 
-    const expense = await this.prisma.financeExpense.create({
-      data: {
+    const [createdExpense] = await this.db
+      .insert(financeExpense)
+      .values({
         businessId,
         accountId: dto.accountId,
         expenseCategoryId: dto.expenseCategoryId,
         expenseNo: await this.ledger.generateUniqueExpenseNo(businessId),
         title: this.normalizeName(dto.title),
-        amount: dto.amount,
+        amount: new Decimal(dto.amount),
         expenseDate: dto.expenseDate,
         status: FinanceExpenseStatus.DRAFT,
         note: this.normalizeNullableText(dto.note),
         createdBy: currentUser.id,
-      },
-      include: EXPENSE_INCLUDE,
-    });
+      })
+      .returning();
+
+    const expense = await this.findExpenseWithRelations(
+      businessId,
+      createdExpense.id,
+    );
 
     return apiResponse(expense, "Expense created successfully");
   }
@@ -69,35 +77,15 @@ export class ExpenseService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-
-    const where: Prisma.FinanceExpenseWhereInput = {
-      businessId,
-      deletedAt: null,
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.accountId ? { accountId: query.accountId } : {}),
-      ...(query.expenseCategoryId
-        ? { expenseCategoryId: query.expenseCategoryId }
-        : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { expenseNo: { contains: query.search, mode: "insensitive" } },
-              { title: { contains: query.search, mode: "insensitive" } },
-              { referenceNo: { contains: query.search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-    };
+    const where = this.buildExpenseWhere(businessId, query);
 
     const [items, total] = await Promise.all([
-      this.prisma.financeExpense.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-        include: EXPENSE_INCLUDE,
-      }),
-      this.prisma.financeExpense.count({ where }),
+      this.selectExpensesWithRelations(where, limit, skip),
+      this.db
+        .select({ value: count() })
+        .from(financeExpense)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
     ]);
 
     return paginatedResponse(items, {
@@ -109,10 +97,7 @@ export class ExpenseService {
   }
 
   async findOne(businessId: string, expenseId: string) {
-    const expense = await this.prisma.financeExpense.findFirst({
-      where: { id: expenseId, businessId, deletedAt: null },
-      include: EXPENSE_INCLUDE,
-    });
+    const expense = await this.findExpenseWithRelations(businessId, expenseId);
 
     if (!expense) {
       throw new NotFoundException("Expense not found");
@@ -137,9 +122,9 @@ export class ExpenseService {
         : Promise.resolve(),
     ]);
 
-    const expense = await this.prisma.financeExpense.update({
-      where: { id: expenseId },
-      data: {
+    await this.db
+      .update(financeExpense)
+      .set({
         ...(dto.accountId !== undefined && { accountId: dto.accountId }),
         ...(dto.expenseCategoryId !== undefined && {
           expenseCategoryId: dto.expenseCategoryId,
@@ -147,16 +132,17 @@ export class ExpenseService {
         ...(dto.title !== undefined && {
           title: this.normalizeName(dto.title),
         }),
-        ...(dto.amount !== undefined && { amount: dto.amount }),
+        ...(dto.amount !== undefined && { amount: new Decimal(dto.amount) }),
         ...(dto.expenseDate !== undefined && {
           expenseDate: dto.expenseDate,
         }),
         ...(dto.note !== undefined && {
           note: this.normalizeNullableText(dto.note),
         }),
-      },
-      include: EXPENSE_INCLUDE,
-    });
+      })
+      .where(eq(financeExpense.id, expenseId));
+
+    const expense = await this.findExpenseWithRelations(businessId, expenseId);
 
     return apiResponse(expense, "Expense updated successfully");
   }
@@ -172,7 +158,7 @@ export class ExpenseService {
       throw new BadRequestException("Only draft expenses can be paid");
     }
 
-    const paidExpense = await this.prisma.$transaction(async (tx) => {
+    const paidExpense = await this.db.transaction(async (tx) => {
       await this.ledger.debitAccount(tx, {
         businessId,
         accountId: expense.accountId,
@@ -183,13 +169,12 @@ export class ExpenseService {
         createdBy: currentUser.id,
       });
 
-      return tx.financeExpense.update({
-        where: { id: expense.id },
-        data: {
-          status: FinanceExpenseStatus.PAID,
-        },
-        include: EXPENSE_INCLUDE,
-      });
+      await tx
+        .update(financeExpense)
+        .set({ status: FinanceExpenseStatus.PAID })
+        .where(eq(financeExpense.id, expense.id));
+
+      return this.findExpenseWithRelations(businessId, expense.id);
     });
 
     return apiResponse(paidExpense, "Expense paid successfully");
@@ -202,22 +187,116 @@ export class ExpenseService {
       throw new BadRequestException("Only draft expenses can be cancelled");
     }
 
-    const cancelledExpense = await this.prisma.financeExpense.update({
-      where: { id: expense.id },
-      data: {
+    await this.db
+      .update(financeExpense)
+      .set({
         status: FinanceExpenseStatus.CANCELLED,
         deletedAt: new Date(),
-      },
-      include: EXPENSE_INCLUDE,
-    });
+      })
+      .where(eq(financeExpense.id, expense.id));
+
+    const cancelledExpense = await this.findExpenseWithRelations(
+      businessId,
+      expense.id,
+      true,
+    );
 
     return apiResponse(cancelledExpense, "Expense cancelled successfully");
   }
 
+  private buildExpenseWhere(businessId: string, query: QueryExpenseDto) {
+    return and(
+      eq(financeExpense.businessId, businessId),
+      isNull(financeExpense.deletedAt),
+      query.status ? eq(financeExpense.status, query.status) : undefined,
+      query.accountId ? eq(financeExpense.accountId, query.accountId) : undefined,
+      query.expenseCategoryId
+        ? eq(financeExpense.expenseCategoryId, query.expenseCategoryId)
+        : undefined,
+      query.search
+        ? or(
+            ilike(financeExpense.expenseNo, `%${query.search}%`),
+            ilike(financeExpense.title, `%${query.search}%`),
+            ilike(financeExpense.referenceNo, `%${query.search}%`),
+          )
+        : undefined,
+    );
+  }
+
+  private async selectExpensesWithRelations(
+    where: ReturnType<typeof this.buildExpenseWhere>,
+    limit?: number,
+    offset?: number,
+  ) {
+    const rows = await this.db
+      .select({
+        expense: financeExpense,
+        account: financeAccount,
+        category: financeExpenseCategory,
+      })
+      .from(financeExpense)
+      .leftJoin(financeAccount, eq(financeAccount.id, financeExpense.accountId))
+      .leftJoin(
+        financeExpenseCategory,
+        eq(financeExpenseCategory.id, financeExpense.expenseCategoryId),
+      )
+      .where(where)
+      .orderBy(desc(financeExpense.createdAt))
+      .limit(limit ?? 10)
+      .offset(offset ?? 0);
+
+    return rows.map(({ expense, account, category }) => ({
+      ...expense,
+      account,
+      category,
+    }));
+  }
+
+  private async findExpenseWithRelations(
+    businessId: string,
+    expenseId: string,
+    includeDeleted = false,
+  ) {
+    const [row] = await this.db
+      .select({
+        expense: financeExpense,
+        account: financeAccount,
+        category: financeExpenseCategory,
+      })
+      .from(financeExpense)
+      .leftJoin(financeAccount, eq(financeAccount.id, financeExpense.accountId))
+      .leftJoin(
+        financeExpenseCategory,
+        eq(financeExpenseCategory.id, financeExpense.expenseCategoryId),
+      )
+      .where(
+        and(
+          eq(financeExpense.id, expenseId),
+          eq(financeExpense.businessId, businessId),
+          includeDeleted ? undefined : isNull(financeExpense.deletedAt),
+        ),
+      );
+
+    return row
+      ? {
+          ...row.expense,
+          account: row.account,
+          category: row.category,
+        }
+      : null;
+  }
+
   private async getExpenseOrThrow(businessId: string, expenseId: string) {
-    const expense = await this.prisma.financeExpense.findFirst({
-      where: { id: expenseId, businessId, deletedAt: null },
-    });
+    const [expense] = await this.db
+      .select()
+      .from(financeExpense)
+      .where(
+        and(
+          eq(financeExpense.id, expenseId),
+          eq(financeExpense.businessId, businessId),
+          isNull(financeExpense.deletedAt),
+        ),
+      );
 
     if (!expense) {
       throw new NotFoundException("Expense not found");
@@ -227,15 +306,17 @@ export class ExpenseService {
   }
 
   private async assertActiveAccount(businessId: string, accountId: string) {
-    const account = await this.prisma.financeAccount.findFirst({
-      where: {
-        id: accountId,
-        businessId,
-        deletedAt: null,
-        status: FinanceAccountStatus.ACTIVE,
-      },
-      select: { id: true },
-    });
+    const [account] = await this.db
+      .select({ id: financeAccount.id })
+      .from(financeAccount)
+      .where(
+        and(
+          eq(financeAccount.id, accountId),
+          eq(financeAccount.businessId, businessId),
+          isNull(financeAccount.deletedAt),
+          eq(financeAccount.status, FinanceAccountStatus.ACTIVE),
+        ),
+      );
 
     if (!account) {
       throw new NotFoundException("Finance account not found");
@@ -243,15 +324,20 @@ export class ExpenseService {
   }
 
   private async assertActiveCategory(businessId: string, categoryId: string) {
-    const category = await this.prisma.financeExpenseCategory.findFirst({
-      where: {
-        id: categoryId,
-        businessId,
-        deletedAt: null,
-        status: FinanceExpenseCategoryStatus.ACTIVE,
-      },
-      select: { id: true },
-    });
+    const [category] = await this.db
+      .select({ id: financeExpenseCategory.id })
+      .from(financeExpenseCategory)
+      .where(
+        and(
+          eq(financeExpenseCategory.id, categoryId),
+          eq(financeExpenseCategory.businessId, businessId),
+          isNull(financeExpenseCategory.deletedAt),
+          eq(
+            financeExpenseCategory.status,
+            FinanceExpenseCategoryStatus.ACTIVE,
+          ),
+        ),
+      );
 
     if (!category) {
       throw new NotFoundException("Expense category not found");

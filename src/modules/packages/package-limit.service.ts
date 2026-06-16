@@ -1,16 +1,33 @@
 import { ForbiddenException, Injectable } from "@nestjs/common";
 import {
+  type JsonValue,
   BusinessStatus,
   MediaAssetStatus,
   MediaFileType,
   PackageLimitKey,
-  Prisma,
   SystemUserStatus,
   SystemUserType,
-} from "@prisma/client";
+  business,
+  mediaAsset,
+  packageSubscription,
+  packageUsageCounter,
+  product,
+  systemUser,
+} from "@/database/schema";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  exists,
+  gte,
+  inArray,
+  isNull,
+  lte,
+} from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
-import { PrismaService } from "../../prisma/prisma.service";
+import { DatabaseService } from "../../database/database.service";
 import { PackageSubscriptionService } from "./package-subscription.service";
 
 type LimitUsage = {
@@ -30,9 +47,13 @@ type PlanSnapshotLimit = {
 @Injectable()
 export class PackageLimitService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly subscriptions: PackageSubscriptionService,
   ) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async assertWithinLimit(
     user: Pick<CurrentUserPayload, "id" | "type" | "tenantId">,
@@ -130,14 +151,11 @@ export class PackageLimitService {
     subscriptionId: string,
     limitKey: PackageLimitKey,
   ) {
-    const subscription = await this.prisma.packageSubscription.findUnique({
-      where: {
-        id: subscriptionId,
-      },
-      select: {
-        planSnapshot: true,
-      },
-    });
+    const [subscription] = await this.db
+      .select({ planSnapshot: packageSubscription.planSnapshot })
+      .from(packageSubscription)
+      .where(eq(packageSubscription.id, subscriptionId))
+      .limit(1);
 
     if (!subscription) {
       return 0;
@@ -155,76 +173,109 @@ export class PackageLimitService {
     limitKey: PackageLimitKey,
   ) {
     const now = new Date();
-
-    const counter = await this.prisma.packageUsageCounter.findFirst({
-      where: {
-        subscriptionId,
-        limitKey,
-        periodStart: {
-          lte: now,
-        },
-        periodEnd: {
-          gte: now,
-        },
-      },
-      orderBy: {
-        periodStart: "desc",
-      },
-    });
+    const [counter] = await this.db
+      .select()
+      .from(packageUsageCounter)
+      .where(
+        and(
+          eq(packageUsageCounter.subscriptionId, subscriptionId),
+          eq(packageUsageCounter.limitKey, limitKey),
+          lte(packageUsageCounter.periodStart, now),
+          gte(packageUsageCounter.periodEnd, now),
+        ),
+      )
+      .orderBy(desc(packageUsageCounter.periodStart))
+      .limit(1);
 
     return counter?.usedValue ?? 0;
   }
 
   private getLiveUsage(tenantId: string, limitKey: PackageLimitKey) {
-    const activeBusinessWhere: Prisma.BusinessWhereInput = {
-      ownerUserId: tenantId,
-      deletedAt: null,
-      status: {
-        in: [BusinessStatus.TRIAL, BusinessStatus.ACTIVE],
-      },
-    };
-
     if (limitKey === PackageLimitKey.MAX_BUSINESSES) {
-      return this.prisma.business.count({
-        where: activeBusinessWhere,
-      });
+      return this.db
+        .select({ value: count() })
+        .from(business)
+        .where(
+          and(
+            eq(business.ownerUserId, tenantId),
+            isNull(business.deletedAt),
+            inArray(business.status, [BusinessStatus.ACTIVE]),
+          ),
+        )
+        .then(([row]) => row?.value ?? 0);
     }
 
     if (limitKey === PackageLimitKey.MAX_EMPLOYEES) {
-      return this.prisma.systemUser.count({
-        where: {
-          tenantId,
-          type: SystemUserType.EMPLOYEE,
-          status: SystemUserStatus.ACTIVE,
-          deletedAt: null,
-        },
-      });
+      return this.db
+        .select({ value: count() })
+        .from(systemUser)
+        .where(
+          and(
+            eq(systemUser.tenantId, tenantId),
+            eq(systemUser.type, SystemUserType.EMPLOYEE),
+            eq(systemUser.status, SystemUserStatus.ACTIVE),
+            isNull(systemUser.deletedAt),
+          ),
+        )
+        .then(([row]) => row?.value ?? 0);
     }
 
     if (limitKey === PackageLimitKey.MAX_MEDIAS) {
-      return this.prisma.mediaAsset.count({
-        where: {
-          deletedAt: null,
-          status: MediaAssetStatus.ACTIVE,
-          fileType: MediaFileType.IMAGE,
-          business: activeBusinessWhere,
-        },
-      });
+      return this.db
+        .select({ value: count() })
+        .from(mediaAsset)
+        .where(
+          and(
+            isNull(mediaAsset.deletedAt),
+            eq(mediaAsset.status, MediaAssetStatus.ACTIVE),
+            eq(mediaAsset.fileType, MediaFileType.IMAGE),
+            exists(
+              this.db
+                .select({ id: business.id })
+                .from(business)
+                .where(
+                  and(
+                    eq(business.id, mediaAsset.businessId),
+                    eq(business.ownerUserId, tenantId),
+                    isNull(business.deletedAt),
+                    eq(business.status, BusinessStatus.ACTIVE),
+                  ),
+                ),
+            ),
+          ),
+        )
+        .then(([row]) => row?.value ?? 0);
     }
 
     if (limitKey === PackageLimitKey.MAX_PRODUCTS) {
-      return this.prisma.product.count({
-        where: {
-          deletedAt: null,
-          business: activeBusinessWhere,
-        },
-      });
+      return this.db
+        .select({ value: count() })
+        .from(product)
+        .where(
+          and(
+            isNull(product.deletedAt),
+            exists(
+              this.db
+                .select({ id: business.id })
+                .from(business)
+                .where(
+                  and(
+                    eq(business.id, product.businessId),
+                    eq(business.ownerUserId, tenantId),
+                    isNull(business.deletedAt),
+                    eq(business.status, BusinessStatus.ACTIVE),
+                  ),
+                ),
+            ),
+          ),
+        )
+        .then(([row]) => row?.value ?? 0);
     }
 
     return Promise.resolve(0);
   }
 
-  private getPlanSnapshotLimits(snapshot: Prisma.JsonValue) {
+  private getPlanSnapshotLimits(snapshot: JsonValue | null) {
     if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
       return [];
     }

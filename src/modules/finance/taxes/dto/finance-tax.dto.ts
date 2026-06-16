@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { FinanceTaxStatus } from "@prisma/client";
+import { FinanceTaxStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsEnum,

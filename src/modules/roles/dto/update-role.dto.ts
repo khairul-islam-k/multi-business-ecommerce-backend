@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { CommonStatus } from "@prisma/client";
+import { CommonStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsArray,

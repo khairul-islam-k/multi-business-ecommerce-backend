@@ -5,19 +5,40 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
+import {
+  business,
+  businessBranding,
   BusinessMemberStatus,
+  businessMember,
+  businessSetting,
   BusinessStatus,
-  Prisma,
+  systemUser,
   SystemUserType,
-} from "@prisma/client";
+} from "@/database/schema";
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { CreateBusinessDto } from "./dto/create-business.dto";
 import { QueryBusinessDto } from "./dto/query-business.dto";
 import { UpdateBusinessDto } from "./dto/update-business.dto";
-import { PrismaService } from "../../prisma/prisma.service";
+import {
+  DatabaseService,
+  type Database,
+  type DatabaseTransaction,
+} from "../../database/database.service";
 import { BusinessAccessService } from "../access/services/business-access.service";
-import { throwConflictOnUnique } from "../../common/database/prisma-error.util";
+import { throwConflictOnUnique } from "../../common/database/db-error.util";
 import { BusinessAccessContext } from "../../common/request-context/request-context.types";
 import {
   apiResponse,
@@ -25,46 +46,24 @@ import {
 } from "../../common/utils/api-response.util";
 import { generateRandomSlug } from "../../common/utils/slug-generator.util";
 
-const BUSINESS_INCLUDE = {
-  ownerUser: {
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      type: true,
-      status: true,
-    },
-  },
-  settings: true,
-  branding: true,
-  _count: {
-    select: {
-      members: true,
-    },
-  },
-} satisfies Prisma.BusinessInclude;
-
-const ACCESSIBLE_BUSINESS_STATUSES = [
-  BusinessStatus.TRIAL,
-  BusinessStatus.ACTIVE,
-] satisfies BusinessStatus[];
-
 const BUSINESS_SLUG_MAX_LENGTH = 180;
 const BUSINESS_SLUG_RETRY_LIMIT = 5;
+
+type BusinessClient = Database | DatabaseTransaction;
 
 @Injectable()
 export class BusinessService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly businessAccess: BusinessAccessService,
   ) {}
 
   async create(
     userId: string,
     dto: CreateBusinessDto,
-    tx?: Prisma.TransactionClient,
+    tx?: DatabaseTransaction,
   ) {
-    const client = tx ?? this.prisma;
+    const client = tx ?? this.database.db;
 
     const slug = await this.generateUniqueBusinessSlug(
       dto.name,
@@ -81,43 +80,39 @@ export class BusinessService {
       : {};
 
     try {
-      const business = await client.business.create({
-        data: {
-          name: dto.name.trim(),
-          slug,
-          email: dto.email ? this.normalizeEmail(dto.email) : null,
-          phone: dto.phone?.trim() || null,
-          country: dto.country?.trim() || null,
-          currencyCode: dto.currencyCode?.trim().toUpperCase(),
-          timezone: dto.timezone?.trim(),
-          status: dto.status ?? BusinessStatus.TRIAL,
+      const createdBusiness = await client.transaction(async (transaction) => {
+        const [created] = await transaction
+          .insert(business)
+          .values({
+            name: dto.name.trim(),
+            slug,
+            email: dto.email ? this.normalizeEmail(dto.email) : null,
+            phone: dto.phone?.trim() || null,
+            country: dto.country?.trim() || null,
+            currencyCode: dto.currencyCode?.trim().toUpperCase(),
+            timezone: dto.timezone?.trim(),
+            status: dto.status ?? BusinessStatus.ACTIVE,
+            ownerUserId: userId,
+            createdById: userId,
+          })
+          .returning();
 
-          ownerUser: {
-            connect: {
-              id: userId,
-            },
-          },
+        await transaction.insert(businessSetting).values({
+          businessId: created.id,
+          ...settingsData,
+        });
 
-          createdBy: {
-            connect: {
-              id: userId,
-            },
-          },
+        await transaction.insert(businessBranding).values({
+          businessId: created.id,
+          ...brandingData,
+        });
 
-          settings: {
-            create: settingsData,
-          },
-
-          branding: {
-            create: brandingData,
-          },
-        },
-        include: BUSINESS_INCLUDE,
+        return this.findBusinessById(created.id, transaction);
       });
 
-      return apiResponse(business, "Business created successfully");
+      return apiResponse(createdBusiness, "Business created successfully");
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handleDatabaseError(error);
     }
   }
 
@@ -132,114 +127,42 @@ export class BusinessService {
     const canIncludeDeleted =
       currentUser.type === SystemUserType.ADMIN && query.includeDeleted;
 
-    const searchWhere: Prisma.BusinessWhereInput | undefined = query.search
-      ? {
-          OR: [
-            {
-              name: {
-                contains: query.search,
-                mode: "insensitive",
-              },
-            },
-            {
-              slug: {
-                contains: query.search,
-                mode: "insensitive",
-              },
-            },
-            {
-              email: {
-                contains: query.search,
-                mode: "insensitive",
-              },
-            },
-            {
-              phone: {
-                contains: query.search,
-                mode: "insensitive",
-              },
-            },
-            {
-              country: {
-                contains: query.search,
-                mode: "insensitive",
-              },
-            },
-          ],
-        }
-      : undefined;
+    const conditions = [
+      !canIncludeDeleted ? isNull(business.deletedAt) : undefined,
+      this.getBusinessAccessCondition(currentUser),
+      this.getStatusCondition(currentUser, query.status),
+      query.search
+        ? or(
+            ilike(business.name, `%${query.search}%`),
+            ilike(business.slug, `%${query.search}%`),
+            ilike(business.email, `%${query.search}%`),
+            ilike(business.phone, `%${query.search}%`),
+            ilike(business.country, `%${query.search}%`),
+          )
+        : undefined,
+      query.country ? ilike(business.country, query.country) : undefined,
+      query.currencyCode
+        ? ilike(business.currencyCode, query.currencyCode)
+        : undefined,
+    ].filter(Boolean);
 
-    const statusWhere: Prisma.BusinessWhereInput =
-      currentUser.type === SystemUserType.ADMIN
-        ? {
-            ...(query.status && {
-              status: query.status,
-            }),
-          }
-        : {
-            ...(query.status
-              ? {
-                  AND: [
-                    {
-                      status: {
-                        in: ACCESSIBLE_BUSINESS_STATUSES,
-                      },
-                    },
-                    {
-                      status: query.status,
-                    },
-                  ],
-                }
-              : {
-                  status: {
-                    in: ACCESSIBLE_BUSINESS_STATUSES,
-                  },
-                }),
-          };
+    const where = and(...conditions);
+    const orderColumn = business[sortBy];
+    const orderBy = sortOrder === "asc" ? asc(orderColumn) : desc(orderColumn);
 
-    const where: Prisma.BusinessWhereInput = {
-      ...(!canIncludeDeleted && {
-        deletedAt: null,
-      }),
+    const items = await this.selectBusinesses(where)
+      .orderBy(orderBy)
+      .limit(limit)
+      .offset(skip);
 
-      AND: [
-        this.getBusinessAccessWhere(currentUser),
-        statusWhere,
-        ...(searchWhere ? [searchWhere] : []),
-      ],
+    const [totalRow] = await this.database.db
+      .select({ value: count() })
+      .from(business)
+      .where(where);
 
-      ...(query.country && {
-        country: {
-          equals: query.country,
-          mode: "insensitive",
-        },
-      }),
+    const total = totalRow?.value ?? 0;
 
-      ...(query.currencyCode && {
-        currencyCode: {
-          equals: query.currencyCode,
-          mode: "insensitive",
-        },
-      }),
-    };
-
-    const orderBy: Prisma.BusinessOrderByWithRelationInput = {
-      [sortBy]: sortOrder,
-    };
-
-    const items = await this.prisma.business.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy,
-      include: BUSINESS_INCLUDE,
-    });
-
-    const total = await this.prisma.business.count({
-      where,
-    });
-
-    return paginatedResponse(items, {
+    return paginatedResponse(this.mapBusinessRows(items), {
       page,
       limit,
       total,
@@ -248,20 +171,19 @@ export class BusinessService {
   }
 
   async findOne(currentUser: CurrentUserPayload, businessId: string) {
-    const business = await this.prisma.business.findFirst({
-      where: {
-        id: businessId,
-        deletedAt: null,
-        ...this.getBusinessAccessWhere(currentUser),
-      },
-      include: BUSINESS_INCLUDE,
-    });
+    const matchedBusiness = await this.findBusinessByCondition(
+      and(
+        eq(business.id, businessId),
+        isNull(business.deletedAt),
+        this.getBusinessAccessCondition(currentUser),
+      ),
+    );
 
-    if (!business) {
+    if (!matchedBusiness) {
       throw new NotFoundException("Business not found");
     }
 
-    return apiResponse(business);
+    return apiResponse(matchedBusiness);
   }
 
   async update(
@@ -279,155 +201,99 @@ export class BusinessService {
       ? this.buildBusinessBrandingData(dto.branding)
       : null;
 
-    const data: Prisma.BusinessUpdateInput = {
-      ...(dto.name !== undefined && {
-        name: dto.name.trim(),
-      }),
-
-      ...(dto.email !== undefined && {
-        email: dto.email ? this.normalizeEmail(dto.email) : null,
-      }),
-
-      ...(dto.phone !== undefined && {
-        phone: dto.phone?.trim() || null,
-      }),
-
-      ...(dto.country !== undefined && {
-        country: dto.country?.trim() || null,
-      }),
-
-      ...(dto.currencyCode !== undefined && {
-        currencyCode: dto.currencyCode.trim().toUpperCase(),
-      }),
-
-      ...(dto.timezone !== undefined && {
-        timezone: dto.timezone.trim(),
-      }),
-
-      ...(dto.status !== undefined && {
-        status: dto.status,
-      }),
-
-      updatedBy: {
-        connect: {
-          id: currentUser.id,
-        },
-      },
-
-      ...(settingData &&
-        this.hasKeys(settingData) && {
-          settings: {
-            upsert: {
-              create: settingData,
-              update: settingData,
-            },
-          },
-        }),
-
-      ...(brandingData &&
-        this.hasKeys(brandingData) && {
-          branding: {
-            upsert: {
-              create: brandingData,
-              update: brandingData,
-            },
-          },
-        }),
-    };
-
     try {
-      const business = await this.prisma.business.update({
-        where: {
-          id: businessId,
-        },
-        data,
-        include: BUSINESS_INCLUDE,
-      });
+      const updatedBusiness = await this.database.db.transaction(
+        async (transaction) => {
+          await transaction
+            .update(business)
+            .set({
+              ...(dto.name !== undefined && {
+                name: dto.name.trim(),
+              }),
+              ...(dto.email !== undefined && {
+                email: dto.email ? this.normalizeEmail(dto.email) : null,
+              }),
+              ...(dto.phone !== undefined && {
+                phone: dto.phone?.trim() || null,
+              }),
+              ...(dto.country !== undefined && {
+                country: dto.country?.trim() || null,
+              }),
+              ...(dto.currencyCode !== undefined && {
+                currencyCode: dto.currencyCode.trim().toUpperCase(),
+              }),
+              ...(dto.timezone !== undefined && {
+                timezone: dto.timezone.trim(),
+              }),
+              ...(dto.status !== undefined && {
+                status: dto.status,
+              }),
+              updatedById: currentUser.id,
+            })
+            .where(eq(business.id, businessId));
 
-      return apiResponse(business, "Business updated successfully");
+          if (settingData && this.hasKeys(settingData)) {
+            await this.upsertBusinessSettings(
+              transaction,
+              businessId,
+              settingData,
+            );
+          }
+
+          if (brandingData && this.hasKeys(brandingData)) {
+            await this.upsertBusinessBranding(
+              transaction,
+              businessId,
+              brandingData,
+            );
+          }
+
+          return this.findBusinessById(businessId, transaction);
+        },
+      );
+
+      return apiResponse(updatedBusiness, "Business updated successfully");
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handleDatabaseError(error);
     }
   }
 
   async remove(currentUser: CurrentUserPayload, businessId: string) {
-    const business = await this.assertCanDeleteBusiness(
+    const matchedBusiness = await this.assertCanDeleteBusiness(
       currentUser,
       businessId,
     );
 
-    const activeOwnedBusinessCount = await this.prisma.business.count({
-      where: {
-        ownerUserId: business.ownerUserId,
-        deletedAt: null,
-        status: {
-          in: ACCESSIBLE_BUSINESS_STATUSES,
-        },
-      },
-    });
+    const [activeOwnedBusinessCount] = await this.database.db
+      .select({ value: count() })
+      .from(business)
+      .where(
+        and(
+          eq(business.ownerUserId, matchedBusiness.ownerUserId),
+          isNull(business.deletedAt),
+          eq(business.status, BusinessStatus.ACTIVE),
+        ),
+      );
 
     const isActiveOwnedBusiness =
-      business.status === BusinessStatus.ACTIVE ||
-      business.status === BusinessStatus.TRIAL;
+      matchedBusiness.status === BusinessStatus.ACTIVE;
 
-    if (isActiveOwnedBusiness && activeOwnedBusinessCount <= 1) {
+    if (isActiveOwnedBusiness && (activeOwnedBusinessCount?.value ?? 0) <= 1) {
       throw new ForbiddenException(
         "You must have at least one active business",
       );
     }
 
-    await this.prisma.business.update({
-      where: {
-        id: businessId,
-      },
-      data: {
+    await this.database.db
+      .update(business)
+      .set({
         status: BusinessStatus.INACTIVE,
         deletedAt: new Date(),
-        updatedBy: {
-          connect: {
-            id: currentUser.id,
-          },
-        },
-      },
-    });
+        updatedById: currentUser.id,
+      })
+      .where(eq(business.id, businessId));
 
     return apiResponse(null, "Business deleted successfully");
-  }
-
-  private getBusinessAccessWhere(
-    currentUser: CurrentUserPayload,
-  ): Prisma.BusinessWhereInput {
-    if (currentUser.type === SystemUserType.ADMIN) {
-      return {};
-    }
-
-    return {
-      AND: [
-        {
-          OR: [
-            { status: BusinessStatus.ACTIVE },
-            { status: BusinessStatus.TRIAL },
-          ],
-          deletedAt: null,
-        },
-        {
-          OR: [
-            {
-              ownerUserId: currentUser.id,
-            },
-            {
-              members: {
-                some: {
-                  userId: currentUser.id,
-                  status: BusinessMemberStatus.ACTIVE,
-                  deletedAt: null,
-                },
-              },
-            },
-          ],
-        },
-      ],
-    };
   }
 
   async assertCanAccessBusiness(
@@ -456,23 +322,198 @@ export class BusinessService {
       );
     }
 
-    const business = await this.prisma.business.findFirst({
-      where: {
-        id: businessId,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        ownerUserId: true,
-        status: true,
-      },
-    });
+    const [matchedBusiness] = await this.database.db
+      .select({
+        id: business.id,
+        ownerUserId: business.ownerUserId,
+        status: business.status,
+      })
+      .from(business)
+      .where(and(eq(business.id, businessId), isNull(business.deletedAt)))
+      .limit(1);
 
-    if (!business) {
+    if (!matchedBusiness) {
       throw new NotFoundException("Business not found");
     }
 
-    return business;
+    return matchedBusiness;
+  }
+
+  private selectBusinesses(
+    condition: SQL | undefined,
+    client = this.database.db,
+  ) {
+    return client
+      .select({
+        business,
+        ownerUser: {
+          id: systemUser.id,
+          name: systemUser.name,
+          email: systemUser.email,
+          type: systemUser.type,
+          status: systemUser.status,
+        },
+        settings: businessSetting,
+        branding: businessBranding,
+        _count: {
+          members: sql<number>`(
+            select count(*)::int
+            from ${businessMember}
+            where ${businessMember.businessId} = ${business.id}
+          )`,
+        },
+      })
+      .from(business)
+      .innerJoin(systemUser, eq(systemUser.id, business.ownerUserId))
+      .leftJoin(businessSetting, eq(businessSetting.businessId, business.id))
+      .leftJoin(businessBranding, eq(businessBranding.businessId, business.id))
+      .where(condition);
+  }
+
+  private async findBusinessByCondition(
+    condition: SQL | undefined,
+    client: BusinessClient = this.database.db,
+  ) {
+    const [row] = await this.selectBusinesses(condition, client).limit(1);
+
+    if (!row) {
+      return null;
+    }
+
+    return this.mapBusinessRow(row);
+  }
+
+  private async findBusinessById(
+    businessId: string,
+    client: BusinessClient = this.database.db,
+  ) {
+    const matchedBusiness = await this.findBusinessByCondition(
+      eq(business.id, businessId),
+      client,
+    );
+
+    if (!matchedBusiness) {
+      throw new NotFoundException("Business not found");
+    }
+
+    return matchedBusiness;
+  }
+
+  private mapBusinessRows(
+    rows: Awaited<
+      ReturnType<ReturnType<typeof this.selectBusinesses>["execute"]>
+    >,
+  ) {
+    return rows.map((row) => this.mapBusinessRow(row));
+  }
+
+  private mapBusinessRow(row: {
+    business: typeof business.$inferSelect;
+    ownerUser: Pick<
+      typeof systemUser.$inferSelect,
+      "id" | "name" | "email" | "type" | "status"
+    >;
+    settings: typeof businessSetting.$inferSelect | null;
+    branding: typeof businessBranding.$inferSelect | null;
+    _count: {
+      members: number;
+    };
+  }) {
+    return {
+      ...row.business,
+      ownerUser: row.ownerUser,
+      settings: row.settings,
+      branding: row.branding,
+      _count: row._count,
+    };
+  }
+
+  private getBusinessAccessCondition(currentUser: CurrentUserPayload) {
+    if (currentUser.type === SystemUserType.ADMIN) {
+      return undefined;
+    }
+
+    return and(
+      eq(business.status, BusinessStatus.ACTIVE),
+      isNull(business.deletedAt),
+      or(
+        eq(business.ownerUserId, currentUser.id),
+        sql`exists (
+          select 1
+          from ${businessMember}
+          where ${businessMember.businessId} = ${business.id}
+            and ${businessMember.userId} = ${currentUser.id}
+            and ${businessMember.status} = ${BusinessMemberStatus.ACTIVE}
+            and ${businessMember.deletedAt} is null
+        )`,
+      ),
+    );
+  }
+
+  private getStatusCondition(
+    currentUser: CurrentUserPayload,
+    status?: BusinessStatus,
+  ) {
+    if (currentUser.type === SystemUserType.ADMIN) {
+      return status ? eq(business.status, status) : undefined;
+    }
+
+    return status
+      ? and(
+          eq(business.status, BusinessStatus.ACTIVE),
+          eq(business.status, status),
+        )
+      : eq(business.status, BusinessStatus.ACTIVE);
+  }
+
+  private async upsertBusinessSettings(
+    transaction: DatabaseTransaction,
+    businessId: string,
+    data: ReturnType<BusinessService["buildBusinessSettingData"]>,
+  ) {
+    const [existing] = await transaction
+      .select({ id: businessSetting.id })
+      .from(businessSetting)
+      .where(eq(businessSetting.businessId, businessId))
+      .limit(1);
+
+    if (existing) {
+      await transaction
+        .update(businessSetting)
+        .set(data)
+        .where(eq(businessSetting.id, existing.id));
+      return;
+    }
+
+    await transaction.insert(businessSetting).values({
+      businessId,
+      ...data,
+    });
+  }
+
+  private async upsertBusinessBranding(
+    transaction: DatabaseTransaction,
+    businessId: string,
+    data: ReturnType<BusinessService["buildBusinessBrandingData"]>,
+  ) {
+    const [existing] = await transaction
+      .select({ id: businessBranding.id })
+      .from(businessBranding)
+      .where(eq(businessBranding.businessId, businessId))
+      .limit(1);
+
+    if (existing) {
+      await transaction
+        .update(businessBranding)
+        .set(data)
+        .where(eq(businessBranding.id, existing.id));
+      return;
+    }
+
+    await transaction.insert(businessBranding).values({
+      businessId,
+      ...data,
+    });
   }
 
   private buildBusinessSettingData(
@@ -482,27 +523,21 @@ export class BusinessService {
       ...(dto.orderPrefix !== undefined && {
         orderPrefix: dto.orderPrefix.trim().toUpperCase(),
       }),
-
       ...(dto.invoicePrefix !== undefined && {
         invoicePrefix: dto.invoicePrefix.trim().toUpperCase(),
       }),
-
       ...(dto.lowStockThreshold !== undefined && {
         lowStockThreshold: dto.lowStockThreshold,
       }),
-
       ...(dto.allowBackorder !== undefined && {
         allowBackorder: dto.allowBackorder,
       }),
-
       ...(dto.autoConfirmOrder !== undefined && {
         autoConfirmOrder: dto.autoConfirmOrder,
       }),
-
       ...(dto.codEnabled !== undefined && {
         codEnabled: dto.codEnabled,
       }),
-
       ...(dto.onlinePaymentEnabled !== undefined && {
         onlinePaymentEnabled: dto.onlinePaymentEnabled,
       }),
@@ -516,31 +551,24 @@ export class BusinessService {
       ...(dto.logoUrl !== undefined && {
         logoUrl: dto.logoUrl || null,
       }),
-
       ...(dto.faviconUrl !== undefined && {
         faviconUrl: dto.faviconUrl || null,
       }),
-
       ...(dto.primaryColor !== undefined && {
         primaryColor: dto.primaryColor || null,
       }),
-
       ...(dto.secondaryColor !== undefined && {
         secondaryColor: dto.secondaryColor || null,
       }),
-
       ...(dto.accentColor !== undefined && {
         accentColor: dto.accentColor || null,
       }),
-
       ...(dto.fontFamily !== undefined && {
         fontFamily: dto.fontFamily || null,
       }),
-
       ...(dto.seoTitle !== undefined && {
         seoTitle: dto.seoTitle || null,
       }),
-
       ...(dto.seoDescription !== undefined && {
         seoDescription: dto.seoDescription || null,
       }),
@@ -550,7 +578,7 @@ export class BusinessService {
   private async generateUniqueBusinessSlug(
     name: string,
     ownerUserId: string,
-    client: Prisma.TransactionClient | PrismaService = this.prisma,
+    client: BusinessClient = this.database.db,
   ) {
     for (let attempt = 0; attempt < BUSINESS_SLUG_RETRY_LIMIT; attempt++) {
       const slug = generateRandomSlug(name, {
@@ -558,15 +586,13 @@ export class BusinessService {
         maxLength: BUSINESS_SLUG_MAX_LENGTH,
       });
 
-      const existingBusiness = await client.business.findFirst({
-        where: {
-          slug,
-          ownerUserId,
-        },
-        select: {
-          id: true,
-        },
-      });
+      const [existingBusiness] = await client
+        .select({ id: business.id })
+        .from(business)
+        .where(
+          and(eq(business.slug, slug), eq(business.ownerUserId, ownerUserId)),
+        )
+        .limit(1);
 
       if (!existingBusiness) {
         return slug;
@@ -584,7 +610,7 @@ export class BusinessService {
     return Object.keys(value).length > 0;
   }
 
-  private handlePrismaError(error: unknown): never {
+  private handleDatabaseError(error: unknown): never {
     throwConflictOnUnique(error, "Business slug already exists");
   }
 }

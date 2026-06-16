@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@jest/globals";
 import { BadRequestException } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import Decimal from "decimal.js";
 
 import {
   assertPositiveMoney,
@@ -10,8 +10,8 @@ import {
 } from "./money";
 
 describe("money helpers", () => {
-  it("creates Prisma decimals without changing precision", () => {
-    expect(toMoney("12.34")).toBeInstanceOf(Prisma.Decimal);
+  it("creates Decimal values without changing precision", () => {
+    expect(toMoney("12.34")).toBeInstanceOf(Decimal);
     expect(toMoney("12.34").toString()).toBe("12.34");
   });
 
@@ -27,3 +27,4 @@ describe("money helpers", () => {
     );
   });
 });
+

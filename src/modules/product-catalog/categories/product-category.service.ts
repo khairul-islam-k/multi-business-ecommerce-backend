@@ -3,7 +3,13 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma, ProductSimpleStatus } from "@prisma/client";
+import {
+  type ProductCategory,
+  ProductSimpleStatus,
+  product,
+  productCategory,
+} from "@/database/schema";
+import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { QueryCatalogDto } from "../common/dto/query-catalog.dto";
@@ -11,30 +17,32 @@ import {
   CreateProductCategoryDto,
   UpdateProductCategoryDto,
 } from "./dto/product-category.dto";
-import { PrismaService } from "../../../prisma/prisma.service";
 import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import { DatabaseService } from "../../../database/database.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
 
-const CATEGORY_INCLUDE = {
-  parent: true,
-  children: true,
+type CategoryWithDetails = ProductCategory & {
+  parent: ProductCategory | null;
+  children: ProductCategory[];
   _count: {
-    select: {
-      children: true,
-      products: true,
-    },
-  },
-} satisfies Prisma.ProductCategoryInclude;
+    children: number;
+    products: number;
+  };
+};
 
 @Injectable()
 export class ProductCategoryService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly lookup: ProductCatalogLookupService,
   ) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async create(
     currentUser: CurrentUserPayload,
@@ -49,8 +57,9 @@ export class ProductCategoryService {
     );
 
     try {
-      const category = await this.prisma.productCategory.create({
-        data: {
+      const [category] = await this.db
+        .insert(productCategory)
+        .values({
           businessId,
           parentId: dto.parentId ?? null,
           name: this.lookup.normalizeName(dto.name),
@@ -60,11 +69,13 @@ export class ProductCategoryService {
           sortOrder: dto.sortOrder ?? 0,
           createdBy: currentUser.id,
           updatedBy: currentUser.id,
-        },
-        include: CATEGORY_INCLUDE,
-      });
+        })
+        .returning();
 
-      return apiResponse(category, "Category created successfully");
+      return apiResponse(
+        await this.withCategoryDetails(category),
+        "Category created successfully",
+      );
     } catch (error) {
       this.lookup.handleUniqueError(
         error,
@@ -77,33 +88,37 @@ export class ProductCategoryService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-
-    const where: Prisma.ProductCategoryWhereInput = {
-      businessId,
-      deletedAt: null,
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { name: { contains: query.search, mode: "insensitive" } },
-              { description: { contains: query.search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-    };
+    const where = and(
+      eq(productCategory.businessId, businessId),
+      isNull(productCategory.deletedAt),
+      query.status ? eq(productCategory.status, query.status) : undefined,
+      query.search
+        ? or(
+            ilike(productCategory.name, `%${query.search}%`),
+            ilike(productCategory.description, `%${query.search}%`),
+          )
+        : undefined,
+    );
 
     const [items, total] = await Promise.all([
-      this.prisma.productCategory.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: [
-          { sortOrder: "asc" },
-          { createdAt: query.sortOrder ?? "desc" },
-        ],
-        include: CATEGORY_INCLUDE,
-      }),
-      this.prisma.productCategory.count({ where }),
+      this.db
+        .select()
+        .from(productCategory)
+        .where(where)
+        .orderBy(
+          asc(productCategory.sortOrder),
+          query.sortOrder === "asc"
+            ? asc(productCategory.createdAt)
+            : desc(productCategory.createdAt),
+        )
+        .limit(limit)
+        .offset(skip)
+        .then((rows) => this.withCategoriesDetails(rows)),
+      this.db
+        .select({ value: count() })
+        .from(productCategory)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
     ]);
 
     return paginatedResponse(items, {
@@ -115,19 +130,15 @@ export class ProductCategoryService {
   }
 
   async findOne(businessId: string, categoryId: string) {
-    const category = await this.prisma.productCategory.findFirst({
-      where: { id: categoryId, businessId, deletedAt: null },
-      include: {
-        ...CATEGORY_INCLUDE,
-        children: { where: { deletedAt: null }, orderBy: { sortOrder: "asc" } },
-      },
-    });
+    const category = await this.findCategoryRow(businessId, categoryId);
 
     if (!category) {
       throw new NotFoundException("Category not found");
     }
 
-    return apiResponse(category);
+    return apiResponse(
+      await this.withCategoryDetails(category, { onlyActiveChildren: true }),
+    );
   }
 
   async update(
@@ -150,10 +161,7 @@ export class ProductCategoryService {
     }
 
     if (dto.name !== undefined || nextParentId !== undefined) {
-      const existing = await this.prisma.productCategory.findUnique({
-        where: { id: categoryId },
-        select: { name: true, parentId: true },
-      });
+      const existing = await this.findCategoryRow(businessId, categoryId);
 
       await this.lookup.assertCategoryNameAvailable(
         businessId,
@@ -164,9 +172,9 @@ export class ProductCategoryService {
     }
 
     try {
-      const category = await this.prisma.productCategory.update({
-        where: { id: categoryId },
-        data: {
+      const [category] = await this.db
+        .update(productCategory)
+        .set({
           ...(dto.parentId !== undefined && { parentId: dto.parentId ?? null }),
           ...(dto.name !== undefined && {
             name: this.lookup.normalizeName(dto.name),
@@ -180,11 +188,14 @@ export class ProductCategoryService {
           ...(dto.status !== undefined && { status: dto.status }),
           ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
           updatedBy: currentUser.id,
-        },
-        include: CATEGORY_INCLUDE,
-      });
+        })
+        .where(eq(productCategory.id, categoryId))
+        .returning();
 
-      return apiResponse(category, "Category updated successfully");
+      return apiResponse(
+        await this.withCategoryDetails(category),
+        "Category updated successfully",
+      );
     } catch (error) {
       this.lookup.handleUniqueError(
         error,
@@ -201,27 +212,39 @@ export class ProductCategoryService {
     await this.findCategoryOrThrow(businessId, categoryId);
     await this.assertCategoryCanBeDeleted(businessId, categoryId);
 
-    await this.prisma.productCategory.update({
-      where: { id: categoryId },
-      data: {
+    await this.db
+      .update(productCategory)
+      .set({
         status: ProductSimpleStatus.INACTIVE,
         deletedAt: new Date(),
         updatedBy: currentUser.id,
-      },
-    });
+      })
+      .where(eq(productCategory.id, categoryId));
 
     return apiResponse(null, "Category deleted successfully");
   }
 
   private async findCategoryOrThrow(businessId: string, categoryId: string) {
-    const category = await this.prisma.productCategory.findFirst({
-      where: { id: categoryId, businessId, deletedAt: null },
-      select: { id: true },
-    });
+    const category = await this.findCategoryRow(businessId, categoryId);
 
     if (!category) {
       throw new NotFoundException("Category not found");
     }
+  }
+
+  private findCategoryRow(businessId: string, categoryId: string) {
+    return this.db
+      .select()
+      .from(productCategory)
+      .where(
+        and(
+          eq(productCategory.id, categoryId),
+          eq(productCategory.businessId, businessId),
+          isNull(productCategory.deletedAt),
+        ),
+      )
+      .limit(1)
+      .then(([category]) => category ?? null);
   }
 
   private async assertCategoryCanBeDeleted(
@@ -229,12 +252,28 @@ export class ProductCategoryService {
     categoryId: string,
   ) {
     const [childCount, productCount] = await Promise.all([
-      this.prisma.productCategory.count({
-        where: { businessId, parentId: categoryId, deletedAt: null },
-      }),
-      this.prisma.product.count({
-        where: { businessId, categoryId, deletedAt: null },
-      }),
+      this.db
+        .select({ value: count() })
+        .from(productCategory)
+        .where(
+          and(
+            eq(productCategory.businessId, businessId),
+            eq(productCategory.parentId, categoryId),
+            isNull(productCategory.deletedAt),
+          ),
+        )
+        .then(([row]) => row?.value ?? 0),
+      this.db
+        .select({ value: count() })
+        .from(product)
+        .where(
+          and(
+            eq(product.businessId, businessId),
+            eq(product.categoryId, categoryId),
+            isNull(product.deletedAt),
+          ),
+        )
+        .then(([row]) => row?.value ?? 0),
     ]);
 
     if (childCount > 0) {
@@ -248,5 +287,59 @@ export class ProductCategoryService {
         "Category cannot be deleted while assigned to active products",
       );
     }
+  }
+
+  private async withCategoriesDetails(categories: ProductCategory[]) {
+    return Promise.all(
+      categories.map((category) => this.withCategoryDetails(category)),
+    );
+  }
+
+  private async withCategoryDetails(
+    category: ProductCategory,
+    options: { onlyActiveChildren?: boolean } = {},
+  ): Promise<CategoryWithDetails> {
+    const [parent, children, childCount, productCount] = await Promise.all([
+      category.parentId
+        ? this.db
+            .select()
+            .from(productCategory)
+            .where(eq(productCategory.id, category.parentId))
+            .limit(1)
+            .then(([row]) => row ?? null)
+        : Promise.resolve(null),
+      this.db
+        .select()
+        .from(productCategory)
+        .where(
+          and(
+            eq(productCategory.parentId, category.id),
+            options.onlyActiveChildren
+              ? isNull(productCategory.deletedAt)
+              : undefined,
+          ),
+        )
+        .orderBy(asc(productCategory.sortOrder)),
+      this.db
+        .select({ value: count() })
+        .from(productCategory)
+        .where(eq(productCategory.parentId, category.id))
+        .then(([row]) => row?.value ?? 0),
+      this.db
+        .select({ value: count() })
+        .from(product)
+        .where(eq(product.categoryId, category.id))
+        .then(([row]) => row?.value ?? 0),
+    ]);
+
+    return {
+      ...category,
+      parent,
+      children,
+      _count: {
+        children: childCount,
+        products: productCount,
+      },
+    };
   }
 }

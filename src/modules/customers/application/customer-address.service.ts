@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { OrderAddressType } from "@prisma/client";
+import { OrderAddressType } from "@/database/schema";
 
 import {
   CustomerAddressDto,

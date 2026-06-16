@@ -5,14 +5,38 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  type BusinessMember,
+  type RbacRole,
+  type RbacRolePermission,
+  type RbacUserRoleMap,
+  type SystemUser,
+  type SystemUserProfile,
   BusinessMemberStatus,
   CommonStatus,
-  Prisma,
   SystemUserStatus,
   SystemUserType,
   UserRoleMapStatus,
-} from "@prisma/client";
+  businessMember,
+  rbacRole,
+  rbacRolePermission,
+  rbacUserRoleMap,
+  systemUser,
+  systemUserProfile,
+} from "@/database/schema";
 import * as argon2 from "argon2";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  ilike,
+  inArray,
+  isNull,
+  ne,
+  or,
+} from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { AssignEmployeeRolesDto } from "./dto/assign-employee-roles.dto";
@@ -21,15 +45,51 @@ import { EmployeeProfileDto } from "./dto/employee-profile.dto";
 import { QueryEmployeesDto } from "./dto/query-employees.dto";
 import { UpdateEmployeeStatusDto } from "./dto/update-employee-status.dto";
 import { UpdateEmployeeDto } from "./dto/update-employee.dto";
-import { PrismaService } from "../../prisma/prisma.service";
+import { DatabaseService } from "../../database/database.service";
+import { isUniqueConstraintError } from "../../common/database/db-error.util";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
 
+type UserSummary = Pick<SystemUser, "id" | "name" | "email" | "type">;
+
+type EmployeeRoleMap = RbacUserRoleMap & {
+  role: Pick<
+    RbacRole,
+    "id" | "businessId" | "name" | "description" | "status"
+  > & {
+    permissions: Pick<RbacRolePermission, "id" | "feature" | "action">[];
+  };
+};
+
+type EmployeeDetails = Pick<
+  SystemUser,
+  | "id"
+  | "name"
+  | "email"
+  | "phone"
+  | "type"
+  | "status"
+  | "emailVerifiedAt"
+  | "createdAt"
+  | "updatedAt"
+  | "deletedAt"
+> & {
+  profile: SystemUserProfile | null;
+  businessMembers: BusinessMember[];
+  userRoleMaps: EmployeeRoleMap[];
+  createdBy: UserSummary | null;
+  updatedBy: UserSummary | null;
+};
+
 @Injectable()
 export class EmployeeService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly database: DatabaseService) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async create(
     currentUser: CurrentUserPayload,
@@ -57,51 +117,51 @@ export class EmployeeService {
     });
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
-        const employee = await tx.systemUser.create({
-          data: {
+      return await this.db.transaction(async (tx) => {
+        const [employee] = await tx
+          .insert(systemUser)
+          .values({
             name: dto.name.trim(),
             email,
             phone,
             passwordHash,
             type: SystemUserType.EMPLOYEE,
             status: dto.status ?? SystemUserStatus.ACTIVE,
-
             tenantId:
               currentUser.type === SystemUserType.TENANT
                 ? currentUser.id
                 : currentUser.tenantId,
-
             createdById: currentUser.id,
             updatedById: currentUser.id,
+          })
+          .returning();
 
-            profile: {
-              create: profileData,
-            },
+        await tx.insert(systemUserProfile).values({
+          userId: employee.id,
+          ...profileData,
+        });
 
-            businessMembers: {
-              create: {
-                businessId,
-              },
-            },
-          },
-          select: this.getEmployeeSelect(businessId),
+        await tx.insert(businessMember).values({
+          businessId,
+          userId: employee.id,
+          status: BusinessMemberStatus.ACTIVE,
         });
 
         if (roleIds.length > 0) {
-          await tx.rbacUserRoleMap.createMany({
-            data: roleIds.map((roleId) => ({
-              userId: employee.id,
-              roleId,
-              status: UserRoleMapStatus.ACTIVE,
-              assignedBy: currentUser.id,
-            })),
-            skipDuplicates: true,
-          });
+          await tx
+            .insert(rbacUserRoleMap)
+            .values(
+              roleIds.map((roleId) => ({
+                userId: employee.id,
+                roleId,
+                status: UserRoleMapStatus.ACTIVE,
+                assignedBy: currentUser.id,
+              })),
+            )
+            .onConflictDoNothing();
         }
 
         const createdEmployee = await this.getEmployeeByIdOrThrow(
-          tx,
           businessId,
           employee.id,
         );
@@ -109,7 +169,7 @@ export class EmployeeService {
         return apiResponse(createdEmployee, "Employee created successfully");
       });
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handleDatabaseError(error);
     }
   }
 
@@ -117,68 +177,49 @@ export class EmployeeService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-
     const sortBy = query.sortBy ?? "createdAt";
     const sortOrder = query.sortOrder ?? "desc";
+    const where = and(
+      eq(systemUser.type, SystemUserType.EMPLOYEE),
+      exists(
+        this.db
+          .select({ id: businessMember.id })
+          .from(businessMember)
+          .where(
+            and(
+              eq(businessMember.userId, systemUser.id),
+              eq(businessMember.businessId, businessId),
+              eq(businessMember.status, BusinessMemberStatus.ACTIVE),
+              isNull(businessMember.deletedAt),
+            ),
+          ),
+      ),
+      !query.includeDeleted ? isNull(systemUser.deletedAt) : undefined,
+      query.status ? eq(systemUser.status, query.status) : undefined,
+      query.search
+        ? or(
+            ilike(systemUser.name, `%${query.search}%`),
+            ilike(systemUser.email, `%${query.search}%`),
+            ilike(systemUser.phone, `%${query.search}%`),
+          )
+        : undefined,
+    );
 
-    const where: Prisma.SystemUserWhereInput = {
-      type: SystemUserType.EMPLOYEE,
-
-      businessMembers: {
-        some: {
-          businessId,
-          status: BusinessMemberStatus.ACTIVE,
-          deletedAt: null,
-        },
-      },
-
-      ...(!query.includeDeleted && {
-        deletedAt: null,
-      }),
-
-      ...(query.status && {
-        status: query.status,
-      }),
-
-      ...(query.search && {
-        OR: [
-          {
-            name: {
-              contains: query.search,
-              mode: "insensitive",
-            },
-          },
-          {
-            email: {
-              contains: query.search,
-              mode: "insensitive",
-            },
-          },
-          {
-            phone: {
-              contains: query.search,
-              mode: "insensitive",
-            },
-          },
-        ],
-      }),
-    };
-
-    const orderBy: Prisma.SystemUserOrderByWithRelationInput = {
-      [sortBy]: sortOrder,
-    };
-
-    const items = await this.prisma.systemUser.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy,
-      select: this.getEmployeeSelect(businessId),
-    });
-
-    const total = await this.prisma.systemUser.count({
-      where,
-    });
+    const [items, total] = await Promise.all([
+      this.db
+        .select()
+        .from(systemUser)
+        .where(where)
+        .orderBy(this.employeeOrderBy(sortBy, sortOrder))
+        .limit(limit)
+        .offset(skip)
+        .then((rows) => this.withEmployeesDetails(rows, businessId)),
+      this.db
+        .select({ value: count() })
+        .from(systemUser)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
+    ]);
 
     return paginatedResponse(items, {
       page,
@@ -189,11 +230,7 @@ export class EmployeeService {
   }
 
   async findOne(businessId: string, employeeId: string) {
-    const employee = await this.getEmployeeByIdOrThrow(
-      this.prisma,
-      businessId,
-      employeeId,
-    );
+    const employee = await this.getEmployeeByIdOrThrow(businessId, employeeId);
 
     return apiResponse(employee);
   }
@@ -208,7 +245,6 @@ export class EmployeeService {
 
     const email =
       dto.email !== undefined ? this.normalizeEmail(dto.email) : undefined;
-
     const phone =
       dto.phone !== undefined
         ? this.normalizeNullableText(dto.phone)
@@ -225,47 +261,35 @@ export class EmployeeService {
     const passwordHash = dto.password
       ? await this.hashPassword(dto.password)
       : undefined;
-
     const profileData = this.buildProfileData(dto.profile);
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
-        await tx.systemUser.update({
-          where: {
-            id: employeeId,
-          },
-          data: {
-            ...(dto.name !== undefined && {
-              name: dto.name.trim(),
-            }),
-
-            ...(email !== undefined && {
-              email,
-            }),
-
-            ...(phone !== undefined && {
-              phone,
-            }),
-
-            ...(passwordHash !== undefined && {
-              passwordHash,
-            }),
-
+      return await this.db.transaction(async (tx) => {
+        await tx
+          .update(systemUser)
+          .set({
+            ...(dto.name !== undefined && { name: dto.name.trim() }),
+            ...(email !== undefined && { email }),
+            ...(phone !== undefined && { phone }),
+            ...(passwordHash !== undefined && { passwordHash }),
             updatedById: currentUser.id,
+          })
+          .where(eq(systemUser.id, employeeId));
 
-            ...(profileData && {
-              profile: {
-                upsert: {
-                  create: profileData,
-                  update: profileData,
-                },
-              },
-            }),
-          },
-        });
+        if (profileData) {
+          await tx
+            .insert(systemUserProfile)
+            .values({
+              userId: employeeId,
+              ...profileData,
+            })
+            .onConflictDoUpdate({
+              target: systemUserProfile.userId,
+              set: profileData,
+            });
+        }
 
         const employee = await this.getEmployeeByIdOrThrow(
-          tx,
           businessId,
           employeeId,
         );
@@ -273,7 +297,7 @@ export class EmployeeService {
         return apiResponse(employee, "Employee updated successfully");
       });
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handleDatabaseError(error);
     }
   }
 
@@ -285,21 +309,15 @@ export class EmployeeService {
   ) {
     await this.assertEmployeeBelongsToBusiness(businessId, employeeId);
 
-    await this.prisma.systemUser.update({
-      where: {
-        id: employeeId,
-      },
-      data: {
+    await this.db
+      .update(systemUser)
+      .set({
         status: dto.status,
         updatedById: currentUser.id,
-      },
-    });
+      })
+      .where(eq(systemUser.id, employeeId));
 
-    const employee = await this.getEmployeeByIdOrThrow(
-      this.prisma,
-      businessId,
-      employeeId,
-    );
+    const employee = await this.getEmployeeByIdOrThrow(businessId, employeeId);
 
     return apiResponse(employee, "Employee status updated successfully");
   }
@@ -318,56 +336,60 @@ export class EmployeeService {
       await this.assertRolesBelongToBusiness(businessId, roleIds);
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.rbacUserRoleMap.updateMany({
-        where: {
-          userId: employeeId,
-          role: {
-            businessId,
-          },
-          status: UserRoleMapStatus.ACTIVE,
-        },
-        data: {
-          status: UserRoleMapStatus.REVOKED,
-        },
-      });
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(rbacUserRoleMap)
+        .set({ status: UserRoleMapStatus.REVOKED })
+        .where(
+          and(
+            eq(rbacUserRoleMap.userId, employeeId),
+            eq(rbacUserRoleMap.status, UserRoleMapStatus.ACTIVE),
+            exists(
+              this.db
+                .select({ id: rbacRole.id })
+                .from(rbacRole)
+                .where(
+                  and(
+                    eq(rbacRole.id, rbacUserRoleMap.roleId),
+                    eq(rbacRole.businessId, businessId),
+                  ),
+                ),
+            ),
+          ),
+        );
 
       if (roleIds.length > 0) {
-        await tx.rbacUserRoleMap.createMany({
-          data: roleIds.map((roleId) => ({
-            userId: employeeId,
-            roleId,
-            status: UserRoleMapStatus.ACTIVE,
-            assignedBy: currentUser.id,
-          })),
-          skipDuplicates: true,
-        });
+        await tx
+          .insert(rbacUserRoleMap)
+          .values(
+            roleIds.map((roleId) => ({
+              userId: employeeId,
+              roleId,
+              status: UserRoleMapStatus.ACTIVE,
+              assignedBy: currentUser.id,
+            })),
+          )
+          .onConflictDoNothing();
 
-        await tx.rbacUserRoleMap.updateMany({
-          where: {
-            userId: employeeId,
-            roleId: {
-              in: roleIds,
-            },
-            status: {
-              not: UserRoleMapStatus.ACTIVE,
-            },
-          },
-          data: {
+        await tx
+          .update(rbacUserRoleMap)
+          .set({
             status: UserRoleMapStatus.ACTIVE,
             assignedBy: currentUser.id,
             assignedAt: new Date(),
             expiresAt: null,
-          },
-        });
+          })
+          .where(
+            and(
+              eq(rbacUserRoleMap.userId, employeeId),
+              inArray(rbacUserRoleMap.roleId, roleIds),
+              ne(rbacUserRoleMap.status, UserRoleMapStatus.ACTIVE),
+            ),
+          );
       }
     });
 
-    const employee = await this.getEmployeeByIdOrThrow(
-      this.prisma,
-      businessId,
-      employeeId,
-    );
+    const employee = await this.getEmployeeByIdOrThrow(businessId, employeeId);
 
     return apiResponse(employee, "Employee roles updated successfully");
   }
@@ -383,217 +405,144 @@ export class EmployeeService {
 
     await this.assertEmployeeBelongsToBusiness(businessId, employeeId);
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.db.transaction(async (tx) => {
       const now = new Date();
 
-      await tx.businessMember.updateMany({
-        where: {
-          businessId,
-          userId: employeeId,
-          deletedAt: null,
-        },
-        data: {
+      await tx
+        .update(businessMember)
+        .set({
           status: BusinessMemberStatus.INACTIVE,
           deletedAt: now,
-        },
-      });
+        })
+        .where(
+          and(
+            eq(businessMember.businessId, businessId),
+            eq(businessMember.userId, employeeId),
+            isNull(businessMember.deletedAt),
+          ),
+        );
 
-      await tx.rbacUserRoleMap.updateMany({
-        where: {
-          userId: employeeId,
-          role: {
-            businessId,
-          },
-          status: UserRoleMapStatus.ACTIVE,
-        },
-        data: {
-          status: UserRoleMapStatus.REVOKED,
-        },
-      });
+      await tx
+        .update(rbacUserRoleMap)
+        .set({ status: UserRoleMapStatus.REVOKED })
+        .where(
+          and(
+            eq(rbacUserRoleMap.userId, employeeId),
+            eq(rbacUserRoleMap.status, UserRoleMapStatus.ACTIVE),
+            exists(
+              this.db
+                .select({ id: rbacRole.id })
+                .from(rbacRole)
+                .where(
+                  and(
+                    eq(rbacRole.id, rbacUserRoleMap.roleId),
+                    eq(rbacRole.businessId, businessId),
+                  ),
+                ),
+            ),
+          ),
+        );
 
-      const activeMemberships = await tx.businessMember.count({
-        where: {
-          userId: employeeId,
-          status: BusinessMemberStatus.ACTIVE,
-          deletedAt: null,
-        },
-      });
+      const [activeMemberships] = await tx
+        .select({ value: count() })
+        .from(businessMember)
+        .where(
+          and(
+            eq(businessMember.userId, employeeId),
+            eq(businessMember.status, BusinessMemberStatus.ACTIVE),
+            isNull(businessMember.deletedAt),
+          ),
+        );
 
-      if (activeMemberships > 0) {
+      if ((activeMemberships?.value ?? 0) > 0) {
         return;
       }
 
-      await tx.systemUserProfile.updateMany({
-        where: {
-          userId: employeeId,
-          deletedAt: null,
-        },
-        data: {
-          deletedAt: now,
-        },
-      });
+      await tx
+        .update(systemUserProfile)
+        .set({ deletedAt: now })
+        .where(
+          and(
+            eq(systemUserProfile.userId, employeeId),
+            isNull(systemUserProfile.deletedAt),
+          ),
+        );
 
-      await tx.systemUser.update({
-        where: {
-          id: employeeId,
-        },
-        data: {
+      await tx
+        .update(systemUser)
+        .set({
           status: SystemUserStatus.INACTIVE,
           deletedAt: now,
           deletedById: currentUser.id,
           updatedById: currentUser.id,
-        },
-      });
+        })
+        .where(eq(systemUser.id, employeeId));
     });
 
     return apiResponse(null, "Employee deleted successfully");
   }
 
-  private getEmployeeSelect(businessId: string): Prisma.SystemUserSelect {
-    return {
-      id: true,
-      name: true,
-      email: true,
-      phone: true,
-      type: true,
-      status: true,
-      emailVerifiedAt: true,
-      createdAt: true,
-      updatedAt: true,
-      deletedAt: true,
-
-      profile: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          imageUrl: true,
-          dateOfBirth: true,
-          gender: true,
-          address: true,
-          city: true,
-          country: true,
-          bio: true,
-        },
-      },
-
-      businessMembers: {
-        where: {
-          businessId,
-          status: BusinessMemberStatus.ACTIVE,
-          deletedAt: null,
-        },
-        select: {
-          id: true,
-          businessId: true,
-          userId: true,
-          createdAt: true,
-          updatedAt: true,
-          deletedAt: true,
-        },
-      },
-
-      userRoleMaps: {
-        where: {
-          role: {
-            businessId,
-            deletedAt: null,
-          },
-        },
-        select: {
-          id: true,
-          status: true,
-          assignedAt: true,
-          expiresAt: true,
-          role: {
-            select: {
-              id: true,
-              businessId: true,
-              name: true,
-              description: true,
-              status: true,
-              permissions: {
-                orderBy: [{ feature: "asc" }, { action: "asc" }],
-                select: {
-                  id: true,
-                  feature: true,
-                  action: true,
-                },
-              },
-            },
-          },
-        },
-      },
-
-      createdBy: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          type: true,
-        },
-      },
-
-      updatedBy: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          type: true,
-        },
-      },
-    };
-  }
-
-  private async getEmployeeByIdOrThrow(
-    prisma: Prisma.TransactionClient | PrismaService,
-    businessId: string,
-    employeeId: string,
-  ) {
-    const employee = await prisma.systemUser.findFirst({
-      where: {
-        id: employeeId,
-        type: SystemUserType.EMPLOYEE,
-        deletedAt: null,
-        businessMembers: {
-          some: {
-            businessId,
-            status: BusinessMemberStatus.ACTIVE,
-            deletedAt: null,
-          },
-        },
-      },
-      select: this.getEmployeeSelect(businessId),
-    });
+  private async getEmployeeByIdOrThrow(businessId: string, employeeId: string) {
+    const [employee] = await this.db
+      .select()
+      .from(systemUser)
+      .where(
+        and(
+          eq(systemUser.id, employeeId),
+          eq(systemUser.type, SystemUserType.EMPLOYEE),
+          isNull(systemUser.deletedAt),
+          exists(
+            this.db
+              .select({ id: businessMember.id })
+              .from(businessMember)
+              .where(
+                and(
+                  eq(businessMember.userId, systemUser.id),
+                  eq(businessMember.businessId, businessId),
+                  eq(businessMember.status, BusinessMemberStatus.ACTIVE),
+                  isNull(businessMember.deletedAt),
+                ),
+              ),
+          ),
+        ),
+      )
+      .limit(1);
 
     if (!employee) {
       throw new NotFoundException("Employee not found");
     }
 
-    return employee;
+    return this.withEmployeeDetails(employee, businessId);
   }
 
   private async assertEmployeeBelongsToBusiness(
     businessId: string,
     employeeId: string,
   ) {
-    const employee = await this.prisma.systemUser.findFirst({
-      where: {
-        id: employeeId,
-        type: SystemUserType.EMPLOYEE,
-        deletedAt: null,
-        businessMembers: {
-          some: {
-            businessId,
-            status: BusinessMemberStatus.ACTIVE,
-            deletedAt: null,
-          },
-        },
-      },
-      select: {
-        id: true,
-      },
-    });
+    const [employee] = await this.db
+      .select({ id: systemUser.id })
+      .from(systemUser)
+      .where(
+        and(
+          eq(systemUser.id, employeeId),
+          eq(systemUser.type, SystemUserType.EMPLOYEE),
+          isNull(systemUser.deletedAt),
+          exists(
+            this.db
+              .select({ id: businessMember.id })
+              .from(businessMember)
+              .where(
+                and(
+                  eq(businessMember.userId, systemUser.id),
+                  eq(businessMember.businessId, businessId),
+                  eq(businessMember.status, BusinessMemberStatus.ACTIVE),
+                  isNull(businessMember.deletedAt),
+                ),
+              ),
+          ),
+        ),
+      )
+      .limit(1);
 
     if (!employee) {
       throw new NotFoundException("Employee not found in this business");
@@ -604,19 +553,17 @@ export class EmployeeService {
     businessId: string,
     roleIds: string[],
   ) {
-    const roles = await this.prisma.rbacRole.findMany({
-      where: {
-        id: {
-          in: roleIds,
-        },
-        businessId,
-        status: CommonStatus.ACTIVE,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-      },
-    });
+    const roles = await this.db
+      .select({ id: rbacRole.id })
+      .from(rbacRole)
+      .where(
+        and(
+          inArray(rbacRole.id, roleIds),
+          eq(rbacRole.businessId, businessId),
+          eq(rbacRole.status, CommonStatus.ACTIVE),
+          isNull(rbacRole.deletedAt),
+        ),
+      );
 
     if (roles.length !== roleIds.length) {
       throw new BadRequestException(
@@ -626,20 +573,16 @@ export class EmployeeService {
   }
 
   private async assertEmailAvailable(email: string, ignoreUserId?: string) {
-    const existingUser = await this.prisma.systemUser.findFirst({
-      where: {
-        email,
-
-        ...(ignoreUserId && {
-          id: {
-            not: ignoreUserId,
-          },
-        }),
-      },
-      select: {
-        id: true,
-      },
-    });
+    const [existingUser] = await this.db
+      .select({ id: systemUser.id })
+      .from(systemUser)
+      .where(
+        and(
+          eq(systemUser.email, email),
+          ignoreUserId ? ne(systemUser.id, ignoreUserId) : undefined,
+        ),
+      )
+      .limit(1);
 
     if (existingUser) {
       throw new ConflictException("Email already exists");
@@ -647,24 +590,177 @@ export class EmployeeService {
   }
 
   private async assertPhoneAvailable(phone: string, ignoreUserId?: string) {
-    const existingUser = await this.prisma.systemUser.findFirst({
-      where: {
-        phone,
-
-        ...(ignoreUserId && {
-          id: {
-            not: ignoreUserId,
-          },
-        }),
-      },
-      select: {
-        id: true,
-      },
-    });
+    const [existingUser] = await this.db
+      .select({ id: systemUser.id })
+      .from(systemUser)
+      .where(
+        and(
+          eq(systemUser.phone, phone),
+          ignoreUserId ? ne(systemUser.id, ignoreUserId) : undefined,
+        ),
+      )
+      .limit(1);
 
     if (existingUser) {
       throw new ConflictException("Phone already exists");
     }
+  }
+
+  private async withEmployeesDetails(
+    employees: SystemUser[],
+    businessId: string,
+  ) {
+    return Promise.all(
+      employees.map((employee) =>
+        this.withEmployeeDetails(employee, businessId),
+      ),
+    );
+  }
+
+  private async withEmployeeDetails(
+    employee: SystemUser,
+    businessId: string,
+  ): Promise<EmployeeDetails> {
+    const [profile, businessMembers, userRoleMaps, createdBy, updatedBy] =
+      await Promise.all([
+        this.db
+          .select()
+          .from(systemUserProfile)
+          .where(eq(systemUserProfile.userId, employee.id))
+          .limit(1)
+          .then(([item]) => item ?? null),
+        this.db
+          .select()
+          .from(businessMember)
+          .where(
+            and(
+              eq(businessMember.businessId, businessId),
+              eq(businessMember.userId, employee.id),
+              eq(businessMember.status, BusinessMemberStatus.ACTIVE),
+              isNull(businessMember.deletedAt),
+            ),
+          ),
+        this.getEmployeeRoleMaps(employee.id, businessId),
+        employee.createdById
+          ? this.findUserSummary(employee.createdById)
+          : null,
+        employee.updatedById
+          ? this.findUserSummary(employee.updatedById)
+          : null,
+      ]);
+
+    return {
+      id: employee.id,
+      name: employee.name,
+      email: employee.email,
+      phone: employee.phone,
+      type: employee.type,
+      status: employee.status,
+      emailVerifiedAt: employee.emailVerifiedAt,
+      createdAt: employee.createdAt,
+      updatedAt: employee.updatedAt,
+      deletedAt: employee.deletedAt,
+      profile,
+      businessMembers,
+      userRoleMaps,
+      createdBy,
+      updatedBy,
+    };
+  }
+
+  private async getEmployeeRoleMaps(userId: string, businessId: string) {
+    const maps = await this.db
+      .select()
+      .from(rbacUserRoleMap)
+      .where(
+        and(
+          eq(rbacUserRoleMap.userId, userId),
+          exists(
+            this.db
+              .select({ id: rbacRole.id })
+              .from(rbacRole)
+              .where(
+                and(
+                  eq(rbacRole.id, rbacUserRoleMap.roleId),
+                  eq(rbacRole.businessId, businessId),
+                  isNull(rbacRole.deletedAt),
+                ),
+              ),
+          ),
+        ),
+      );
+
+    return Promise.all(
+      maps.map(async (map) => ({
+        ...map,
+        role: await this.getRoleSummaryWithPermissions(map.roleId),
+      })),
+    );
+  }
+
+  private async getRoleSummaryWithPermissions(roleId: string) {
+    const [role] = await this.db
+      .select({
+        id: rbacRole.id,
+        businessId: rbacRole.businessId,
+        name: rbacRole.name,
+        description: rbacRole.description,
+        status: rbacRole.status,
+      })
+      .from(rbacRole)
+      .where(eq(rbacRole.id, roleId))
+      .limit(1);
+
+    if (!role) {
+      throw new NotFoundException("Role not found");
+    }
+
+    const permissions = await this.db
+      .select({
+        id: rbacRolePermission.id,
+        feature: rbacRolePermission.feature,
+        action: rbacRolePermission.action,
+      })
+      .from(rbacRolePermission)
+      .where(eq(rbacRolePermission.roleId, roleId))
+      .orderBy(asc(rbacRolePermission.feature), asc(rbacRolePermission.action));
+
+    return {
+      ...role,
+      permissions,
+    };
+  }
+
+  private findUserSummary(userId: string) {
+    return this.db
+      .select({
+        id: systemUser.id,
+        name: systemUser.name,
+        email: systemUser.email,
+        type: systemUser.type,
+      })
+      .from(systemUser)
+      .where(eq(systemUser.id, userId))
+      .limit(1)
+      .then(([user]) => user ?? null);
+  }
+
+  private employeeOrderBy(
+    sortBy: NonNullable<QueryEmployeesDto["sortBy"]>,
+    sortOrder: NonNullable<QueryEmployeesDto["sortOrder"]>,
+  ) {
+    const column =
+      sortBy === "name"
+        ? systemUser.name
+        : sortBy === "email"
+          ? systemUser.email
+          : sortBy === "status"
+            ? systemUser.status
+            : sortBy === "updatedAt"
+              ? systemUser.updatedAt
+              : systemUser.createdAt;
+
+    return sortOrder === "asc" ? asc(column) : desc(column);
   }
 
   private normalizeEmail(email: string) {
@@ -694,9 +790,7 @@ export class EmployeeService {
   }
 
   private normalizeRoleIds(roleIds: string[]) {
-    const uniqueRoleIds = [...new Set(roleIds)];
-
-    return uniqueRoleIds;
+    return [...new Set(roleIds)];
   }
 
   private buildProfileData(
@@ -726,15 +820,9 @@ export class EmployeeService {
     });
   }
 
-  private handlePrismaError(error: unknown): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === "P2002") {
-        throw new ConflictException("Employee email or phone already exists");
-      }
-
-      if (error.code === "P2025") {
-        throw new NotFoundException("Employee not found");
-      }
+  private handleDatabaseError(error: unknown): never {
+    if (isUniqueConstraintError(error)) {
+      throw new ConflictException("Employee email or phone already exists");
     }
 
     throw error;

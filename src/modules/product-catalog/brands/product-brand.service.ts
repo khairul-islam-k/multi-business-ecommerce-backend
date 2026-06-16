@@ -3,7 +3,13 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma, ProductSimpleStatus } from "@prisma/client";
+import {
+  type ProductBrand,
+  ProductSimpleStatus,
+  product,
+  productBrand,
+} from "@/database/schema";
+import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { QueryCatalogDto } from "../common/dto/query-catalog.dto";
@@ -11,23 +17,27 @@ import {
   CreateProductBrandDto,
   UpdateProductBrandDto,
 } from "./dto/product-brand.dto";
-import { PrismaService } from "../../../prisma/prisma.service";
 import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import { DatabaseService } from "../../../database/database.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
 
-const BRAND_INCLUDE = {
-  _count: { select: { products: true } },
-} satisfies Prisma.ProductBrandInclude;
+type BrandWithCount = ProductBrand & {
+  _count: { products: number };
+};
 
 @Injectable()
 export class ProductBrandService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly lookup: ProductCatalogLookupService,
   ) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async create(
     currentUser: CurrentUserPayload,
@@ -35,8 +45,9 @@ export class ProductBrandService {
     dto: CreateProductBrandDto,
   ) {
     try {
-      const brand = await this.prisma.productBrand.create({
-        data: {
+      const [brand] = await this.db
+        .insert(productBrand)
+        .values({
           businessId,
           name: this.lookup.normalizeName(dto.name),
           description: this.lookup.normalizeNullableText(dto.description),
@@ -45,11 +56,13 @@ export class ProductBrandService {
           sortOrder: dto.sortOrder ?? 0,
           createdBy: currentUser.id,
           updatedBy: currentUser.id,
-        },
-        include: BRAND_INCLUDE,
-      });
+        })
+        .returning();
 
-      return apiResponse(brand, "Brand created successfully");
+      return apiResponse(
+        await this.withBrandCount(brand),
+        "Brand created successfully",
+      );
     } catch (error) {
       this.lookup.handleUniqueError(error, "Brand name already exists");
     }
@@ -59,32 +72,37 @@ export class ProductBrandService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const where: Prisma.ProductBrandWhereInput = {
-      businessId,
-      deletedAt: null,
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { name: { contains: query.search, mode: "insensitive" } },
-              { description: { contains: query.search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-    };
+    const where = and(
+      eq(productBrand.businessId, businessId),
+      isNull(productBrand.deletedAt),
+      query.status ? eq(productBrand.status, query.status) : undefined,
+      query.search
+        ? or(
+            ilike(productBrand.name, `%${query.search}%`),
+            ilike(productBrand.description, `%${query.search}%`),
+          )
+        : undefined,
+    );
 
     const [items, total] = await Promise.all([
-      this.prisma.productBrand.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: [
-          { sortOrder: "asc" },
-          { createdAt: query.sortOrder ?? "desc" },
-        ],
-        include: BRAND_INCLUDE,
-      }),
-      this.prisma.productBrand.count({ where }),
+      this.db
+        .select()
+        .from(productBrand)
+        .where(where)
+        .orderBy(
+          asc(productBrand.sortOrder),
+          query.sortOrder === "asc"
+            ? asc(productBrand.createdAt)
+            : desc(productBrand.createdAt),
+        )
+        .limit(limit)
+        .offset(skip)
+        .then((rows) => this.withBrandsCount(rows)),
+      this.db
+        .select({ value: count() })
+        .from(productBrand)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
     ]);
 
     return paginatedResponse(items, {
@@ -96,16 +114,13 @@ export class ProductBrandService {
   }
 
   async findOne(businessId: string, brandId: string) {
-    const brand = await this.prisma.productBrand.findFirst({
-      where: { id: brandId, businessId, deletedAt: null },
-      include: BRAND_INCLUDE,
-    });
+    const brand = await this.findBrandRow(businessId, brandId);
 
     if (!brand) {
       throw new NotFoundException("Brand not found");
     }
 
-    return apiResponse(brand);
+    return apiResponse(await this.withBrandCount(brand));
   }
 
   async update(
@@ -117,9 +132,9 @@ export class ProductBrandService {
     await this.findBrandOrThrow(businessId, brandId);
 
     try {
-      const brand = await this.prisma.productBrand.update({
-        where: { id: brandId },
-        data: {
+      const [brand] = await this.db
+        .update(productBrand)
+        .set({
           ...(dto.name !== undefined && {
             name: this.lookup.normalizeName(dto.name),
           }),
@@ -132,11 +147,14 @@ export class ProductBrandService {
           ...(dto.status !== undefined && { status: dto.status }),
           ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
           updatedBy: currentUser.id,
-        },
-        include: BRAND_INCLUDE,
-      });
+        })
+        .where(eq(productBrand.id, brandId))
+        .returning();
 
-      return apiResponse(brand, "Brand updated successfully");
+      return apiResponse(
+        await this.withBrandCount(brand),
+        "Brand updated successfully",
+      );
     } catch (error) {
       this.lookup.handleUniqueError(error, "Brand name already exists");
     }
@@ -150,38 +168,75 @@ export class ProductBrandService {
     await this.findBrandOrThrow(businessId, brandId);
     await this.assertBrandCanBeDeleted(businessId, brandId);
 
-    await this.prisma.productBrand.update({
-      where: { id: brandId },
-      data: {
+    await this.db
+      .update(productBrand)
+      .set({
         status: ProductSimpleStatus.INACTIVE,
         deletedAt: new Date(),
         updatedBy: currentUser.id,
-      },
-    });
+      })
+      .where(eq(productBrand.id, brandId));
 
     return apiResponse(null, "Brand deleted successfully");
   }
 
   private async findBrandOrThrow(businessId: string, brandId: string) {
-    const brand = await this.prisma.productBrand.findFirst({
-      where: { id: brandId, businessId, deletedAt: null },
-      select: { id: true },
-    });
+    const brand = await this.findBrandRow(businessId, brandId);
 
     if (!brand) {
       throw new NotFoundException("Brand not found");
     }
   }
 
-  private async assertBrandCanBeDeleted(businessId: string, brandId: string) {
-    const productCount = await this.prisma.product.count({
-      where: { businessId, brandId, deletedAt: null },
-    });
+  private findBrandRow(businessId: string, brandId: string) {
+    return this.db
+      .select()
+      .from(productBrand)
+      .where(
+        and(
+          eq(productBrand.id, brandId),
+          eq(productBrand.businessId, businessId),
+          isNull(productBrand.deletedAt),
+        ),
+      )
+      .limit(1)
+      .then(([brand]) => brand ?? null);
+  }
 
-    if (productCount > 0) {
+  private async assertBrandCanBeDeleted(businessId: string, brandId: string) {
+    const [{ value }] = await this.db
+      .select({ value: count() })
+      .from(product)
+      .where(
+        and(
+          eq(product.businessId, businessId),
+          eq(product.brandId, brandId),
+          isNull(product.deletedAt),
+        ),
+      );
+
+    if (value > 0) {
       throw new BadRequestException(
         "Brand cannot be deleted while assigned to active products",
       );
     }
+  }
+
+  private async withBrandsCount(brands: ProductBrand[]) {
+    return Promise.all(brands.map((brand) => this.withBrandCount(brand)));
+  }
+
+  private async withBrandCount(brand: ProductBrand): Promise<BrandWithCount> {
+    const [{ value }] = await this.db
+      .select({ value: count() })
+      .from(product)
+      .where(eq(product.brandId, brand.id));
+
+    return {
+      ...brand,
+      _count: {
+        products: value,
+      },
+    };
   }
 }

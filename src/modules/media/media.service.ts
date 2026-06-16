@@ -5,18 +5,24 @@ import {
   UnsupportedMediaTypeException,
 } from "@nestjs/common";
 import {
+  type MediaAsset,
+  type MediaAssetTag,
+  type MediaTag,
   MediaAssetStatus,
   MediaFileType,
   MediaTagStatus,
   PackageLimitKey,
-  Prisma,
-} from "@prisma/client";
+  mediaAsset,
+  mediaAssetTag,
+  mediaTag,
+} from "@/database/schema";
+import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { DeleteMediaBulkDto } from "./dto/delete-media.dto";
 import { QueryMediaDto } from "./dto/query-media.dto";
 import { UploadMediaDto } from "./dto/upload-media.dto";
-import { PrismaService } from "../../prisma/prisma.service";
+import { DatabaseService } from "../../database/database.service";
 import { PackageLimitService } from "../packages/package-limit.service";
 import {
   apiResponse,
@@ -39,29 +45,28 @@ const SUPPORTED_IMAGE_MIME_TYPES = new Set([
   "image/webp",
 ]);
 
-const MEDIA_ASSET_INCLUDE = {
-  tags: {
-    include: {
-      tag: true,
-    },
-    orderBy: {
-      tag: {
-        name: "asc",
-      },
-    },
-  },
-} satisfies Prisma.MediaAssetInclude;
+type MediaAssetTagWithTag = MediaAssetTag & {
+  tag: MediaTag;
+};
+
+type MediaAssetWithTags = MediaAsset & {
+  tags: MediaAssetTagWithTag[];
+};
 
 @Injectable()
 export class MediaService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     @Inject(MEDIA_UPLOADER)
     private readonly uploader: MediaUploader,
     @Inject(MEDIA_LIMITS)
     private readonly limits: MediaLimits,
     private readonly packageLimits: PackageLimitService,
   ) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async uploadImage(
     currentUser: CurrentUserPayload,
@@ -118,9 +123,7 @@ export class MediaService {
     }
 
     const tags = this.normalizeTags(dto.tags);
-    const assets: Prisma.MediaAssetGetPayload<{
-      include: typeof MEDIA_ASSET_INCLUDE;
-    }>[] = [];
+    const assets: MediaAssetWithTags[] = [];
 
     for (const file of files) {
       const uploadedFile = await this.uploader.upload(file, {
@@ -146,43 +149,48 @@ export class MediaService {
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
     const tags = this.normalizeTags(query.tags);
-
-    const where: Prisma.MediaAssetWhereInput = {
-      businessId,
-      fileType: MediaFileType.IMAGE,
-      status: MediaAssetStatus.ACTIVE,
-      deletedAt: null,
-      ...(tags.length > 0 && {
-        tags: {
-          some: {
-            tag: {
-              businessId,
-              status: MediaTagStatus.ACTIVE,
-              name: {
-                in: tags,
-                mode: "insensitive",
-              },
-            },
-          },
-        },
-      }),
-    };
-
-    const orderBy: Prisma.MediaAssetOrderByWithRelationInput = {
-      [query.sortBy ?? "createdAt"]: query.sortOrder ?? "desc",
-    };
+    const where = and(
+      eq(mediaAsset.businessId, businessId),
+      eq(mediaAsset.fileType, MediaFileType.IMAGE),
+      eq(mediaAsset.status, MediaAssetStatus.ACTIVE),
+      isNull(mediaAsset.deletedAt),
+      tags.length > 0
+        ? inArray(
+            mediaAsset.id,
+            this.db
+              .select({ id: mediaAssetTag.mediaAssetId })
+              .from(mediaAssetTag)
+              .innerJoin(mediaTag, eq(mediaTag.id, mediaAssetTag.tagId))
+              .where(
+                and(
+                  eq(mediaTag.businessId, businessId),
+                  eq(mediaTag.status, MediaTagStatus.ACTIVE),
+                  inArray(mediaTag.name, tags),
+                ),
+              ),
+          )
+        : undefined,
+    );
 
     const [items, total] = await Promise.all([
-      this.prisma.mediaAsset.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy,
-        include: MEDIA_ASSET_INCLUDE,
-      }),
-      this.prisma.mediaAsset.count({
-        where,
-      }),
+      this.db
+        .select()
+        .from(mediaAsset)
+        .where(where)
+        .orderBy(
+          this.mediaOrderBy(
+            query.sortBy ?? "createdAt",
+            query.sortOrder ?? "desc",
+          ),
+        )
+        .limit(limit)
+        .offset(skip)
+        .then((rows) => this.withAssetsTags(rows)),
+      this.db
+        .select({ value: count() })
+        .from(mediaAsset)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
     ]);
 
     return paginatedResponse(items, {
@@ -255,13 +263,14 @@ export class MediaService {
     businessId: string,
     mediaAssetId: string,
   ) {
-    const asset = await this.prisma.mediaAsset.findFirst({
-      where: this.getActiveImageWhere(businessId, [mediaAssetId]),
-      select: {
-        id: true,
-        fileUrl: true,
-      },
-    });
+    const [asset] = await this.db
+      .select({
+        id: mediaAsset.id,
+        fileUrl: mediaAsset.fileUrl,
+      })
+      .from(mediaAsset)
+      .where(this.getActiveImageCondition(businessId, [mediaAssetId]))
+      .limit(1);
 
     if (!asset) {
       throw new BadRequestException("Image not found");
@@ -276,13 +285,13 @@ export class MediaService {
   ) {
     const uniqueMediaAssetIds = [...new Set(mediaAssetIds)];
 
-    const assets = await this.prisma.mediaAsset.findMany({
-      where: this.getActiveImageWhere(businessId, uniqueMediaAssetIds),
-      select: {
-        id: true,
-        fileUrl: true,
-      },
-    });
+    const assets = await this.db
+      .select({
+        id: mediaAsset.id,
+        fileUrl: mediaAsset.fileUrl,
+      })
+      .from(mediaAsset)
+      .where(this.getActiveImageCondition(businessId, uniqueMediaAssetIds));
 
     if (assets.length !== uniqueMediaAssetIds.length) {
       throw new BadRequestException("One or more images were not found");
@@ -291,33 +300,24 @@ export class MediaService {
     return assets;
   }
 
-  private getActiveImageWhere(
-    businessId: string,
-    mediaAssetIds: string[],
-  ): Prisma.MediaAssetWhereInput {
-    return {
-      id: {
-        in: mediaAssetIds,
-      },
-      businessId,
-      fileType: MediaFileType.IMAGE,
-      status: MediaAssetStatus.ACTIVE,
-      deletedAt: null,
-    };
+  private getActiveImageCondition(businessId: string, mediaAssetIds: string[]) {
+    return and(
+      inArray(mediaAsset.id, mediaAssetIds),
+      eq(mediaAsset.businessId, businessId),
+      eq(mediaAsset.fileType, MediaFileType.IMAGE),
+      eq(mediaAsset.status, MediaAssetStatus.ACTIVE),
+      isNull(mediaAsset.deletedAt),
+    );
   }
 
   private async softDeleteImageAssets(mediaAssetIds: string[]) {
-    await this.prisma.mediaAsset.updateMany({
-      where: {
-        id: {
-          in: mediaAssetIds,
-        },
-      },
-      data: {
+    await this.db
+      .update(mediaAsset)
+      .set({
         status: MediaAssetStatus.INACTIVE,
         deletedAt: new Date(),
-      },
-    });
+      })
+      .where(inArray(mediaAsset.id, mediaAssetIds));
   }
 
   private async createImageAsset(params: {
@@ -332,38 +332,93 @@ export class MediaService {
     altText?: string;
     tags: string[];
   }) {
-    return this.prisma.mediaAsset.create({
-      data: {
-        businessId: params.businessId,
-        uploadedBy: params.uploadedBy,
-        fileName: params.uploadedFile.fileName,
-        fileUrl: params.uploadedFile.fileUrl,
-        fileType: MediaFileType.IMAGE,
-        mimeType: params.uploadedFile.mimeType,
-        fileSize: params.uploadedFile.fileSize,
-        altText: this.normalizeNullableText(params.altText),
-        tags: {
-          create: params.tags.map((tag) => ({
-            tag: {
-              connectOrCreate: {
-                where: {
-                  businessId_name: {
-                    businessId: params.businessId,
-                    name: tag,
-                  },
-                },
-                create: {
-                  businessId: params.businessId,
-                  name: tag,
-                  status: MediaTagStatus.ACTIVE,
-                },
-              },
-            },
-          })),
-        },
-      },
-      include: MEDIA_ASSET_INCLUDE,
+    const asset = await this.db.transaction(async (tx) => {
+      const [createdAsset] = await tx
+        .insert(mediaAsset)
+        .values({
+          businessId: params.businessId,
+          uploadedBy: params.uploadedBy,
+          fileName: params.uploadedFile.fileName,
+          fileUrl: params.uploadedFile.fileUrl,
+          fileType: MediaFileType.IMAGE,
+          mimeType: params.uploadedFile.mimeType,
+          fileSize: params.uploadedFile.fileSize,
+          altText: this.normalizeNullableText(params.altText),
+          status: MediaAssetStatus.ACTIVE,
+        })
+        .returning();
+
+      for (const tag of params.tags) {
+        await tx
+          .insert(mediaTag)
+          .values({
+            businessId: params.businessId,
+            name: tag,
+            status: MediaTagStatus.ACTIVE,
+          })
+          .onConflictDoNothing();
+
+        const [tagRow] = await tx
+          .select({ id: mediaTag.id })
+          .from(mediaTag)
+          .where(
+            and(
+              eq(mediaTag.businessId, params.businessId),
+              eq(mediaTag.name, tag),
+            ),
+          )
+          .limit(1);
+
+        if (tagRow) {
+          await tx
+            .insert(mediaAssetTag)
+            .values({
+              mediaAssetId: createdAsset.id,
+              tagId: tagRow.id,
+            })
+            .onConflictDoNothing();
+        }
+      }
+
+      return createdAsset;
     });
+
+    return this.withAssetTags(asset);
+  }
+
+  private async withAssetsTags(assets: MediaAsset[]) {
+    return Promise.all(assets.map((asset) => this.withAssetTags(asset)));
+  }
+
+  private async withAssetTags(asset: MediaAsset): Promise<MediaAssetWithTags> {
+    const tags = await this.db
+      .select({ map: mediaAssetTag, tag: mediaTag })
+      .from(mediaAssetTag)
+      .innerJoin(mediaTag, eq(mediaTag.id, mediaAssetTag.tagId))
+      .where(eq(mediaAssetTag.mediaAssetId, asset.id))
+      .orderBy(asc(mediaTag.name));
+
+    return {
+      ...asset,
+      tags: tags.map((row) => ({
+        ...row.map,
+        tag: row.tag,
+      })),
+    };
+  }
+
+  private mediaOrderBy(
+    sortBy: NonNullable<QueryMediaDto["sortBy"]>,
+    sortOrder: NonNullable<QueryMediaDto["sortOrder"]>,
+  ) {
+    const column =
+      sortBy === "fileName"
+        ? mediaAsset.fileName
+        : sortBy === "fileSize"
+          ? mediaAsset.fileSize
+          : mediaAsset.createdAt;
+
+    return sortOrder === "asc" ? asc(column) : desc(column);
   }
 
   private normalizeTags(value?: string) {

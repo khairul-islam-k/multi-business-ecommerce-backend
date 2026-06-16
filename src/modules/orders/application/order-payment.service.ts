@@ -7,8 +7,13 @@ import {
   FinanceSourceType,
   InvoiceStatus,
   OrderPaymentStatus,
-  Prisma,
-} from "@prisma/client";
+  courierShipment,
+  invoice,
+  orderOrder,
+  orderPayment,
+} from "@/database/schema";
+import Decimal from "decimal.js";
+import { and, eq, gt, isNull, sql } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import type {
@@ -23,19 +28,25 @@ import {
 } from "../domain/order-payment.policy";
 import { OrderCodeRepository } from "../infrastructure/order-code.repository";
 import { OrderRepository } from "../infrastructure/order.repository";
-import { ORDER_INCLUDE } from "../infrastructure/order.selects";
-import { PrismaService } from "../../../prisma/prisma.service";
+import {
+  DatabaseService,
+  type DatabaseTransaction,
+} from "../../../database/database.service";
 import { FinanceLedgerService } from "../../finance/common/finance-ledger.service";
 import { apiResponse } from "../../../common/utils/api-response.util";
 
 @Injectable()
 export class OrderPaymentService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly orders: OrderRepository,
     private readonly codes: OrderCodeRepository,
     private readonly finance: FinanceLedgerService,
   ) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async addPayment(
     currentUser: CurrentUserPayload,
@@ -48,10 +59,8 @@ export class OrderPaymentService {
     assertOrderCanAcceptPayment(order.status);
     assertDirectOrderPayment(dto);
 
-    const updatedOrder = await this.prisma.$transaction(async (tx) => {
-      const dueAmount = new Prisma.Decimal(order.totalAmount).minus(
-        order.paidAmount,
-      );
+    const updatedOrder = await this.db.transaction(async (tx) => {
+      const dueAmount = new Decimal(order.totalAmount).minus(order.paidAmount);
 
       await this.createPayment(tx, {
         businessId,
@@ -68,12 +77,12 @@ export class OrderPaymentService {
   }
 
   async createPayment(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
       orderId: string;
       payment: OrderPaymentInputDto;
-      amount: Prisma.Decimal.Value;
+      amount: Decimal.Value;
       currentUserId: string;
     },
   ) {
@@ -82,25 +91,23 @@ export class OrderPaymentService {
     const paymentNo = await this.codes.generateUniquePaymentNo(
       params.businessId,
     );
-    const amount = new Prisma.Decimal(params.amount);
+    const amount = new Decimal(params.amount);
 
     if (amount.lessThanOrEqualTo(0)) {
       throw new BadRequestException("Order has no payable amount remaining");
     }
 
-    await tx.orderPayment.create({
-      data: {
-        businessId: params.businessId,
-        orderId: params.orderId,
-        financeAccountId: params.payment.financeAccountId,
-        paymentNo,
-        amount,
-        paymentMethod: params.payment.paymentMethod,
-        paymentStatus: OrderPaymentStatus.PAID,
-        transactionReference: paymentNo,
-        paidAt: new Date(),
-        createdBy: params.currentUserId,
-      },
+    await tx.insert(orderPayment).values({
+      businessId: params.businessId,
+      orderId: params.orderId,
+      financeAccountId: params.payment.financeAccountId,
+      paymentNo,
+      amount,
+      paymentMethod: params.payment.paymentMethod,
+      paymentStatus: OrderPaymentStatus.PAID,
+      transactionReference: paymentNo,
+      paidAt: new Date(),
+      createdBy: params.currentUserId,
     });
 
     await this.finance.creditAccount(tx, {
@@ -114,28 +121,32 @@ export class OrderPaymentService {
   }
 
   async refreshOrderPaymentState(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     businessId: string,
     orderId: string,
   ) {
-    const order = await tx.orderOrder.findFirst({
-      where: { id: orderId, businessId },
-      include: { payments: true },
-    });
+    const [order] = await tx
+      .select()
+      .from(orderOrder)
+      .where(and(eq(orderOrder.id, orderId), eq(orderOrder.businessId, businessId)));
 
     if (!order) {
       throw new NotFoundException("Order not found");
     }
 
-    const paidAmount = order.payments.reduce(
+    const payments = await tx
+      .select()
+      .from(orderPayment)
+      .where(eq(orderPayment.orderId, order.id));
+    const paidAmount = payments.reduce(
       (total, payment) => total.plus(payment.amount),
-      new Prisma.Decimal(0),
+      new Decimal(0),
     );
     const paymentStatus = getOrderPaymentStatus(order.totalAmount, paidAmount);
 
-    await tx.invoice.updateMany({
-      where: { businessId, orderId, deletedAt: null },
-      data: {
+    await tx
+      .update(invoice)
+      .set({
         paidAmount,
         status:
           paymentStatus === OrderPaymentStatus.PAID
@@ -143,20 +154,26 @@ export class OrderPaymentService {
             : paymentStatus === OrderPaymentStatus.PARTIALLY_PAID
               ? InvoiceStatus.PARTIALLY_PAID
               : InvoiceStatus.ISSUED,
-      },
-    });
+      })
+      .where(
+        and(
+          eq(invoice.businessId, businessId),
+          eq(invoice.orderId, orderId),
+          isNull(invoice.deletedAt),
+        ),
+      );
 
-    const codShipment = await tx.courierShipment.findFirst({
-      where: {
-        businessId,
-        orderId,
-        deletedAt: null,
-        codAmount: {
-          gt: 0,
-        },
-      },
-      select: { id: true },
-    });
+    const [codShipment] = await tx
+      .select({ id: courierShipment.id })
+      .from(courierShipment)
+      .where(
+        and(
+          eq(courierShipment.businessId, businessId),
+          eq(courierShipment.orderId, orderId),
+          isNull(courierShipment.deletedAt),
+          gt(courierShipment.codAmount, new Decimal(0)),
+        ),
+      );
 
     if (!codShipment) {
       await this.finance.syncOrderReceivable(tx, {
@@ -168,13 +185,15 @@ export class OrderPaymentService {
       });
     }
 
-    return tx.orderOrder.update({
-      where: { id: orderId },
-      data: {
+    const [updatedOrder] = await tx
+      .update(orderOrder)
+      .set({
         paidAmount,
         paymentStatus,
-      },
-      include: ORDER_INCLUDE,
-    });
+      })
+      .where(eq(orderOrder.id, orderId))
+      .returning();
+
+    return this.orders.hydrate(updatedOrder, tx);
   }
 }

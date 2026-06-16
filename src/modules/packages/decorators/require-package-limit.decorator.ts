@@ -1,5 +1,5 @@
 import { SetMetadata } from "@nestjs/common";
-import { PackageLimitKey } from "@prisma/client";
+import { PackageLimitKey } from "@/database/schema";
 
 export const PACKAGE_LIMIT_METADATA_KEY = "package_limit";
 

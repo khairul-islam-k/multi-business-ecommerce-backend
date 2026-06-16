@@ -1,11 +1,12 @@
 import { Injectable, InternalServerErrorException } from "@nestjs/common";
+import { sql } from "drizzle-orm";
 
-import { PrismaService } from "./prisma/prisma.service";
+import { DatabaseService } from "./database/database.service";
 import { apiResponse } from "./common/utils/api-response.util";
 
 @Injectable()
 export class AppService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly database: DatabaseService) {}
 
   ping() {
     return apiResponse(null, "Server is up.");
@@ -13,7 +14,7 @@ export class AppService {
 
   async ready() {
     try {
-      await this.prisma.$executeRaw`SELECT 1;`;
+      await this.database.db.execute(sql`SELECT 1`);
       return apiResponse(null, "Database is ready.");
     } catch {
       throw new InternalServerErrorException({

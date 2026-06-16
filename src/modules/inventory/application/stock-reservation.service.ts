@@ -4,13 +4,22 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  type InventoryStock,
+  type InventoryWarehouseStock,
   InventoryMovementType,
   InventoryOrderAllocationStatus,
   InventoryReferenceType,
-  Prisma,
   WarehouseStatus,
-} from "@prisma/client";
+  inventoryOrderAllocation,
+  inventoryStock,
+  inventoryStockMovement,
+  inventoryWarehouseStock,
+  warehouse,
+} from "@/database/schema";
+import Decimal from "decimal.js";
+import { and, asc, eq, isNull } from "drizzle-orm";
 
+import type { DatabaseTransaction } from "../../../database/database.service";
 import { buildStockItemKey } from "../domain/stock-item-key";
 import { normalizeOptionalText } from "../../../common/text/normalizers";
 import { StockItemRef } from "../common/inventory.types";
@@ -18,34 +27,26 @@ import { StockItemRef } from "../common/inventory.types";
 @Injectable()
 export class StockReservationService {
   async reserveForOrder(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: StockItemRef & {
       orderId: string;
       orderItemId: string;
-      quantity: Prisma.Decimal.Value;
+      quantity: Decimal.Value;
       warehouseId?: string | null;
       createdBy?: string;
     },
   ) {
-    const quantity = new Prisma.Decimal(params.quantity);
+    const quantity = new Decimal(params.quantity);
     const stockItemKey = buildStockItemKey(params.productId, params.variantId);
 
     if (quantity.lessThanOrEqualTo(0)) {
       throw new BadRequestException("Reservation quantity is required");
     }
 
-    const stock = await tx.inventoryStock.findUnique({
-      where: {
-        businessId_stockItemKey: {
-          businessId: params.businessId,
-          stockItemKey,
-        },
-      },
+    const stock = await this.getStockByItemKey(tx, {
+      businessId: params.businessId,
+      stockItemKey,
     });
-
-    if (!stock) {
-      throw new BadRequestException("Stock is not available for this item");
-    }
 
     const warehouseStock = params.warehouseId
       ? await this.findManualWarehouseStock(tx, {
@@ -60,8 +61,9 @@ export class StockReservationService {
           quantity,
         });
 
-    const allocation = await tx.inventoryOrderAllocation.create({
-      data: {
+    const [allocation] = await tx
+      .insert(inventoryOrderAllocation)
+      .values({
         businessId: params.businessId,
         orderId: params.orderId,
         orderItemId: params.orderItemId,
@@ -73,72 +75,64 @@ export class StockReservationService {
         quantity,
         status: InventoryOrderAllocationStatus.RESERVED,
         createdBy: params.createdBy,
-      },
-    });
+      })
+      .returning();
 
-    await tx.inventoryStock.update({
-      where: { id: stock.id },
-      data: {
-        quantityReserved: stock.quantityReserved.plus(quantity),
-      },
-    });
+    await tx
+      .update(inventoryStock)
+      .set({
+        quantityReserved: new Decimal(stock.quantityReserved).plus(quantity),
+      })
+      .where(eq(inventoryStock.id, stock.id));
 
-    await tx.inventoryWarehouseStock.update({
-      where: { id: warehouseStock.id },
-      data: {
-        quantityReserved: warehouseStock.quantityReserved.plus(quantity),
-      },
-    });
+    await tx
+      .update(inventoryWarehouseStock)
+      .set({
+        quantityReserved: new Decimal(warehouseStock.quantityReserved).plus(
+          quantity,
+        ),
+      })
+      .where(eq(inventoryWarehouseStock.id, warehouseStock.id));
 
-    await tx.inventoryStockMovement.create({
-      data: {
-        businessId: params.businessId,
-        stockId: stock.id,
-        warehouseId: warehouseStock.warehouseId,
-        productId: params.productId,
-        variantId: params.variantId ?? null,
-        stockItemKey,
-        movementType: InventoryMovementType.RESERVED,
-        quantity,
-        referenceType: InventoryReferenceType.ORDER,
-        referenceId: params.orderId,
-        createdBy: params.createdBy,
-      },
+    await tx.insert(inventoryStockMovement).values({
+      businessId: params.businessId,
+      stockId: stock.id,
+      warehouseId: warehouseStock.warehouseId,
+      productId: params.productId,
+      variantId: params.variantId ?? null,
+      stockItemKey,
+      movementType: InventoryMovementType.RESERVED,
+      quantity,
+      referenceType: InventoryReferenceType.ORDER,
+      referenceId: params.orderId,
+      createdBy: params.createdBy,
     });
 
     return allocation;
   }
 
   async reserveStock(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: StockItemRef & {
       warehouseId: string;
-      quantity: Prisma.Decimal.Value;
+      quantity: Decimal.Value;
       referenceType: InventoryReferenceType;
       referenceId: string;
       note?: string | null;
       createdBy?: string;
     },
   ) {
-    const quantity = new Prisma.Decimal(params.quantity);
+    const quantity = new Decimal(params.quantity);
     const stockItemKey = buildStockItemKey(params.productId, params.variantId);
 
     if (quantity.lessThanOrEqualTo(0)) {
       throw new BadRequestException("Reservation quantity is required");
     }
 
-    const stock = await tx.inventoryStock.findUnique({
-      where: {
-        businessId_stockItemKey: {
-          businessId: params.businessId,
-          stockItemKey,
-        },
-      },
+    const stock = await this.getStockByItemKey(tx, {
+      businessId: params.businessId,
+      stockItemKey,
     });
-
-    if (!stock) {
-      throw new BadRequestException("Stock is not available for this item");
-    }
 
     const warehouseStock = await this.findManualWarehouseStock(tx, {
       businessId: params.businessId,
@@ -147,52 +141,52 @@ export class StockReservationService {
       quantity,
     });
 
-    await tx.inventoryStock.update({
-      where: { id: stock.id },
-      data: {
-        quantityReserved: stock.quantityReserved.plus(quantity),
-      },
-    });
+    await tx
+      .update(inventoryStock)
+      .set({
+        quantityReserved: new Decimal(stock.quantityReserved).plus(quantity),
+      })
+      .where(eq(inventoryStock.id, stock.id));
 
-    await tx.inventoryWarehouseStock.update({
-      where: { id: warehouseStock.id },
-      data: {
-        quantityReserved: warehouseStock.quantityReserved.plus(quantity),
-      },
-    });
+    await tx
+      .update(inventoryWarehouseStock)
+      .set({
+        quantityReserved: new Decimal(warehouseStock.quantityReserved).plus(
+          quantity,
+        ),
+      })
+      .where(eq(inventoryWarehouseStock.id, warehouseStock.id));
 
-    await tx.inventoryStockMovement.create({
-      data: {
-        businessId: params.businessId,
-        stockId: stock.id,
-        warehouseId: warehouseStock.warehouseId,
-        productId: params.productId,
-        variantId: params.variantId ?? null,
-        stockItemKey,
-        movementType: InventoryMovementType.RESERVED,
-        quantity,
-        referenceType: params.referenceType,
-        referenceId: params.referenceId,
-        note: normalizeOptionalText(params.note),
-        createdBy: params.createdBy,
-      },
+    await tx.insert(inventoryStockMovement).values({
+      businessId: params.businessId,
+      stockId: stock.id,
+      warehouseId: warehouseStock.warehouseId,
+      productId: params.productId,
+      variantId: params.variantId ?? null,
+      stockItemKey,
+      movementType: InventoryMovementType.RESERVED,
+      quantity,
+      referenceType: params.referenceType,
+      referenceId: params.referenceId,
+      note: normalizeOptionalText(params.note),
+      createdBy: params.createdBy,
     });
 
     return stock;
   }
 
   async releaseStockReservation(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: StockItemRef & {
       warehouseId: string;
-      quantity: Prisma.Decimal.Value;
+      quantity: Decimal.Value;
       referenceType: InventoryReferenceType;
       referenceId: string;
       note?: string | null;
       createdBy?: string;
     },
   ) {
-    const quantity = new Prisma.Decimal(params.quantity);
+    const quantity = new Decimal(params.quantity);
     const stockItemKey = buildStockItemKey(params.productId, params.variantId);
 
     if (quantity.lessThanOrEqualTo(0)) {
@@ -206,45 +200,31 @@ export class StockReservationService {
       quantity,
     });
 
-    await tx.inventoryStock.update({
-      where: { id: stock.id },
-      data: {
-        quantityReserved: stock.quantityReserved.minus(quantity),
-      },
-    });
+    await this.releaseReservedQuantity(tx, stock, warehouseStock, quantity);
 
-    await tx.inventoryWarehouseStock.update({
-      where: { id: warehouseStock.id },
-      data: {
-        quantityReserved: warehouseStock.quantityReserved.minus(quantity),
-      },
-    });
-
-    await tx.inventoryStockMovement.create({
-      data: {
-        businessId: params.businessId,
-        stockId: stock.id,
-        warehouseId: warehouseStock.warehouseId,
-        productId: params.productId,
-        variantId: params.variantId ?? null,
-        stockItemKey,
-        movementType: InventoryMovementType.RESERVATION_RELEASED,
-        quantity,
-        referenceType: params.referenceType,
-        referenceId: params.referenceId,
-        note: normalizeOptionalText(params.note),
-        createdBy: params.createdBy,
-      },
+    await tx.insert(inventoryStockMovement).values({
+      businessId: params.businessId,
+      stockId: stock.id,
+      warehouseId: warehouseStock.warehouseId,
+      productId: params.productId,
+      variantId: params.variantId ?? null,
+      stockItemKey,
+      movementType: InventoryMovementType.RESERVATION_RELEASED,
+      quantity,
+      referenceType: params.referenceType,
+      referenceId: params.referenceId,
+      note: normalizeOptionalText(params.note),
+      createdBy: params.createdBy,
     });
 
     return stock;
   }
 
   async deductReservedStock(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: StockItemRef & {
       warehouseId: string;
-      quantity: Prisma.Decimal.Value;
+      quantity: Decimal.Value;
       movementType: InventoryMovementType;
       referenceType: InventoryReferenceType;
       referenceId: string;
@@ -252,7 +232,7 @@ export class StockReservationService {
       createdBy?: string;
     },
   ) {
-    const quantity = new Prisma.Decimal(params.quantity);
+    const quantity = new Decimal(params.quantity);
     const stockItemKey = buildStockItemKey(params.productId, params.variantId);
 
     if (quantity.lessThanOrEqualTo(0)) {
@@ -267,246 +247,213 @@ export class StockReservationService {
     });
 
     if (
-      stock.totalQuantity.lessThan(quantity) ||
-      warehouseStock.totalQuantity.lessThan(quantity)
+      new Decimal(stock.totalQuantity).lessThan(quantity) ||
+      new Decimal(warehouseStock.totalQuantity).lessThan(quantity)
     ) {
       throw new BadRequestException("Reserved stock is insufficient");
     }
 
-    const updatedStock = await tx.inventoryStock.update({
-      where: { id: stock.id },
-      data: {
-        totalQuantity: stock.totalQuantity.minus(quantity),
-        quantityReserved: stock.quantityReserved.minus(quantity),
-      },
-    });
+    const [updatedStock] = await tx
+      .update(inventoryStock)
+      .set({
+        totalQuantity: new Decimal(stock.totalQuantity).minus(quantity),
+        quantityReserved: new Decimal(stock.quantityReserved).minus(quantity),
+      })
+      .where(eq(inventoryStock.id, stock.id))
+      .returning();
 
-    await tx.inventoryWarehouseStock.update({
-      where: { id: warehouseStock.id },
-      data: {
-        totalQuantity: warehouseStock.totalQuantity.minus(quantity),
-        quantityReserved: warehouseStock.quantityReserved.minus(quantity),
-      },
-    });
+    await tx
+      .update(inventoryWarehouseStock)
+      .set({
+        totalQuantity: new Decimal(warehouseStock.totalQuantity).minus(quantity),
+        quantityReserved: new Decimal(warehouseStock.quantityReserved).minus(
+          quantity,
+        ),
+      })
+      .where(eq(inventoryWarehouseStock.id, warehouseStock.id));
 
-    await tx.inventoryStockMovement.create({
-      data: {
-        businessId: params.businessId,
-        stockId: stock.id,
-        warehouseId: warehouseStock.warehouseId,
-        productId: params.productId,
-        variantId: params.variantId ?? null,
-        stockItemKey,
-        movementType: params.movementType,
-        quantity,
-        referenceType: params.referenceType,
-        referenceId: params.referenceId,
-        note: normalizeOptionalText(params.note),
-        createdBy: params.createdBy,
-      },
+    await tx.insert(inventoryStockMovement).values({
+      businessId: params.businessId,
+      stockId: stock.id,
+      warehouseId: warehouseStock.warehouseId,
+      productId: params.productId,
+      variantId: params.variantId ?? null,
+      stockItemKey,
+      movementType: params.movementType,
+      quantity,
+      referenceType: params.referenceType,
+      referenceId: params.referenceId,
+      note: normalizeOptionalText(params.note),
+      createdBy: params.createdBy,
     });
 
     return updatedStock;
   }
 
   async releaseOrderReservation(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
       allocationId: string;
     },
     userId?: string,
   ) {
-    const allocation = await tx.inventoryOrderAllocation.findUnique({
-      where: { id: params.allocationId },
-      include: { stock: true },
+    const { allocation, stock } = await this.getReservedAllocation(tx, params);
+    const warehouseStock = await this.getWarehouseStockByItemKey(tx, {
+      businessId: allocation.businessId,
+      warehouseId: allocation.warehouseId,
+      stockItemKey: allocation.stockItemKey,
     });
 
-    if (
-      !allocation ||
-      allocation.businessId !== params.businessId ||
-      allocation.status !== InventoryOrderAllocationStatus.RESERVED
-    ) {
-      throw new NotFoundException("Reserved allocation not found");
-    }
+    await this.releaseReservedQuantity(
+      tx,
+      stock,
+      warehouseStock,
+      allocation.quantity,
+    );
 
-    const warehouseStock = await tx.inventoryWarehouseStock.findUnique({
-      where: {
-        businessId_warehouseId_stockItemKey: {
-          businessId: allocation.businessId,
-          warehouseId: allocation.warehouseId,
-          stockItemKey: allocation.stockItemKey,
-        },
-      },
+    await tx.insert(inventoryStockMovement).values({
+      businessId: allocation.businessId,
+      stockId: allocation.stockId,
+      warehouseId: allocation.warehouseId,
+      productId: allocation.productId,
+      variantId: allocation.variantId,
+      stockItemKey: allocation.stockItemKey,
+      movementType: InventoryMovementType.RESERVATION_RELEASED,
+      quantity: allocation.quantity,
+      referenceType: InventoryReferenceType.ORDER,
+      referenceId: allocation.orderId,
+      createdBy: userId,
     });
 
-    if (!warehouseStock) {
-      throw new NotFoundException("Warehouse stock not found");
-    }
-
-    await tx.inventoryStock.update({
-      where: { id: allocation.stockId },
-      data: {
-        quantityReserved: allocation.stock.quantityReserved.minus(
-          allocation.quantity,
-        ),
-      },
-    });
-
-    await tx.inventoryWarehouseStock.update({
-      where: { id: warehouseStock.id },
-      data: {
-        quantityReserved: warehouseStock.quantityReserved.minus(
-          allocation.quantity,
-        ),
-      },
-    });
-
-    await tx.inventoryStockMovement.create({
-      data: {
-        businessId: allocation.businessId,
-        stockId: allocation.stockId,
-        warehouseId: allocation.warehouseId,
-        productId: allocation.productId,
-        variantId: allocation.variantId,
-        stockItemKey: allocation.stockItemKey,
-        movementType: InventoryMovementType.RESERVATION_RELEASED,
-        quantity: allocation.quantity,
-        referenceType: InventoryReferenceType.ORDER,
-        referenceId: allocation.orderId,
-        createdBy: userId,
-      },
-    });
-
-    return tx.inventoryOrderAllocation.update({
-      where: { id: allocation.id },
-      data: {
+    const [updatedAllocation] = await tx
+      .update(inventoryOrderAllocation)
+      .set({
         status: InventoryOrderAllocationStatus.RELEASED,
         releasedAt: new Date(),
-      },
-    });
+      })
+      .where(eq(inventoryOrderAllocation.id, allocation.id))
+      .returning();
+
+    return updatedAllocation;
   }
 
   async fulfillOrderAllocation(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
       allocationId: string;
     },
     userId?: string,
   ) {
-    const allocation = await tx.inventoryOrderAllocation.findUnique({
-      where: { id: params.allocationId },
-      include: { stock: true },
+    const { allocation, stock } = await this.getReservedAllocation(tx, params);
+    const warehouseStock = await this.getWarehouseStockByItemKey(tx, {
+      businessId: allocation.businessId,
+      warehouseId: allocation.warehouseId,
+      stockItemKey: allocation.stockItemKey,
     });
 
-    if (
-      !allocation ||
-      allocation.businessId !== params.businessId ||
-      allocation.status !== InventoryOrderAllocationStatus.RESERVED
-    ) {
-      throw new NotFoundException("Reserved allocation not found");
-    }
-
-    const warehouseStock = await tx.inventoryWarehouseStock.findUnique({
-      where: {
-        businessId_warehouseId_stockItemKey: {
-          businessId: allocation.businessId,
-          warehouseId: allocation.warehouseId,
-          stockItemKey: allocation.stockItemKey,
-        },
-      },
-    });
-
-    if (!warehouseStock) {
-      throw new NotFoundException("Warehouse stock not found");
-    }
-
-    await tx.inventoryStock.update({
-      where: { id: allocation.stockId },
-      data: {
-        totalQuantity: allocation.stock.totalQuantity.minus(
+    await tx
+      .update(inventoryStock)
+      .set({
+        totalQuantity: new Decimal(stock.totalQuantity).minus(
           allocation.quantity,
         ),
-        quantityReserved: allocation.stock.quantityReserved.minus(
+        quantityReserved: new Decimal(stock.quantityReserved).minus(
           allocation.quantity,
         ),
-      },
-    });
+      })
+      .where(eq(inventoryStock.id, allocation.stockId));
 
-    await tx.inventoryWarehouseStock.update({
-      where: { id: warehouseStock.id },
-      data: {
-        totalQuantity: warehouseStock.totalQuantity.minus(allocation.quantity),
-        quantityReserved: warehouseStock.quantityReserved.minus(
+    await tx
+      .update(inventoryWarehouseStock)
+      .set({
+        totalQuantity: new Decimal(warehouseStock.totalQuantity).minus(
           allocation.quantity,
         ),
-      },
+        quantityReserved: new Decimal(warehouseStock.quantityReserved).minus(
+          allocation.quantity,
+        ),
+      })
+      .where(eq(inventoryWarehouseStock.id, warehouseStock.id));
+
+    await tx.insert(inventoryStockMovement).values({
+      businessId: allocation.businessId,
+      stockId: allocation.stockId,
+      warehouseId: allocation.warehouseId,
+      productId: allocation.productId,
+      variantId: allocation.variantId,
+      stockItemKey: allocation.stockItemKey,
+      movementType: InventoryMovementType.SALE_OUT,
+      quantity: allocation.quantity,
+      referenceType: InventoryReferenceType.ORDER,
+      referenceId: allocation.orderId,
+      createdBy: userId,
     });
 
-    await tx.inventoryStockMovement.create({
-      data: {
-        businessId: allocation.businessId,
-        stockId: allocation.stockId,
-        warehouseId: allocation.warehouseId,
-        productId: allocation.productId,
-        variantId: allocation.variantId,
-        stockItemKey: allocation.stockItemKey,
-        movementType: InventoryMovementType.SALE_OUT,
-        quantity: allocation.quantity,
-        referenceType: InventoryReferenceType.ORDER,
-        referenceId: allocation.orderId,
-        createdBy: userId,
-      },
-    });
-
-    return tx.inventoryOrderAllocation.update({
-      where: { id: allocation.id },
-      data: {
+    const [updatedAllocation] = await tx
+      .update(inventoryOrderAllocation)
+      .set({
         status: InventoryOrderAllocationStatus.FULFILLED,
         fulfilledAt: new Date(),
-      },
-    });
+      })
+      .where(eq(inventoryOrderAllocation.id, allocation.id))
+      .returning();
+
+    return updatedAllocation;
+  }
+
+  private async getStockByItemKey(
+    tx: DatabaseTransaction,
+    params: {
+      businessId: string;
+      stockItemKey: string;
+    },
+  ) {
+    const [stock] = await tx
+      .select()
+      .from(inventoryStock)
+      .where(
+        and(
+          eq(inventoryStock.businessId, params.businessId),
+          eq(inventoryStock.stockItemKey, params.stockItemKey),
+        ),
+      );
+
+    if (!stock) {
+      throw new BadRequestException("Stock is not available for this item");
+    }
+
+    return stock;
   }
 
   private async findManualWarehouseStock(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
       warehouseId: string;
       stockItemKey: string;
-      quantity: Prisma.Decimal;
+      quantity: Decimal;
     },
   ) {
-    const warehouse = await tx.warehouse.findFirst({
-      where: {
-        id: params.warehouseId,
-        businessId: params.businessId,
-        deletedAt: null,
-        status: WarehouseStatus.ACTIVE,
-      },
-      select: { id: true },
-    });
+    const [warehouseRow] = await tx
+      .select({ id: warehouse.id })
+      .from(warehouse)
+      .where(
+        and(
+          eq(warehouse.id, params.warehouseId),
+          eq(warehouse.businessId, params.businessId),
+          isNull(warehouse.deletedAt),
+          eq(warehouse.status, WarehouseStatus.ACTIVE),
+        ),
+      );
 
-    if (!warehouse) {
+    if (!warehouseRow) {
       throw new NotFoundException("Warehouse not found");
     }
 
-    const warehouseStock = await tx.inventoryWarehouseStock.findUnique({
-      where: {
-        businessId_warehouseId_stockItemKey: {
-          businessId: params.businessId,
-          warehouseId: params.warehouseId,
-          stockItemKey: params.stockItemKey,
-        },
-      },
-    });
-
-    if (!warehouseStock) {
-      throw new BadRequestException("Selected warehouse has no stock");
-    }
-
-    const availableQuantity = warehouseStock.totalQuantity.minus(
+    const warehouseStock = await this.getWarehouseStockByItemKey(tx, params);
+    const availableQuantity = new Decimal(warehouseStock.totalQuantity).minus(
       warehouseStock.quantityReserved,
     );
 
@@ -520,44 +467,20 @@ export class StockReservationService {
   }
 
   private async getReservedStockPair(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
       warehouseId: string;
       stockItemKey: string;
-      quantity: Prisma.Decimal;
+      quantity: Decimal;
     },
   ) {
-    const stock = await tx.inventoryStock.findUnique({
-      where: {
-        businessId_stockItemKey: {
-          businessId: params.businessId,
-          stockItemKey: params.stockItemKey,
-        },
-      },
-    });
-
-    if (!stock) {
-      throw new BadRequestException("Stock is not available for this item");
-    }
-
-    const warehouseStock = await tx.inventoryWarehouseStock.findUnique({
-      where: {
-        businessId_warehouseId_stockItemKey: {
-          businessId: params.businessId,
-          warehouseId: params.warehouseId,
-          stockItemKey: params.stockItemKey,
-        },
-      },
-    });
-
-    if (!warehouseStock) {
-      throw new NotFoundException("Warehouse stock not found");
-    }
+    const stock = await this.getStockByItemKey(tx, params);
+    const warehouseStock = await this.getWarehouseStockByItemKey(tx, params);
 
     if (
-      stock.quantityReserved.lessThan(params.quantity) ||
-      warehouseStock.quantityReserved.lessThan(params.quantity)
+      new Decimal(stock.quantityReserved).lessThan(params.quantity) ||
+      new Decimal(warehouseStock.quantityReserved).lessThan(params.quantity)
     ) {
       throw new BadRequestException("Reserved stock is insufficient");
     }
@@ -566,35 +489,35 @@ export class StockReservationService {
   }
 
   private async findAutoWarehouseStock(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
       stockItemKey: string;
-      quantity: Prisma.Decimal;
+      quantity: Decimal;
     },
   ) {
-    const warehouseStocks = await tx.inventoryWarehouseStock.findMany({
-      where: {
-        businessId: params.businessId,
-        stockItemKey: params.stockItemKey,
-        warehouse: {
-          deletedAt: null,
-          status: WarehouseStatus.ACTIVE,
-        },
-      },
-      include: {
-        warehouse: {
-          select: {
-            createdAt: true,
-          },
-        },
-      },
-    });
+    const warehouseStocks = await tx
+      .select({
+        warehouseStock: inventoryWarehouseStock,
+        warehouseCreatedAt: warehouse.createdAt,
+      })
+      .from(inventoryWarehouseStock)
+      .innerJoin(warehouse, eq(warehouse.id, inventoryWarehouseStock.warehouseId))
+      .where(
+        and(
+          eq(inventoryWarehouseStock.businessId, params.businessId),
+          eq(inventoryWarehouseStock.stockItemKey, params.stockItemKey),
+          isNull(warehouse.deletedAt),
+          eq(warehouse.status, WarehouseStatus.ACTIVE),
+        ),
+      )
+      .orderBy(asc(warehouse.createdAt));
 
-    const eligibleWarehouseStocks = warehouseStocks
-      .map((warehouseStock) => ({
+    const selectedWarehouseStock = warehouseStocks
+      .map(({ warehouseStock, warehouseCreatedAt }) => ({
         ...warehouseStock,
-        availableQuantity: warehouseStock.totalQuantity.minus(
+        warehouseCreatedAt,
+        availableQuantity: new Decimal(warehouseStock.totalQuantity).minus(
           warehouseStock.quantityReserved,
         ),
       }))
@@ -611,17 +534,96 @@ export class StockReservationService {
         }
 
         return (
-          left.warehouse.createdAt.getTime() -
-          right.warehouse.createdAt.getTime()
+          left.warehouseCreatedAt.getTime() -
+          right.warehouseCreatedAt.getTime()
         );
-      });
-
-    const selectedWarehouseStock = eligibleWarehouseStocks[0];
+      })[0];
 
     if (!selectedWarehouseStock) {
       throw new BadRequestException("No warehouse has enough available stock");
     }
 
     return selectedWarehouseStock;
+  }
+
+  private async getWarehouseStockByItemKey(
+    tx: DatabaseTransaction,
+    params: {
+      businessId: string;
+      warehouseId: string;
+      stockItemKey: string;
+    },
+  ) {
+    const [warehouseStock] = await tx
+      .select()
+      .from(inventoryWarehouseStock)
+      .where(
+        and(
+          eq(inventoryWarehouseStock.businessId, params.businessId),
+          eq(inventoryWarehouseStock.warehouseId, params.warehouseId),
+          eq(inventoryWarehouseStock.stockItemKey, params.stockItemKey),
+        ),
+      );
+
+    if (!warehouseStock) {
+      throw new NotFoundException("Warehouse stock not found");
+    }
+
+    return warehouseStock;
+  }
+
+  private async getReservedAllocation(
+    tx: DatabaseTransaction,
+    params: {
+      businessId: string;
+      allocationId: string;
+    },
+  ) {
+    const [row] = await tx
+      .select({
+        allocation: inventoryOrderAllocation,
+        stock: inventoryStock,
+      })
+      .from(inventoryOrderAllocation)
+      .innerJoin(inventoryStock, eq(inventoryStock.id, inventoryOrderAllocation.stockId))
+      .where(
+        and(
+          eq(inventoryOrderAllocation.id, params.allocationId),
+          eq(inventoryOrderAllocation.businessId, params.businessId),
+          eq(
+            inventoryOrderAllocation.status,
+            InventoryOrderAllocationStatus.RESERVED,
+          ),
+        ),
+      );
+
+    if (!row) {
+      throw new NotFoundException("Reserved allocation not found");
+    }
+
+    return row;
+  }
+
+  private async releaseReservedQuantity(
+    tx: DatabaseTransaction,
+    stock: InventoryStock,
+    warehouseStock: InventoryWarehouseStock,
+    quantity: Decimal.Value,
+  ) {
+    await tx
+      .update(inventoryStock)
+      .set({
+        quantityReserved: new Decimal(stock.quantityReserved).minus(quantity),
+      })
+      .where(eq(inventoryStock.id, stock.id));
+
+    await tx
+      .update(inventoryWarehouseStock)
+      .set({
+        quantityReserved: new Decimal(warehouseStock.quantityReserved).minus(
+          quantity,
+        ),
+      })
+      .where(eq(inventoryWarehouseStock.id, warehouseStock.id));
   }
 }

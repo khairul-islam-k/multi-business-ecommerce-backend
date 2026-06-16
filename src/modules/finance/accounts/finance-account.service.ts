@@ -5,10 +5,16 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  type FinanceAccount,
   FinanceAccountStatus,
   FinanceSourceType,
-  Prisma,
-} from "@prisma/client";
+  financeAccount,
+  financeAccountTransaction,
+  financeExpense,
+  orderPayment,
+} from "@/database/schema";
+import Decimal from "decimal.js";
+import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import {
@@ -18,54 +24,57 @@ import {
   QueryFinanceTransactionDto,
   UpdateFinanceAccountDto,
 } from "./dto/finance-account.dto";
-import { PrismaService } from "../../../prisma/prisma.service";
+import { DatabaseService } from "../../../database/database.service";
 import { FinanceLedgerService } from "../common/finance-ledger.service";
+import { isUniqueConstraintError } from "../../../common/database/db-error.util";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
 
-const ACCOUNT_INCLUDE = {
+type FinanceAccountWithCount = FinanceAccount & {
   _count: {
-    select: {
-      transactions: true,
-      expenses: true,
-      orderPayments: true,
-    },
-  },
-} satisfies Prisma.FinanceAccountInclude;
+    transactions: number;
+    expenses: number;
+    orderPayments: number;
+  };
+};
 
 @Injectable()
 export class FinanceAccountService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly ledger: FinanceLedgerService,
   ) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async create(
     currentUser: CurrentUserPayload,
     businessId: string,
     dto: CreateFinanceAccountDto,
   ) {
-    const openingBalance = new Prisma.Decimal(dto.openingBalance ?? 0);
+    const openingBalance = new Decimal(dto.openingBalance ?? 0);
 
     try {
-      const account = await this.prisma.$transaction(async (tx) => {
-        const createdAccount = await tx.financeAccount.create({
-          data: {
+      const account = await this.db.transaction(async (tx) => {
+        const [createdAccount] = await tx
+          .insert(financeAccount)
+          .values({
             businessId,
             name: this.normalizeName(dto.name),
             accountType: dto.accountType,
             accountNumber: this.normalizeNullableText(dto.accountNumber),
             currencyCode: dto.currencyCode?.trim().toUpperCase() || "BDT",
             openingBalance,
-            currentBalance: 0,
+            currentBalance: new Decimal(0),
             status: dto.status ?? FinanceAccountStatus.ACTIVE,
             createdBy: currentUser.id,
             updatedBy: currentUser.id,
-          },
-          include: ACCOUNT_INCLUDE,
-        });
+          })
+          .returning();
 
         if (openingBalance.greaterThan(0)) {
           await this.ledger.creditAccount(tx, {
@@ -78,15 +87,14 @@ export class FinanceAccountService {
           });
         }
 
-        return tx.financeAccount.findFirst({
-          where: { id: createdAccount.id, businessId },
-          include: ACCOUNT_INCLUDE,
-        });
+        const latest = await this.findAccountRow(businessId, createdAccount.id);
+
+        return latest ? this.withAccountCount(latest) : null;
       });
 
       return apiResponse(account, "Finance account created successfully");
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handleDatabaseError(error);
     }
   }
 
@@ -94,36 +102,35 @@ export class FinanceAccountService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-
-    const where: Prisma.FinanceAccountWhereInput = {
-      businessId,
-      deletedAt: null,
-      ...(query.accountType ? { accountType: query.accountType } : {}),
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { name: { contains: query.search, mode: "insensitive" } },
-              {
-                accountNumber: {
-                  contains: query.search,
-                  mode: "insensitive",
-                },
-              },
-            ],
-          }
-        : {}),
-    };
+    const where = and(
+      eq(financeAccount.businessId, businessId),
+      isNull(financeAccount.deletedAt),
+      query.accountType
+        ? eq(financeAccount.accountType, query.accountType)
+        : undefined,
+      query.status ? eq(financeAccount.status, query.status) : undefined,
+      query.search
+        ? or(
+            ilike(financeAccount.name, `%${query.search}%`),
+            ilike(financeAccount.accountNumber, `%${query.search}%`),
+          )
+        : undefined,
+    );
 
     const [items, total] = await Promise.all([
-      this.prisma.financeAccount.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-        include: ACCOUNT_INCLUDE,
-      }),
-      this.prisma.financeAccount.count({ where }),
+      this.db
+        .select()
+        .from(financeAccount)
+        .where(where)
+        .orderBy(desc(financeAccount.createdAt))
+        .limit(limit)
+        .offset(skip)
+        .then((rows) => this.withAccountsCount(rows)),
+      this.db
+        .select({ value: count() })
+        .from(financeAccount)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
     ]);
 
     return paginatedResponse(items, {
@@ -135,16 +142,13 @@ export class FinanceAccountService {
   }
 
   async findOne(businessId: string, accountId: string) {
-    const account = await this.prisma.financeAccount.findFirst({
-      where: { id: accountId, businessId, deletedAt: null },
-      include: ACCOUNT_INCLUDE,
-    });
+    const account = await this.findAccountRow(businessId, accountId);
 
     if (!account) {
       throw new NotFoundException("Finance account not found");
     }
 
-    return apiResponse(account);
+    return apiResponse(await this.withAccountCount(account));
   }
 
   async update(
@@ -160,9 +164,9 @@ export class FinanceAccountService {
     }
 
     try {
-      const account = await this.prisma.financeAccount.update({
-        where: { id: accountId },
-        data: {
+      const [account] = await this.db
+        .update(financeAccount)
+        .set({
           ...(dto.name !== undefined && {
             name: this.normalizeName(dto.name),
           }),
@@ -177,13 +181,16 @@ export class FinanceAccountService {
           }),
           ...(dto.status !== undefined && { status: dto.status }),
           updatedBy: currentUser.id,
-        },
-        include: ACCOUNT_INCLUDE,
-      });
+        })
+        .where(eq(financeAccount.id, accountId))
+        .returning();
 
-      return apiResponse(account, "Finance account updated successfully");
+      return apiResponse(
+        await this.withAccountCount(account),
+        "Finance account updated successfully",
+      );
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handleDatabaseError(error);
     }
   }
 
@@ -195,7 +202,7 @@ export class FinanceAccountService {
   ) {
     await this.assertAccountExists(businessId, accountId);
 
-    const account = await this.prisma.$transaction(async (tx) => {
+    const account = await this.db.transaction(async (tx) => {
       await this.ledger.creditAccount(tx, {
         businessId,
         accountId,
@@ -205,13 +212,13 @@ export class FinanceAccountService {
         createdBy: currentUser.id,
       });
 
-      return tx.financeAccount.findFirst({
-        where: { id: accountId, businessId },
-        include: ACCOUNT_INCLUDE,
-      });
+      return this.findAccountRow(businessId, accountId);
     });
 
-    return apiResponse(account, "Money added to finance account");
+    return apiResponse(
+      account ? await this.withAccountCount(account) : null,
+      "Money added to finance account",
+    );
   }
 
   async remove(
@@ -221,20 +228,20 @@ export class FinanceAccountService {
   ) {
     const account = await this.assertAccountExists(businessId, accountId);
 
-    if (new Prisma.Decimal(account.currentBalance).greaterThan(0)) {
+    if (new Decimal(account.currentBalance).greaterThan(0)) {
       throw new BadRequestException(
         "Finance account cannot be deleted while it has a balance",
       );
     }
 
-    await this.prisma.financeAccount.update({
-      where: { id: accountId },
-      data: {
+    await this.db
+      .update(financeAccount)
+      .set({
         status: FinanceAccountStatus.INACTIVE,
         deletedAt: new Date(),
         updatedBy: currentUser.id,
-      },
-    });
+      })
+      .where(eq(financeAccount.id, accountId));
 
     return apiResponse(null, "Finance account deleted successfully");
   }
@@ -249,20 +256,24 @@ export class FinanceAccountService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-
-    const where: Prisma.FinanceAccountTransactionWhereInput = {
-      businessId,
-      accountId,
-    };
+    const where = and(
+      eq(financeAccountTransaction.businessId, businessId),
+      eq(financeAccountTransaction.accountId, accountId),
+    );
 
     const [items, total] = await Promise.all([
-      this.prisma.financeAccountTransaction.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-      }),
-      this.prisma.financeAccountTransaction.count({ where }),
+      this.db
+        .select()
+        .from(financeAccountTransaction)
+        .where(where)
+        .orderBy(desc(financeAccountTransaction.createdAt))
+        .limit(limit)
+        .offset(skip),
+      this.db
+        .select({ value: count() })
+        .from(financeAccountTransaction)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
     ]);
 
     return paginatedResponse(items, {
@@ -274,15 +285,63 @@ export class FinanceAccountService {
   }
 
   private async assertAccountExists(businessId: string, accountId: string) {
-    const account = await this.prisma.financeAccount.findFirst({
-      where: { id: accountId, businessId, deletedAt: null },
-    });
+    const account = await this.findAccountRow(businessId, accountId);
 
     if (!account) {
       throw new NotFoundException("Finance account not found");
     }
 
     return account;
+  }
+
+  private findAccountRow(businessId: string, accountId: string) {
+    return this.db
+      .select()
+      .from(financeAccount)
+      .where(
+        and(
+          eq(financeAccount.id, accountId),
+          eq(financeAccount.businessId, businessId),
+          isNull(financeAccount.deletedAt),
+        ),
+      )
+      .limit(1)
+      .then(([account]) => account ?? null);
+  }
+
+  private async withAccountsCount(accounts: FinanceAccount[]) {
+    return Promise.all(accounts.map((account) => this.withAccountCount(account)));
+  }
+
+  private async withAccountCount(
+    account: FinanceAccount,
+  ): Promise<FinanceAccountWithCount> {
+    const [transactions, expenses, orderPayments] = await Promise.all([
+      this.db
+        .select({ value: count() })
+        .from(financeAccountTransaction)
+        .where(eq(financeAccountTransaction.accountId, account.id))
+        .then(([row]) => row?.value ?? 0),
+      this.db
+        .select({ value: count() })
+        .from(financeExpense)
+        .where(eq(financeExpense.accountId, account.id))
+        .then(([row]) => row?.value ?? 0),
+      this.db
+        .select({ value: count() })
+        .from(orderPayment)
+        .where(eq(orderPayment.financeAccountId, account.id))
+        .then(([row]) => row?.value ?? 0),
+    ]);
+
+    return {
+      ...account,
+      _count: {
+        transactions,
+        expenses,
+        orderPayments,
+      },
+    };
   }
 
   private normalizeName(value: string) {
@@ -305,11 +364,8 @@ export class FinanceAccountService {
     return normalizedValue || null;
   }
 
-  private handlePrismaError(error: unknown): never {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
+  private handleDatabaseError(error: unknown): never {
+    if (isUniqueConstraintError(error)) {
       throw new ConflictException("Finance account name already exists");
     }
 

@@ -3,7 +3,48 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma, ProductVariantStatus } from "@prisma/client";
+import {
+  type Product,
+  type ProductImage,
+  type ProductVariant,
+  type ProductVariantAttribute,
+  ProductVariantStatus,
+  courierShipmentItem,
+  inventoryOrderAllocation,
+  inventoryStock,
+  inventoryStockAdjustmentItem,
+  inventoryStockMovement,
+  inventoryStockTransferItem,
+  inventoryWarehouseStock,
+  invoiceItem,
+  orderCartItem,
+  orderOrderItem,
+  orderReturnItem,
+  product,
+  productAttribute,
+  productAttributeValue,
+  productImage,
+  productVariant,
+  productVariantAttribute,
+  supplierInvoiceItem,
+  supplierProductMap,
+  supplierPurchaseOrderItem,
+  supplierPurchaseReturnItem,
+} from "@/database/schema";
+import Decimal from "decimal.js";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  ilike,
+  inArray,
+  isNull,
+  ne,
+  or,
+} from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import {
@@ -22,16 +63,25 @@ import {
   buildAttributeCombinationKey,
   variantMatchesAttributes,
 } from "./domain/variant-combination.policy";
-import { VARIANT_INCLUDE } from "./infrastructure/product-variant.selects";
-import { PrismaService } from "../../../prisma/prisma.service";
+import {
+  type DatabaseTransaction,
+  DatabaseService,
+} from "../../../database/database.service";
 import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
 import { apiResponse } from "../../../common/utils/api-response.util";
 
-type ProductVariantWithInclude = Prisma.ProductVariantGetPayload<{
-  include: typeof VARIANT_INCLUDE;
-}>;
+type VariantAttributeWithDetails = ProductVariantAttribute & {
+  attribute: typeof productAttribute.$inferSelect;
+  attributeValue: typeof productAttributeValue.$inferSelect;
+};
 
-type VariantOptionVariant = ProductVariantWithInclude & {
+type ProductVariantWithDetails = ProductVariant & {
+  product: Pick<Product, "name" | "price">;
+  attributes: VariantAttributeWithDetails[];
+  images: ProductImage[];
+};
+
+type VariantOptionVariant = ProductVariantWithDetails & {
   stock: {
     totalQuantity: number;
     quantityReserved: number;
@@ -44,9 +94,13 @@ type VariantOptionVariant = ProductVariantWithInclude & {
 @Injectable()
 export class ProductVariantService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly lookup: ProductCatalogLookupService,
   ) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async create(
     currentUser: CurrentUserPayload,
@@ -68,42 +122,48 @@ export class ProductVariantService {
     ]);
 
     try {
-      const variant = await this.prisma.$transaction(async (tx) => {
-        const createdVariant = await tx.productVariant.create({
-          data: {
+      const variant = await this.db.transaction(async (tx) => {
+        const [createdVariant] = await tx
+          .insert(productVariant)
+          .values({
             businessId,
             productId,
             title: this.lookup.normalizeName(dto.title),
             sku,
             barcode,
-            priceOverride: dto.priceOverride ?? null,
-            weight: dto.weight ?? null,
+            priceOverride:
+              dto.priceOverride === undefined
+                ? null
+                : new Decimal(dto.priceOverride),
+            weight: dto.weight === undefined ? null : new Decimal(dto.weight),
             status: dto.status ?? ProductVariantStatus.ACTIVE,
             createdBy: currentUser.id,
             updatedBy: currentUser.id,
-            attributes: this.buildAttributeCreate(attributes),
-            images: this.buildImageCreate(
-              businessId,
-              productId,
-              currentUser.id,
-              dto.images,
-            ),
-          },
-          include: VARIANT_INCLUDE,
+          })
+          .returning();
+
+        await this.insertAttributes(tx, createdVariant.id, attributes);
+        await this.insertImages(tx, {
+          businessId,
+          productId,
+          variantId: createdVariant.id,
+          userId: currentUser.id,
+          images: dto.images,
         });
 
-        await tx.inventoryStock.create({
-          data: {
-            businessId,
-            productId,
-            variantId: createdVariant.id,
-            stockItemKey: buildStockItemKey(productId, createdVariant.id),
-          },
+        await tx.insert(inventoryStock).values({
+          businessId,
+          productId,
+          variantId: createdVariant.id,
+          stockItemKey: buildStockItemKey(productId, createdVariant.id),
+          lowStockAlertQty: new Decimal(0),
+          quantityReserved: new Decimal(0),
+          totalQuantity: new Decimal(0),
         });
 
         await this.zeroProductLevelStock(tx, businessId, productId);
 
-        return createdVariant;
+        return this.getVariantDetails(createdVariant);
       });
 
       return apiResponse(variant, "Product variant created successfully");
@@ -150,43 +210,56 @@ export class ProductVariantService {
     ]);
 
     try {
-      const createdVariants = await this.prisma.$transaction(async (tx) => {
-        const created: ProductVariantWithInclude[] = [];
+      const createdVariants = await this.db.transaction(async (tx) => {
+        const created: ProductVariantWithDetails[] = [];
 
         for (const [index, variant] of variants.entries()) {
-          const createdVariant = await tx.productVariant.create({
-            data: {
+          const [createdVariant] = await tx
+            .insert(productVariant)
+            .values({
               businessId,
               productId,
               title: variant.title,
               sku: skus[index],
               barcode: barcodes[index],
-              priceOverride: variant.dto.priceOverride ?? null,
-              weight: variant.dto.weight ?? null,
+              priceOverride:
+                variant.dto.priceOverride === undefined
+                  ? null
+                  : new Decimal(variant.dto.priceOverride),
+              weight:
+                variant.dto.weight === undefined
+                  ? null
+                  : new Decimal(variant.dto.weight),
               status: variant.dto.status ?? ProductVariantStatus.ACTIVE,
               createdBy: currentUser.id,
               updatedBy: currentUser.id,
-              attributes: this.buildAttributeCreate(variant.attributes),
-              images: this.buildImageCreate(
-                businessId,
-                productId,
-                currentUser.id,
-                variant.dto.images,
-              ),
-            },
-            include: VARIANT_INCLUDE,
+            })
+            .returning();
+
+          await this.insertAttributes(
+            tx,
+            createdVariant.id,
+            variant.attributes,
+          );
+          await this.insertImages(tx, {
+            businessId,
+            productId,
+            variantId: createdVariant.id,
+            userId: currentUser.id,
+            images: variant.dto.images,
           });
 
-          await tx.inventoryStock.create({
-            data: {
-              businessId,
-              productId,
-              variantId: createdVariant.id,
-              stockItemKey: buildStockItemKey(productId, createdVariant.id),
-            },
+          await tx.insert(inventoryStock).values({
+            businessId,
+            productId,
+            variantId: createdVariant.id,
+            stockItemKey: buildStockItemKey(productId, createdVariant.id),
+            lowStockAlertQty: new Decimal(0),
+            quantityReserved: new Decimal(0),
+            totalQuantity: new Decimal(0),
           });
 
-          created.push(createdVariant);
+          created.push(await this.getVariantDetails(createdVariant));
         }
 
         await this.zeroProductLevelStock(tx, businessId, productId);
@@ -256,59 +329,70 @@ export class ProductVariantService {
     await this.lookup.assertProductExists(businessId, productId);
 
     const search = query.search?.trim();
-    const where: Prisma.ProductVariantWhereInput = {
-      businessId,
-      productId,
-      deletedAt: null,
-      ...(search
-        ? {
-            OR: [
-              { title: { contains: search, mode: "insensitive" } },
-              {
-                attributes: {
-                  some: {
-                    attribute: {
-                      name: { contains: search, mode: "insensitive" },
-                      deletedAt: null,
-                    },
-                  },
-                },
-              },
-              {
-                attributes: {
-                  some: {
-                    attributeValue: {
-                      value: { contains: search, mode: "insensitive" },
-                      deletedAt: null,
-                    },
-                  },
-                },
-              },
-            ],
-          }
-        : {}),
-    };
+    const where = and(
+      eq(productVariant.businessId, businessId),
+      eq(productVariant.productId, productId),
+      isNull(productVariant.deletedAt),
+      search
+        ? or(
+            ilike(productVariant.title, `%${search}%`),
+            exists(
+              this.db
+                .select({ id: productVariantAttribute.id })
+                .from(productVariantAttribute)
+                .innerJoin(
+                  productAttribute,
+                  eq(productAttribute.id, productVariantAttribute.attributeId),
+                )
+                .where(
+                  and(
+                    eq(productVariantAttribute.variantId, productVariant.id),
+                    ilike(productAttribute.name, `%${search}%`),
+                    isNull(productAttribute.deletedAt),
+                  ),
+                ),
+            ),
+            exists(
+              this.db
+                .select({ id: productVariantAttribute.id })
+                .from(productVariantAttribute)
+                .innerJoin(
+                  productAttributeValue,
+                  eq(
+                    productAttributeValue.id,
+                    productVariantAttribute.attributeValueId,
+                  ),
+                )
+                .where(
+                  and(
+                    eq(productVariantAttribute.variantId, productVariant.id),
+                    ilike(productAttributeValue.value, `%${search}%`),
+                    isNull(productAttributeValue.deletedAt),
+                  ),
+                ),
+            ),
+          )
+        : undefined,
+    );
 
-    const variants = await this.prisma.productVariant.findMany({
-      where,
-      include: VARIANT_INCLUDE,
-      orderBy: { createdAt: "desc" },
-    });
+    const variants = await this.db
+      .select()
+      .from(productVariant)
+      .where(where)
+      .orderBy(desc(productVariant.createdAt))
+      .then((rows) => this.getVariantsDetails(rows));
 
     return apiResponse(variants);
   }
 
   async findOne(businessId: string, productId: string, variantId: string) {
-    const variant = await this.prisma.productVariant.findFirst({
-      where: { id: variantId, businessId, productId, deletedAt: null },
-      include: VARIANT_INCLUDE,
-    });
+    const variant = await this.findVariantRow(businessId, productId, variantId);
 
     if (!variant) {
       throw new NotFoundException("Product variant not found");
     }
 
-    return apiResponse(variant);
+    return apiResponse(await this.getVariantDetails(variant));
   }
 
   async update(
@@ -330,44 +414,55 @@ export class ProductVariantService {
         : undefined;
 
     try {
-      const variant = await this.prisma.$transaction(async (tx) => {
+      const variant = await this.db.transaction(async (tx) => {
         if (attributes !== undefined) {
-          await tx.productVariantAttribute.deleteMany({ where: { variantId } });
+          await tx
+            .delete(productVariantAttribute)
+            .where(eq(productVariantAttribute.variantId, variantId));
+          await this.insertAttributes(tx, variantId, attributes);
         }
 
         if (dto.images !== undefined) {
-          await tx.productImage.updateMany({
-            where: { variantId, deletedAt: null },
-            data: { deletedAt: new Date(), updatedBy: currentUser.id },
+          await tx
+            .update(productImage)
+            .set({ deletedAt: new Date(), updatedBy: currentUser.id })
+            .where(
+              and(
+                eq(productImage.variantId, variantId),
+                isNull(productImage.deletedAt),
+              ),
+            );
+          await this.insertImages(tx, {
+            businessId,
+            productId,
+            variantId,
+            userId: currentUser.id,
+            images: dto.images,
           });
         }
 
-        return tx.productVariant.update({
-          where: { id: variantId },
-          data: {
+        const [updated] = await tx
+          .update(productVariant)
+          .set({
             ...(dto.title !== undefined && {
               title: this.lookup.normalizeName(dto.title),
             }),
             ...(dto.priceOverride !== undefined && {
-              priceOverride: dto.priceOverride,
+              priceOverride:
+                dto.priceOverride === null
+                  ? null
+                  : new Decimal(dto.priceOverride),
             }),
-            ...(dto.weight !== undefined && { weight: dto.weight }),
+            ...(dto.weight !== undefined && {
+              weight: dto.weight === null ? null : new Decimal(dto.weight),
+            }),
             ...(dto.status !== undefined && { status: dto.status }),
             updatedBy: currentUser.id,
-            ...(attributes !== undefined && {
-              attributes: this.buildAttributeCreate(attributes),
-            }),
-            ...(dto.images !== undefined && {
-              images: this.buildImageCreate(
-                businessId,
-                productId,
-                currentUser.id,
-                dto.images,
-              ),
-            }),
-          },
-          include: VARIANT_INCLUDE,
-        });
+          })
+          .where(eq(productVariant.id, variantId))
+          .returning();
+
+        return this.getVariantDetails(updated);
       });
 
       return apiResponse(variant, "Product variant updated successfully");
@@ -387,22 +482,22 @@ export class ProductVariantService {
     const variantIds = dto.variants.map((variant) => variant.variantId);
     this.assertUniqueVariantIds(variantIds);
 
-    const existingVariants = await this.prisma.productVariant.findMany({
-      where: {
-        businessId,
-        productId,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        attributes: {
-          select: {
-            attributeId: true,
-            attributeValueId: true,
-          },
-        },
-      },
-    });
+    const existingRows = await this.db
+      .select()
+      .from(productVariant)
+      .where(
+        and(
+          eq(productVariant.businessId, businessId),
+          eq(productVariant.productId, productId),
+          isNull(productVariant.deletedAt),
+        ),
+      );
+    const existingVariants = await Promise.all(
+      existingRows.map(async (variant) => ({
+        id: variant.id,
+        attributes: await this.getAttributeSelections(variant.id),
+      })),
+    );
     const existingVariantIds = new Set(
       existingVariants.map((variant) => variant.id),
     );
@@ -431,55 +526,67 @@ export class ProductVariantService {
     assertBulkUpdateAttributeCombinations(existingVariants, updates);
 
     try {
-      const updatedVariants = await this.prisma.$transaction(async (tx) => {
-        const updated: ProductVariantWithInclude[] = [];
+      const updatedVariants = await this.db.transaction(async (tx) => {
+        const updated: ProductVariantWithDetails[] = [];
 
         for (const update of updates) {
           if (update.attributes !== undefined) {
-            await tx.productVariantAttribute.deleteMany({
-              where: { variantId: update.variantId },
-            });
+            await tx
+              .delete(productVariantAttribute)
+              .where(eq(productVariantAttribute.variantId, update.variantId));
+            await this.insertAttributes(
+              tx,
+              update.variantId,
+              update.attributes,
+            );
           }
 
           if (update.dto.images !== undefined) {
-            await tx.productImage.updateMany({
-              where: { variantId: update.variantId, deletedAt: null },
-              data: { deletedAt: new Date(), updatedBy: currentUser.id },
+            await tx
+              .update(productImage)
+              .set({ deletedAt: new Date(), updatedBy: currentUser.id })
+              .where(
+                and(
+                  eq(productImage.variantId, update.variantId),
+                  isNull(productImage.deletedAt),
+                ),
+              );
+            await this.insertImages(tx, {
+              businessId,
+              productId,
+              variantId: update.variantId,
+              userId: currentUser.id,
+              images: update.dto.images,
             });
           }
 
-          const variant = await tx.productVariant.update({
-            where: { id: update.variantId },
-            data: {
+          const [variant] = await tx
+            .update(productVariant)
+            .set({
               ...(update.dto.title !== undefined && {
                 title: this.lookup.normalizeName(update.dto.title),
               }),
               ...(update.dto.priceOverride !== undefined && {
-                priceOverride: update.dto.priceOverride,
+                priceOverride:
+                  update.dto.priceOverride === null
+                    ? null
+                    : new Decimal(update.dto.priceOverride),
               }),
               ...(update.dto.weight !== undefined && {
-                weight: update.dto.weight,
+                weight:
+                  update.dto.weight === null
+                    ? null
+                    : new Decimal(update.dto.weight),
               }),
               ...(update.dto.status !== undefined && {
                 status: update.dto.status,
               }),
               updatedBy: currentUser.id,
-              ...(update.attributes !== undefined && {
-                attributes: this.buildAttributeCreate(update.attributes),
-              }),
-              ...(update.dto.images !== undefined && {
-                images: this.buildImageCreate(
-                  businessId,
-                  productId,
-                  currentUser.id,
-                  update.dto.images,
-                ),
-              }),
-            },
-            include: VARIANT_INCLUDE,
-          });
+            })
+            .where(eq(productVariant.id, update.variantId))
+            .returning();
 
-          updated.push(variant);
+          updated.push(await this.getVariantDetails(variant));
         }
 
         return updated;
@@ -515,60 +622,105 @@ export class ProductVariantService {
     await this.lookup.assertVariantExists(businessId, productId, variantId);
     await this.assertVariantCanBeDeleted(businessId, variantId);
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.productVariant.update({
-        where: { id: variantId },
-        data: {
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(productVariant)
+        .set({
           status: ProductVariantStatus.INACTIVE,
           deletedAt: new Date(),
           updatedBy: currentUser.id,
-        },
-      });
+        })
+        .where(eq(productVariant.id, variantId));
 
-      await tx.inventoryStock.deleteMany({
-        where: { businessId, variantId },
-      });
+      await tx
+        .delete(inventoryStock)
+        .where(
+          and(
+            eq(inventoryStock.businessId, businessId),
+            eq(inventoryStock.variantId, variantId),
+          ),
+        );
     });
 
     return apiResponse(null, "Product variant deleted successfully");
   }
 
-  private buildAttributeCreate(
+  private async insertAttributes(
+    tx: DatabaseTransaction,
+    variantId: string,
     attributes: ProductVariantAttributeInputDto[] = [],
   ) {
-    return attributes.length > 0
-      ? {
-          create: attributes.map((attribute) => ({
-            attributeId: attribute.attributeId,
-            attributeValueId: attribute.attributeValueId,
-          })),
-        }
-      : undefined;
+    if (attributes.length > 0) {
+      await tx.insert(productVariantAttribute).values(
+        attributes.map((attribute) => ({
+          variantId,
+          attributeId: attribute.attributeId,
+          attributeValueId: attribute.attributeValueId,
+        })),
+      );
+    }
+  }
+
+  private async insertImages(
+    tx: DatabaseTransaction,
+    params: {
+      businessId: string;
+      productId: string;
+      variantId: string;
+      userId: string;
+      images: { imageUrl: string; altText?: string }[] | undefined;
+    },
+  ) {
+    if (!params.images?.length) {
+      return;
+    }
+
+    await tx.insert(productImage).values(
+      params.images.map((image, index) => ({
+        businessId: params.businessId,
+        productId: params.productId,
+        variantId: params.variantId,
+        imageUrl: image.imageUrl.trim(),
+        altText: this.lookup.normalizeNullableText(image.altText),
+        sortOrder: index,
+        isThumbnail: index === 0,
+        createdBy: params.userId,
+        updatedBy: params.userId,
+      })),
+    );
   }
 
   private async getOptionVariants(businessId: string, productId: string) {
-    const variants = await this.prisma.productVariant.findMany({
-      where: {
-        businessId,
-        productId,
-        deletedAt: null,
-        status: ProductVariantStatus.ACTIVE,
-      },
-      include: VARIANT_INCLUDE,
-      orderBy: { createdAt: "desc" },
-    });
-    const stocks = await this.prisma.inventoryStock.findMany({
-      where: {
-        businessId,
-        productId,
-        variantId: { in: variants.map((variant) => variant.id) },
-      },
-      select: {
-        variantId: true,
-        totalQuantity: true,
-        quantityReserved: true,
-      },
-    });
+    const variants = await this.db
+      .select()
+      .from(productVariant)
+      .where(
+        and(
+          eq(productVariant.businessId, businessId),
+          eq(productVariant.productId, productId),
+          isNull(productVariant.deletedAt),
+          eq(productVariant.status, ProductVariantStatus.ACTIVE),
+        ),
+      )
+      .orderBy(desc(productVariant.createdAt))
+      .then((rows) => this.getVariantsDetails(rows));
+    const stocks = await this.db
+      .select({
+        variantId: inventoryStock.variantId,
+        totalQuantity: inventoryStock.totalQuantity,
+        quantityReserved: inventoryStock.quantityReserved,
+      })
+      .from(inventoryStock)
+      .where(
+        and(
+          eq(inventoryStock.businessId, businessId),
+          eq(inventoryStock.productId, productId),
+          inArray(
+            inventoryStock.variantId,
+            variants.map((variant) => variant.id),
+          ),
+        ),
+      );
     const stockByVariantId = new Map(
       stocks
         .filter((stock) => stock.variantId)
@@ -742,21 +894,21 @@ export class ProductVariantService {
       return;
     }
 
-    const existingVariants = await this.prisma.productVariant.findMany({
-      where: {
-        businessId,
-        productId,
-        deletedAt: null,
-      },
-      select: {
-        attributes: {
-          select: {
-            attributeId: true,
-            attributeValueId: true,
-          },
-        },
-      },
-    });
+    const existingRows = await this.db
+      .select()
+      .from(productVariant)
+      .where(
+        and(
+          eq(productVariant.businessId, businessId),
+          eq(productVariant.productId, productId),
+          isNull(productVariant.deletedAt),
+        ),
+      );
+    const existingVariants = await Promise.all(
+      existingRows.map(async (variant) => ({
+        attributes: await this.getAttributeSelections(variant.id),
+      })),
+    );
 
     const hasExistingCombination = existingVariants.some((variant) => {
       const key = buildAttributeCombinationKey(variant.attributes);
@@ -800,120 +952,257 @@ export class ProductVariantService {
     return Array.from(codes);
   }
 
-  private buildImageCreate(
-    businessId: string,
-    productId: string,
-    userId: string,
-    images: { imageUrl: string; altText?: string }[] = [],
-  ) {
-    return images.length > 0
-      ? {
-          create: images.map((image, index) => ({
-            businessId,
-            productId,
-            imageUrl: image.imageUrl.trim(),
-            altText: this.lookup.normalizeNullableText(image.altText),
-            sortOrder: index,
-            isThumbnail: index === 0,
-            createdBy: userId,
-            updatedBy: userId,
-          })),
-        }
-      : undefined;
-  }
-
   private async assertVariantCanBeDeleted(
     businessId: string,
     variantId: string,
   ) {
     const referenceCounts = await Promise.all([
-      this.prisma.inventoryStock.count({
-        where: {
-          businessId,
-          variantId,
-          OR: [{ totalQuantity: { not: 0 } }, { quantityReserved: { not: 0 } }],
-        },
-      }),
-      this.prisma.inventoryWarehouseStock.count({
-        where: { businessId, variantId },
-      }),
-      this.prisma.inventoryStockMovement.count({
-        where: { businessId, variantId },
-      }),
-      this.prisma.inventoryStockAdjustmentItem.count({ where: { variantId } }),
-      this.prisma.inventoryStockTransferItem.count({ where: { variantId } }),
-      this.prisma.orderCartItem.count({ where: { variantId } }),
-      this.prisma.orderOrderItem.count({ where: { variantId } }),
-      this.prisma.orderReturnItem.count({ where: { variantId } }),
-      this.prisma.invoiceItem.count({ where: { variantId } }),
-      this.prisma.supplierProductMap.count({
-        where: { businessId, variantId },
-      }),
-      this.prisma.supplierPurchaseOrderItem.count({
-        where: { variantId },
-      }),
-      this.prisma.supplierInvoiceItem.count({ where: { variantId } }),
-      this.prisma.supplierPurchaseReturnItem.count({
-        where: { variantId },
-      }),
-      this.prisma.courierShipmentItem.count({ where: { variantId } }),
-      this.prisma.inventoryOrderAllocation.count({
-        where: { businessId, variantId },
-      }),
+      this.countInventoryStockReferences(businessId, variantId),
+      this.countByBusinessVariant(
+        inventoryWarehouseStock,
+        businessId,
+        variantId,
+      ),
+      this.countByBusinessVariant(
+        inventoryStockMovement,
+        businessId,
+        variantId,
+      ),
+      this.countByVariant(inventoryStockAdjustmentItem, variantId),
+      this.countByVariant(inventoryStockTransferItem, variantId),
+      this.countByVariant(orderCartItem, variantId),
+      this.countByVariant(orderOrderItem, variantId),
+      this.countByVariant(orderReturnItem, variantId),
+      this.countByVariant(invoiceItem, variantId),
+      this.countByBusinessVariant(supplierProductMap, businessId, variantId),
+      this.countByVariant(supplierPurchaseOrderItem, variantId),
+      this.countByVariant(supplierInvoiceItem, variantId),
+      this.countByVariant(supplierPurchaseReturnItem, variantId),
+      this.countByVariant(courierShipmentItem, variantId),
+      this.countByBusinessVariant(
+        inventoryOrderAllocation,
+        businessId,
+        variantId,
+      ),
     ]);
 
-    if (referenceCounts.some((count) => count > 0)) {
+    if (referenceCounts.some((value) => value > 0)) {
       throw new BadRequestException(
         "Product variant cannot be deleted while referenced by inventory, order, invoice, supplier, or courier records",
       );
     }
   }
 
+  private countInventoryStockReferences(businessId: string, variantId: string) {
+    return this.db
+      .select({ value: count() })
+      .from(inventoryStock)
+      .where(
+        and(
+          eq(inventoryStock.businessId, businessId),
+          eq(inventoryStock.variantId, variantId),
+          or(
+            ne(inventoryStock.totalQuantity, new Decimal(0)),
+            ne(inventoryStock.quantityReserved, new Decimal(0)),
+          ),
+        ),
+      )
+      .then(([row]) => row?.value ?? 0);
+  }
+
+  private countByBusinessVariant(
+    table:
+      | typeof inventoryWarehouseStock
+      | typeof inventoryStockMovement
+      | typeof supplierProductMap
+      | typeof inventoryOrderAllocation,
+    businessId: string,
+    variantId: string,
+  ) {
+    return this.db
+      .select({ value: count() })
+      .from(table)
+      .where(
+        and(eq(table.businessId, businessId), eq(table.variantId, variantId)),
+      )
+      .then(([row]) => row?.value ?? 0);
+  }
+
+  private countByVariant(
+    table:
+      | typeof inventoryStockAdjustmentItem
+      | typeof inventoryStockTransferItem
+      | typeof orderCartItem
+      | typeof orderOrderItem
+      | typeof orderReturnItem
+      | typeof invoiceItem
+      | typeof supplierPurchaseOrderItem
+      | typeof supplierInvoiceItem
+      | typeof supplierPurchaseReturnItem
+      | typeof courierShipmentItem,
+    variantId: string,
+  ) {
+    return this.db
+      .select({ value: count() })
+      .from(table)
+      .where(eq(table.variantId, variantId))
+      .then(([row]) => row?.value ?? 0);
+  }
+
   private async zeroProductLevelStock(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     businessId: string,
     productId: string,
   ) {
     const stockItemKey = buildStockItemKey(productId, null);
-    const productStock = await tx.inventoryStock.findUnique({
-      where: {
-        businessId_stockItemKey: {
-          businessId,
-          stockItemKey,
-        },
-      },
-    });
+    const [productStock] = await tx
+      .select()
+      .from(inventoryStock)
+      .where(
+        and(
+          eq(inventoryStock.businessId, businessId),
+          eq(inventoryStock.stockItemKey, stockItemKey),
+        ),
+      )
+      .limit(1);
 
     if (!productStock) {
-      await tx.inventoryStock.create({
-        data: {
-          businessId,
-          productId,
-          variantId: null,
-          stockItemKey,
-        },
+      await tx.insert(inventoryStock).values({
+        businessId,
+        productId,
+        variantId: null,
+        stockItemKey,
+        lowStockAlertQty: new Decimal(0),
+        quantityReserved: new Decimal(0),
+        totalQuantity: new Decimal(0),
       });
       return;
     }
 
-    await tx.inventoryStock.update({
-      where: { id: productStock.id },
-      data: {
-        totalQuantity: 0,
-        quantityReserved: 0,
-      },
-    });
+    await tx
+      .update(inventoryStock)
+      .set({
+        totalQuantity: new Decimal(0),
+        quantityReserved: new Decimal(0),
+      })
+      .where(eq(inventoryStock.id, productStock.id));
 
-    await tx.inventoryWarehouseStock.updateMany({
-      where: {
-        businessId,
-        productId,
-        variantId: null,
-      },
-      data: {
-        totalQuantity: 0,
-        quantityReserved: 0,
-      },
-    });
+    await tx
+      .update(inventoryWarehouseStock)
+      .set({
+        totalQuantity: new Decimal(0),
+        quantityReserved: new Decimal(0),
+      })
+      .where(
+        and(
+          eq(inventoryWarehouseStock.businessId, businessId),
+          eq(inventoryWarehouseStock.productId, productId),
+          isNull(inventoryWarehouseStock.variantId),
+        ),
+      );
+  }
+
+  private findVariantRow(
+    businessId: string,
+    productId: string,
+    variantId: string,
+  ) {
+    return this.db
+      .select()
+      .from(productVariant)
+      .where(
+        and(
+          eq(productVariant.id, variantId),
+          eq(productVariant.businessId, businessId),
+          eq(productVariant.productId, productId),
+          isNull(productVariant.deletedAt),
+        ),
+      )
+      .limit(1)
+      .then(([row]) => row ?? null);
+  }
+
+  private async getVariantsDetails(variants: ProductVariant[]) {
+    return Promise.all(
+      variants.map((variant) => this.getVariantDetails(variant)),
+    );
+  }
+
+  private async getVariantDetails(
+    variant: ProductVariant,
+  ): Promise<ProductVariantWithDetails> {
+    const [productSummary, attributes, images] = await Promise.all([
+      this.db
+        .select({ name: product.name, price: product.price })
+        .from(product)
+        .where(eq(product.id, variant.productId))
+        .limit(1)
+        .then(([row]) => row),
+      this.getVariantAttributes(variant.id),
+      this.getImages(variant.productId, variant.id),
+    ]);
+
+    if (!productSummary) {
+      throw new NotFoundException("Product not found");
+    }
+
+    return {
+      ...variant,
+      product: productSummary,
+      attributes,
+      images,
+    };
+  }
+
+  private getImages(productId: string, variantId: string) {
+    return this.db
+      .select()
+      .from(productImage)
+      .where(
+        and(
+          eq(productImage.productId, productId),
+          eq(productImage.variantId, variantId),
+          isNull(productImage.deletedAt),
+        ),
+      )
+      .orderBy(asc(productImage.sortOrder));
+  }
+
+  private async getVariantAttributes(
+    variantId: string,
+  ): Promise<VariantAttributeWithDetails[]> {
+    const rows = await this.db
+      .select({
+        map: productVariantAttribute,
+        attribute: productAttribute,
+        attributeValue: productAttributeValue,
+      })
+      .from(productVariantAttribute)
+      .innerJoin(
+        productAttribute,
+        eq(productAttribute.id, productVariantAttribute.attributeId),
+      )
+      .innerJoin(
+        productAttributeValue,
+        eq(productAttributeValue.id, productVariantAttribute.attributeValueId),
+      )
+      .where(eq(productVariantAttribute.variantId, variantId))
+      .orderBy(asc(productVariantAttribute.createdAt));
+
+    return rows.map((row) => ({
+      ...row.map,
+      attribute: row.attribute,
+      attributeValue: row.attributeValue,
+    }));
+  }
+
+  private getAttributeSelections(variantId: string) {
+    return this.db
+      .select({
+        attributeId: productVariantAttribute.attributeId,
+        attributeValueId: productVariantAttribute.attributeValueId,
+      })
+      .from(productVariantAttribute)
+      .where(eq(productVariantAttribute.variantId, variantId));
   }
 }

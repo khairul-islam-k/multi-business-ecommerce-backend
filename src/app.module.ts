@@ -20,7 +20,7 @@ import { ProductCatalogModule } from "./modules/product-catalog/product-catalog.
 import { RoleModule } from "./modules/roles/role.module";
 import { SupplierModule } from "./modules/suppliers/supplier.module";
 import { TenantModule } from "./modules/tenants/tenant.module";
-import { PrismaModule } from "./prisma/prisma.module";
+import { DatabaseModule } from "./database/database.module";
 import { validateAppConfig } from "./common/config/app-config.schema";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { RequestLoggerMiddleware } from "./common/middlewares/request-logger.middleware";
@@ -33,7 +33,7 @@ import { RequestContextMiddleware } from "./common/request-context/request-conte
       validate: validateAppConfig,
     }),
 
-    PrismaModule,
+    DatabaseModule,
     CommonModule,
 
     AuthModule,

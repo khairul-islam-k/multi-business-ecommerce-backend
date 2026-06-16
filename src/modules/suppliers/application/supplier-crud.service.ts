@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { Prisma, SupplierStatus } from "@prisma/client";
+import { SupplierStatus, supplier } from "@/database/schema";
+import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import {
@@ -12,8 +13,7 @@ import {
   normalizeSupplierName,
 } from "../domain/supplier-contact.policy";
 import { SupplierRepository } from "../infrastructure/supplier.repository";
-import { SUPPLIER_INCLUDE } from "../infrastructure/supplier.selects";
-import { PrismaService } from "../../../prisma/prisma.service";
+import { DatabaseService } from "../../../database/database.service";
 import {
   apiResponse,
   paginatedResponse,
@@ -22,17 +22,22 @@ import {
 @Injectable()
 export class SupplierCrudService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly suppliers: SupplierRepository,
   ) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async create(
     currentUser: CurrentUserPayload,
     businessId: string,
     dto: CreateSupplierDto,
   ) {
-    const supplier = await this.prisma.supplier.create({
-      data: {
+    const [createdSupplier] = await this.db
+      .insert(supplier)
+      .values({
         businessId,
         name: normalizeSupplierName(dto.name),
         companyName: normalizeNullableText(dto.companyName),
@@ -45,44 +50,54 @@ export class SupplierCrudService {
         note: normalizeNullableText(dto.note),
         createdBy: currentUser.id,
         updatedBy: currentUser.id,
-      },
-      include: SUPPLIER_INCLUDE,
-    });
+      })
+      .returning();
 
-    return apiResponse(supplier, "Supplier created successfully");
+    return apiResponse(
+      await this.suppliers.withCounts(createdSupplier),
+      "Supplier created successfully",
+    );
   }
 
   async findAll(businessId: string, query: QuerySupplierDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const where = and(
+      eq(supplier.businessId, businessId),
+      isNull(supplier.deletedAt),
+      query.status ? eq(supplier.status, query.status) : undefined,
+      query.search
+        ? or(
+            ilike(supplier.name, `%${query.search}%`),
+            ilike(supplier.companyName, `%${query.search}%`),
+            ilike(supplier.email, `%${query.search}%`),
+            ilike(supplier.phone, `%${query.search}%`),
+          )
+        : undefined,
+    );
 
-    const where: Prisma.SupplierWhereInput = {
-      businessId,
-      deletedAt: null,
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { name: { contains: query.search, mode: "insensitive" } },
-              { companyName: { contains: query.search, mode: "insensitive" } },
-              { email: { contains: query.search, mode: "insensitive" } },
-              { phone: { contains: query.search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-    };
-
-    const [items, total] = await Promise.all([
-      this.prisma.supplier.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: query.sortOrder ?? "desc" },
-        include: SUPPLIER_INCLUDE,
-      }),
-      this.prisma.supplier.count({ where }),
+    const [rows, total] = await Promise.all([
+      this.db
+        .select()
+        .from(supplier)
+        .where(where)
+        .orderBy(
+          query.sortOrder === "asc"
+            ? asc(supplier.createdAt)
+            : desc(supplier.createdAt),
+        )
+        .limit(limit)
+        .offset(skip),
+      this.db
+        .select({ value: count() })
+        .from(supplier)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
     ]);
+    const items = await Promise.all(
+      rows.map((supplierRow) => this.suppliers.withCounts(supplierRow)),
+    );
 
     return paginatedResponse(items, {
       page,
@@ -93,16 +108,24 @@ export class SupplierCrudService {
   }
 
   async findOne(businessId: string, supplierId: string) {
-    const supplier = await this.prisma.supplier.findFirst({
-      where: { id: supplierId, businessId, deletedAt: null },
-      include: SUPPLIER_INCLUDE,
-    });
+    const [supplierRow] = await this.db
+      .select()
+      .from(supplier)
+      .where(
+        and(
+          eq(supplier.id, supplierId),
+          eq(supplier.businessId, businessId),
+          isNull(supplier.deletedAt),
+        ),
+      );
 
-    if (!supplier) {
+    if (!supplierRow) {
       await this.suppliers.assertSupplierExists(businessId, supplierId);
     }
 
-    return apiResponse(supplier);
+    return apiResponse(
+      supplierRow ? await this.suppliers.withCounts(supplierRow) : null,
+    );
   }
 
   async update(
@@ -113,9 +136,9 @@ export class SupplierCrudService {
   ) {
     await this.suppliers.assertSupplierExists(businessId, supplierId);
 
-    const supplier = await this.prisma.supplier.update({
-      where: { id: supplierId },
-      data: {
+    const [updatedSupplier] = await this.db
+      .update(supplier)
+      .set({
         ...(dto.name !== undefined && {
           name: normalizeSupplierName(dto.name),
         }),
@@ -142,11 +165,14 @@ export class SupplierCrudService {
           note: normalizeNullableText(dto.note),
         }),
         updatedBy: currentUser.id,
-      },
-      include: SUPPLIER_INCLUDE,
-    });
+      })
+      .where(eq(supplier.id, supplierId))
+      .returning();
 
-    return apiResponse(supplier, "Supplier updated successfully");
+    return apiResponse(
+      await this.suppliers.withCounts(updatedSupplier),
+      "Supplier updated successfully",
+    );
   }
 
   async remove(
@@ -157,14 +183,14 @@ export class SupplierCrudService {
     await this.suppliers.assertSupplierExists(businessId, supplierId);
     await this.suppliers.assertSupplierCanBeDeleted(businessId, supplierId);
 
-    await this.prisma.supplier.update({
-      where: { id: supplierId },
-      data: {
+    await this.db
+      .update(supplier)
+      .set({
         status: SupplierStatus.INACTIVE,
         deletedAt: new Date(),
         updatedBy: currentUser.id,
-      },
-    });
+      })
+      .where(eq(supplier.id, supplierId));
 
     return apiResponse(null, "Supplier deleted successfully");
   }

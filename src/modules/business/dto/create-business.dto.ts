@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { BusinessStatus } from "@prisma/client";
+import { BusinessStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsBoolean,
@@ -156,7 +156,7 @@ export class CreateBusinessDto {
 
   @ApiPropertyOptional({
     enum: BusinessStatus,
-    default: BusinessStatus.TRIAL,
+    default: BusinessStatus.ACTIVE,
   })
   @IsOptional()
   @IsEnum(BusinessStatus)

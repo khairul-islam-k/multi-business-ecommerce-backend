@@ -1,5 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import Decimal from "decimal.js";
 
 import { buildStockItemKey } from "../../inventory/domain/stock-item-key";
 
@@ -45,11 +45,11 @@ export function assertPurchaseReturnItems(
 
 export function calculatePurchaseReturnTotals(
   items: {
-    quantity: Prisma.Decimal;
-    unitCost: Prisma.Decimal;
-    discountAmount: Prisma.Decimal;
-    taxAmount: Prisma.Decimal;
-    lineTotal: Prisma.Decimal;
+    quantity: Decimal;
+    unitCost: Decimal;
+    discountAmount: Decimal;
+    taxAmount: Decimal;
+    lineTotal: Decimal;
   }[],
 ) {
   return items.reduce(
@@ -60,10 +60,11 @@ export function calculatePurchaseReturnTotals(
       totalAmount: totals.totalAmount.plus(item.lineTotal),
     }),
     {
-      subtotal: new Prisma.Decimal(0),
-      discountTotal: new Prisma.Decimal(0),
-      taxTotal: new Prisma.Decimal(0),
-      totalAmount: new Prisma.Decimal(0),
+      subtotal: new Decimal(0),
+      discountTotal: new Decimal(0),
+      taxTotal: new Decimal(0),
+      totalAmount: new Decimal(0),
     },
   );
 }
+

@@ -1,10 +1,16 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import {
+  type InventoryStock,
   InventoryMovementType,
   InventoryReferenceType,
-  Prisma,
-} from "@prisma/client";
+  inventoryStock,
+  inventoryStockMovement,
+  inventoryWarehouseStock,
+} from "@/database/schema";
+import Decimal from "decimal.js";
+import { and, eq } from "drizzle-orm";
 
+import type { DatabaseTransaction } from "../../../database/database.service";
 import { buildStockItemKey } from "../domain/stock-item-key";
 import { normalizeOptionalText } from "../../../common/text/normalizers";
 import { StockItemRef } from "../common/inventory.types";
@@ -12,10 +18,10 @@ import { StockItemRef } from "../common/inventory.types";
 @Injectable()
 export class StockMutationService {
   async applyStockDelta(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: StockItemRef & {
       warehouseId: string;
-      quantityDelta: Prisma.Decimal.Value;
+      quantityDelta: Decimal.Value;
       movementType: InventoryMovementType;
       referenceType?: InventoryReferenceType;
       referenceId?: string;
@@ -23,57 +29,51 @@ export class StockMutationService {
       createdBy?: string;
     },
   ) {
-    const quantityDelta = new Prisma.Decimal(params.quantityDelta);
+    const quantityDelta = new Decimal(params.quantityDelta);
     const stockItemKey = buildStockItemKey(params.productId, params.variantId);
 
     if (quantityDelta.isZero()) {
       throw new BadRequestException("Stock movement quantity is required");
     }
 
-    const stock = await tx.inventoryStock.upsert({
-      where: {
-        businessId_stockItemKey: {
-          businessId: params.businessId,
-          stockItemKey,
-        },
-      },
-      update: {},
-      create: {
-        businessId: params.businessId,
-        productId: params.productId,
-        variantId: params.variantId ?? null,
-        stockItemKey,
-      },
+    const stock = await this.getOrCreateStock(tx, {
+      businessId: params.businessId,
+      productId: params.productId,
+      variantId: params.variantId,
+      stockItemKey,
     });
 
-    const existingWarehouseStock = await tx.inventoryWarehouseStock.findUnique({
-      where: {
-        businessId_warehouseId_stockItemKey: {
-          businessId: params.businessId,
-          warehouseId: params.warehouseId,
-          stockItemKey,
-        },
-      },
-    });
+    const [existingWarehouseStock] = await tx
+      .select()
+      .from(inventoryWarehouseStock)
+      .where(
+        and(
+          eq(inventoryWarehouseStock.businessId, params.businessId),
+          eq(inventoryWarehouseStock.warehouseId, params.warehouseId),
+          eq(inventoryWarehouseStock.stockItemKey, stockItemKey),
+        ),
+      );
 
-    const nextStockTotal = stock.totalQuantity.plus(quantityDelta);
+    const nextStockTotal = new Decimal(stock.totalQuantity).plus(quantityDelta);
     const currentWarehouseTotal =
-      existingWarehouseStock?.totalQuantity ?? new Prisma.Decimal(0);
+      existingWarehouseStock?.totalQuantity ?? new Decimal(0);
     const currentWarehouseReserved =
-      existingWarehouseStock?.quantityReserved ?? new Prisma.Decimal(0);
-    const nextWarehouseTotal = currentWarehouseTotal.plus(quantityDelta);
+      existingWarehouseStock?.quantityReserved ?? new Decimal(0);
+    const nextWarehouseTotal = new Decimal(currentWarehouseTotal).plus(
+      quantityDelta,
+    );
 
     if (nextStockTotal.lessThan(0) || nextWarehouseTotal.lessThan(0)) {
       throw new BadRequestException("Stock cannot be negative");
     }
 
     if (quantityDelta.lessThan(0)) {
-      const availableStockQuantity = stock.totalQuantity.minus(
+      const availableStockQuantity = new Decimal(stock.totalQuantity).minus(
         stock.quantityReserved,
       );
-      const availableWarehouseQuantity = currentWarehouseTotal.minus(
-        currentWarehouseReserved,
-      );
+      const availableWarehouseQuantity = new Decimal(
+        currentWarehouseTotal,
+      ).minus(currentWarehouseReserved);
 
       if (
         availableStockQuantity.plus(quantityDelta).lessThan(0) ||
@@ -83,21 +83,19 @@ export class StockMutationService {
       }
     }
 
-    const updatedStock = await tx.inventoryStock.update({
-      where: { id: stock.id },
-      data: { totalQuantity: nextStockTotal },
-    });
+    const [updatedStock] = await tx
+      .update(inventoryStock)
+      .set({ totalQuantity: nextStockTotal })
+      .where(eq(inventoryStock.id, stock.id))
+      .returning();
 
-    await tx.inventoryWarehouseStock.upsert({
-      where: {
-        businessId_warehouseId_stockItemKey: {
-          businessId: params.businessId,
-          warehouseId: params.warehouseId,
-          stockItemKey,
-        },
-      },
-      update: { totalQuantity: nextWarehouseTotal },
-      create: {
+    if (existingWarehouseStock) {
+      await tx
+        .update(inventoryWarehouseStock)
+        .set({ totalQuantity: nextWarehouseTotal })
+        .where(eq(inventoryWarehouseStock.id, existingWarehouseStock.id));
+    } else {
+      await tx.insert(inventoryWarehouseStock).values({
         businessId: params.businessId,
         stockId: stock.id,
         warehouseId: params.warehouseId,
@@ -105,26 +103,54 @@ export class StockMutationService {
         variantId: params.variantId ?? null,
         stockItemKey,
         totalQuantity: nextWarehouseTotal,
-      },
-    });
+        quantityReserved: new Decimal(0),
+      });
+    }
 
-    await tx.inventoryStockMovement.create({
-      data: {
-        businessId: params.businessId,
-        stockId: stock.id,
-        warehouseId: params.warehouseId,
-        productId: params.productId,
-        variantId: params.variantId ?? null,
-        stockItemKey,
-        movementType: params.movementType,
-        quantity: quantityDelta.abs(),
-        referenceType: params.referenceType,
-        referenceId: params.referenceId,
-        note: normalizeOptionalText(params.note),
-        createdBy: params.createdBy,
-      },
+    await tx.insert(inventoryStockMovement).values({
+      businessId: params.businessId,
+      stockId: stock.id,
+      warehouseId: params.warehouseId,
+      productId: params.productId,
+      variantId: params.variantId ?? null,
+      stockItemKey,
+      movementType: params.movementType,
+      quantity: quantityDelta.abs(),
+      referenceType: params.referenceType,
+      referenceId: params.referenceId,
+      note: normalizeOptionalText(params.note),
+      createdBy: params.createdBy,
     });
 
     return updatedStock;
+  }
+
+  private async getOrCreateStock(
+    tx: DatabaseTransaction,
+    params: {
+      businessId: string;
+      productId: string;
+      variantId?: string | null;
+      stockItemKey: string;
+    },
+  ): Promise<InventoryStock> {
+    const [stock] = await tx
+      .insert(inventoryStock)
+      .values({
+        businessId: params.businessId,
+        productId: params.productId,
+        variantId: params.variantId ?? null,
+        stockItemKey: params.stockItemKey,
+        lowStockAlertQty: new Decimal(0),
+        quantityReserved: new Decimal(0),
+        totalQuantity: new Decimal(0),
+      })
+      .onConflictDoUpdate({
+        target: [inventoryStock.businessId, inventoryStock.stockItemKey],
+        set: { stockItemKey: params.stockItemKey },
+      })
+      .returning();
+
+    return stock;
   }
 }

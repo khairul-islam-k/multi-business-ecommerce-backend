@@ -12,7 +12,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { PackageLimitKey, PermissionAction, RbacFeature } from "@prisma/client";
+import { PackageLimitKey, PermissionAction, RbacFeature } from "@/database/schema";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";

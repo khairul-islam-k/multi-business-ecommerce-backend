@@ -1,5 +1,4 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
 
 import {
   CustomerOrderSortBy,
@@ -38,25 +37,17 @@ export class CustomerOrderQueryService {
       CustomerSortOrder.DESC,
     );
 
-    const where: Prisma.OrderOrderWhereInput = {
+    const where = {
       businessId,
       customerId,
-      deletedAt: null,
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.paymentStatus ? { paymentStatus: query.paymentStatus } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { orderNo: { contains: query.search, mode: "insensitive" } },
-              { note: { contains: query.search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
+      status: query.status,
+      paymentStatus: query.paymentStatus,
+      search: query.search,
     };
 
-    const orderBy: Prisma.OrderOrderOrderByWithRelationInput[] = [
-      { [sortBy]: sortOrder },
-      { createdAt: "desc" },
+    const orderBy = [
+      { field: sortBy, direction: sortOrder },
+      { field: CustomerOrderSortBy.CREATED_AT, direction: CustomerSortOrder.DESC },
     ];
 
     const [items, total] = await this.customers.findOrdersPage({
