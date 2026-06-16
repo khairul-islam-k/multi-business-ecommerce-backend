@@ -7,6 +7,8 @@
   "license": "UNLICENSED",
   "scripts": {
     "dev": "bun --watch ./src/main.ts",
+    "compile": "bun build ./src/main.ts --compile --minify --outfile ./bin/onecomm-api --external @nestjs/microservices --external @nestjs/microservices/microservices-module --external @nestjs/websockets/socket-module --external class-transformer/storage",
+    "execute": "./bin/onecomm-api",
     "build": "nest build",
     "start": "nest start --exec bun",
     "start:dev": "nest start --watch --exec bun",
