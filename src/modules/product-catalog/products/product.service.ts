@@ -203,6 +203,14 @@ export class ProductService {
               ),
           )
         : undefined,
+      query.warehouseId
+        ? exists(
+            this.db
+              .select({ id: inventoryWarehouseStock.id })
+              .from(inventoryWarehouseStock)
+              .where(eq(inventoryWarehouseStock.productId, product.id)),
+          )
+        : undefined,
       search
         ? or(
             ilike(product.name, `%${search}%`),
@@ -606,7 +614,7 @@ export class ProductService {
     };
   }
 
-  private findProductRow(businessId: string, productId: string) {
+  private async findProductRow(businessId: string, productId: string) {
     return this.db
       .select()
       .from(product)

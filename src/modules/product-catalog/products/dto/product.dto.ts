@@ -109,6 +109,11 @@ export class QueryProductDto {
   @IsUUID()
   tagId?: string;
 
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  warehouseId?: string;
+
   @ApiPropertyOptional({
     enum: CatalogSortOrder,
     example: CatalogSortOrder.DESC,
