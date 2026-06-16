@@ -159,7 +159,7 @@ export class FinanceTaxService {
     }
   }
 
-  private findTaxRow(businessId: string, taxId: string) {
+  private async findTaxRow(businessId: string, taxId: string) {
     return this.db
       .select()
       .from(financeTax)

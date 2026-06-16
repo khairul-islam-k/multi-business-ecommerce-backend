@@ -1,14 +1,16 @@
 import { ConflictException } from "@nestjs/common";
 
 type PostgresError = {
-  code?: string;
+  cause: {
+    code: string;
+  };
 };
 
 export function isUniqueConstraintError(error: unknown) {
   return (
     typeof error === "object" &&
     error !== null &&
-    (error as PostgresError).code === "23505"
+    (error as PostgresError).cause.code === "23505"
   );
 }
 

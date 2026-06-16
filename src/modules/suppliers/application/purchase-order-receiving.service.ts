@@ -91,6 +91,7 @@ export class PurchaseOrderReceivingService {
             target: [
               supplierProductMap.businessId,
               supplierProductMap.supplierId,
+              supplierProductMap.productId,
               supplierProductMap.itemKey,
             ],
             set: {
