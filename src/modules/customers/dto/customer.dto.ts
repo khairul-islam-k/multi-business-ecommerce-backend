@@ -4,7 +4,7 @@ import {
   OrderCustomerStatus,
   OrderPaymentStatus,
   OrderStatus,
-} from "@prisma/client";
+} from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsEmail,

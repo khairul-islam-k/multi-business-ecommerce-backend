@@ -1,10 +1,11 @@
-import { FinancePayableStatus, Prisma } from "@prisma/client";
+import Decimal from "decimal.js";
+import { FinancePayableStatus } from "@/database/schema";
 
 import { toMoney } from "./money";
 
 export function getPayableStatus(
-  totalAmount: Prisma.Decimal.Value,
-  paidAmount: Prisma.Decimal.Value,
+  totalAmount: Decimal.Value,
+  paidAmount: Decimal.Value,
 ) {
   const total = toMoney(totalAmount);
   const paid = toMoney(paidAmount);
@@ -17,3 +18,4 @@ export function getPayableStatus(
     ? FinancePayableStatus.PENDING
     : FinancePayableStatus.PARTIALLY_PAID;
 }
+

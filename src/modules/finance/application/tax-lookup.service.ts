@@ -1,23 +1,35 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { FinanceTaxStatus, Prisma } from "@prisma/client";
+import { FinanceTaxStatus, financeTax } from "@/database/schema";
+import { and, eq, isNull } from "drizzle-orm";
 
-import { PrismaService } from "../../../prisma/prisma.service";
+import {
+  type Database,
+  type DatabaseTransaction,
+  DatabaseService,
+} from "../../../database/database.service";
 
 @Injectable()
 export class TaxLookupService {
+  constructor(private readonly database: DatabaseService) {}
+
   async assertActiveTax(
-    client: Prisma.TransactionClient | PrismaService,
+    client: Database | DatabaseTransaction | undefined,
     businessId: string,
     taxId: string,
   ) {
-    const tax = await client.financeTax.findFirst({
-      where: {
-        id: taxId,
-        businessId,
-        deletedAt: null,
-        status: FinanceTaxStatus.ACTIVE,
-      },
-    });
+    const db = client ?? this.database.db;
+    const [tax] = await db
+      .select()
+      .from(financeTax)
+      .where(
+        and(
+          eq(financeTax.id, taxId),
+          eq(financeTax.businessId, businessId),
+          isNull(financeTax.deletedAt),
+          eq(financeTax.status, FinanceTaxStatus.ACTIVE),
+        ),
+      )
+      .limit(1);
 
     if (!tax) {
       throw new NotFoundException("Tax not found");

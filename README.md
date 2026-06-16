@@ -1,4 +1,4 @@
-# OneComm API
+﻿# OneComm API
 
 OneComm is a private NestJS backend for running a multi-tenant commerce operation. It is designed around the full business loop: tenants subscribe to a package, create businesses, invite employees, configure roles and permissions, manage media and catalog data, buy stock from suppliers into warehouses, and sell through online/admin orders or POS.
 
@@ -6,7 +6,7 @@ OneComm is a private NestJS backend for running a multi-tenant commerce operatio
 
 - NestJS
 - TypeScript
-- Prisma
+- Drizzle ORM
 - PostgreSQL
 - Passport JWT
 - Nodemailer
@@ -270,14 +270,13 @@ Cashier scans SKU/barcode
 
 ## Requirements
 
-- Node.js
-- pnpm
+- Bun
 - PostgreSQL
 
 ## Installation
 
 ```bash
-pnpm install
+bun install
 ```
 
 ## Environment Setup
@@ -292,34 +291,34 @@ Then update `.env` for your database, JWT settings, mail credentials, media stor
 
 ## Database Commands
 
-Generate Prisma client:
+Generate Drizzle migration files:
 
 ```bash
-pnpm run db:generate
+bun run db:generate
 ```
 
 Push schema changes to the database:
 
 ```bash
-pnpm run db:push
+bun run db:push
 ```
 
 Seed the admin user:
 
 ```bash
-pnpm run db:seed-admin
+bun run db:seed-admin
 ```
 
-Open Prisma Studio:
+Open Drizzle Studio:
 
 ```bash
-pnpm run db:studio
+bun run db:studio
 ```
 
 Reset database data:
 
 ```bash
-pnpm run db:reset-data
+bun run db:reset-data
 ```
 
 ## Running The App
@@ -327,45 +326,47 @@ pnpm run db:reset-data
 Development mode:
 
 ```bash
-pnpm run dev
+bun run dev
 ```
 
 Standard NestJS watch mode:
 
 ```bash
-pnpm run start:dev
+bun run start:dev
 ```
 
 Production build:
 
 ```bash
-pnpm run build
+bun run build
 ```
 
 Start production server:
 
 ```bash
-pnpm run start:prod
+bun run start:prod
 ```
 
 ## Available Scripts
 
 | Script                   | Description                                                       |
 | ------------------------ | ----------------------------------------------------------------- |
-| `pnpm run dev`           | Generate Prisma client and start app in watch mode                |
-| `pnpm run build`         | Generate Prisma client, push DB schema, seed admin, and build app |
-| `pnpm run start`         | Start the app                                                     |
-| `pnpm run start:dev`     | Start app in watch mode                                           |
-| `pnpm run start:debug`   | Start app in debug watch mode                                     |
-| `pnpm run start:prod`    | Run compiled production app                                       |
-| `pnpm run db:migrate`    | Run Prisma migrations                                             |
-| `pnpm run db:push`       | Push Prisma schema to database                                    |
-| `pnpm run db:generate`   | Generate Prisma client                                            |
-| `pnpm run db:seed-admin` | Seed default admin user                                           |
-| `pnpm run db:reset-data` | Reset database data                                               |
-| `pnpm run db:studio`     | Open Prisma Studio                                                |
-| `pnpm run format`        | Format code with Prettier                                         |
-| `pnpm run lint`          | Lint and auto-fix TypeScript files                                |
+| `bun run dev`             | Start app with Bun watch mode              |
+| `bun run build`           | Build the NestJS app                       |
+| `bun run start`           | Start the app                              |
+| `bun run start:dev`       | Start app in NestJS watch mode             |
+| `bun run start:debug`     | Start app in debug watch mode              |
+| `bun run start:prod`      | Run compiled production app                |
+| `bun run db:migrate:dev`  | Generate Drizzle migration files           |
+| `bun run db:migrate:prod` | Run Drizzle migrations                     |
+| `bun run db:push`         | Push Drizzle schema to database            |
+| `bun run db:generate`     | Generate Drizzle migration files           |
+| `bun run db:seed-admin`   | Seed default admin user                    |
+| `bun run db:reset-data`   | Reset database data                        |
+| `bun run db:studio`       | Open Drizzle Studio                        |
+| `bun run db:check`        | Check Drizzle migration/schema consistency |
+| `bun run format`          | Format code with Prettier                  |
+| `bun run lint`            | Lint and auto-fix TypeScript files         |
 
 ## API Documentation
 
@@ -381,12 +382,12 @@ The exact path depends on the Swagger setup in `src/main.ts`.
 
 ```text
 onecomm-api/
-├── prisma/
 ├── scripts/
 ├── src/
 │   ├── common/
-│   ├── modules/
-│   └── prisma/
+│   ├── database/
+│   └── modules/
+├── drizzle.config.ts
 ├── package.json
 └── README.md
 ```
@@ -396,4 +397,4 @@ onecomm-api/
 - This project is private.
 - The license is `UNLICENSED`.
 - Review seed scripts before running them in production.
-- Keep Prisma schema and the live database synchronized before testing new module flows.
+- Keep Drizzle schema and the live database synchronized before testing new module flows.

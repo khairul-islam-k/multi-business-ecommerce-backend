@@ -11,11 +11,32 @@ import {
   BusinessMemberStatus,
   BusinessStatus,
   OtpPurpose,
-  SystemUser,
+  type SystemUser,
+  type SystemUserProfile,
   SystemUserStatus,
   SystemUserType,
-} from "@prisma/client";
+  business,
+  businessMember,
+  systemEmailVerification,
+  systemPasswordReset,
+  systemSession,
+  systemUser,
+  systemUserProfile,
+} from "@/database/schema";
 import * as argon2 from "argon2";
+import {
+  and,
+  desc,
+  eq,
+  exists,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import type { CurrentUserPayload } from "./decorators/current-user.decorator";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
@@ -34,15 +55,16 @@ import { VerifyResetOtpDto } from "./dto/verify-reset-email.dto";
 import { OtpPolicy } from "./domain/otp.policy";
 import { SessionService } from "./application/session.service";
 import { TokenService } from "./application/token.service";
-import { PrismaService } from "../../prisma/prisma.service";
 import { BusinessService } from "../business/business.service";
 import { MailService } from "../mail/mail.service";
 import { PackageSubscriptionService } from "../packages/package-subscription.service";
+import { DatabaseService } from "../../database/database.service";
 import { normalizeEmail } from "../../common/text/normalizers";
 import { apiResponse } from "../../common/utils/api-response.util";
 
 type AuthBusiness = {
   id: string;
+  name: string;
   ownerUserId: string;
   members: {
     id: string;
@@ -50,17 +72,16 @@ type AuthBusiness = {
   }[];
 };
 
-const ACCESSIBLE_BUSINESS_STATUSES = [
-  BusinessStatus.TRIAL,
-  BusinessStatus.ACTIVE,
-] satisfies BusinessStatus[];
+type UserWithProfile = SystemUser & {
+  profile: SystemUserProfile | null;
+};
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger("Auth");
 
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly businessService: BusinessService,
     private readonly packageSubscriptions: PackageSubscriptionService,
     private readonly tokens: TokenService,
@@ -69,15 +90,14 @@ export class AuthService {
     private readonly sessions: SessionService,
   ) {}
 
+  private get db() {
+    return this.database.db;
+  }
+
   async register(dto: RegisterDto) {
     const email = normalizeEmail(dto.email);
 
-    const existingUser = await this.prisma.systemUser.findUnique({
-      where: { email },
-      select: {
-        id: true,
-      },
-    });
+    const existingUser = await this.findUserIdByEmail(email);
 
     if (existingUser) {
       throw new ConflictException(
@@ -90,28 +110,27 @@ export class AuthService {
     const passwordHash = await this.hashPassword(dto.password);
     const expiresAt = this.otpPolicy.getExpiresAt();
 
-    const data = await this.prisma.$transaction(async (tx) => {
-      const user = await tx.systemUser.create({
-        data: {
+    const data = await this.db.transaction(async (tx) => {
+      const [user] = await tx
+        .insert(systemUser)
+        .values({
           name: dto.name,
           email,
           passwordHash,
           status: SystemUserStatus.INACTIVE,
           type: SystemUserType.TENANT,
           emailVerifiedAt: null,
-          profile: {
-            create: {},
-          },
-        },
-      });
+        })
+        .returning();
 
-      await tx.systemEmailVerification.create({
-        data: {
-          userId: user.id,
-          otpHash,
-          purpose: OtpPurpose.EMAIL_VERIFICATION,
-          expiresAt,
-        },
+      await tx.insert(systemUserProfile).values({ userId: user.id });
+
+      await tx.insert(systemEmailVerification).values({
+        userId: user.id,
+        otpHash,
+        purpose: OtpPurpose.EMAIL_VERIFICATION,
+        expiresAt,
+        attemptCount: 0,
       });
 
       await this.packageSubscriptions.assignDefaultTrial(user.id, tx);
@@ -151,15 +170,11 @@ export class AuthService {
 
   async verifyEmail(dto: VerifyEmailDto) {
     const email = normalizeEmail(dto.email);
-
-    const user = await this.prisma.systemUser.findUnique({
-      where: { email },
-      select: {
-        id: true,
-        email: true,
-        status: true,
-        emailVerifiedAt: true,
-      },
+    const user = await this.findUserByEmail(email, {
+      id: true,
+      email: true,
+      status: true,
+      emailVerifiedAt: true,
     });
 
     if (!user) {
@@ -175,19 +190,10 @@ export class AuthService {
       );
     }
 
-    const verification = await this.prisma.systemEmailVerification.findFirst({
-      where: {
-        userId: user.id,
-        purpose: OtpPurpose.EMAIL_VERIFICATION,
-        verifiedAt: null,
-        expiresAt: {
-          gt: new Date(),
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
+    const verification = await this.findLatestActiveVerification(
+      user.id,
+      OtpPurpose.EMAIL_VERIFICATION,
+    );
 
     if (!verification) {
       throw new BadRequestException(
@@ -203,42 +209,27 @@ export class AuthService {
     );
 
     if (!isOtpMatched) {
-      await this.prisma.systemEmailVerification.update({
-        where: {
-          id: verification.id,
-        },
-        data: {
-          attemptCount: {
-            increment: 1,
-          },
-        },
-      });
+      await this.incrementEmailVerificationAttempts(verification.id);
 
       throw new BadRequestException(
         "The one-time password is incorrect. Please check the code and try again.",
       );
     }
 
-    await this.prisma.$transaction([
-      this.prisma.systemEmailVerification.update({
-        where: {
-          id: verification.id,
-        },
-        data: {
-          verifiedAt: new Date(),
-        },
-      }),
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(systemEmailVerification)
+        .set({ verifiedAt: new Date() })
+        .where(eq(systemEmailVerification.id, verification.id));
 
-      this.prisma.systemUser.update({
-        where: {
-          id: user.id,
-        },
-        data: {
+      await tx
+        .update(systemUser)
+        .set({
           emailVerifiedAt: new Date(),
           status: SystemUserStatus.ACTIVE,
-        },
-      }),
-    ]);
+        })
+        .where(eq(systemUser.id, user.id));
+    });
 
     return apiResponse(
       { success: "true" },
@@ -248,10 +239,7 @@ export class AuthService {
 
   async requestEmailVerification(dto: RequestEmailChangeOrVerificationDto) {
     const email = normalizeEmail(dto.email);
-
-    const user = await this.prisma.systemUser.findUnique({
-      where: { email },
-    });
+    const user = await this.findUserByEmail(email);
 
     if (!user) {
       throw new BadRequestException(
@@ -262,20 +250,20 @@ export class AuthService {
     const otp = this.otpPolicy.generateOtp();
     const otpHash = await this.hashPassword(otp);
     const expiresAt = this.otpPolicy.getExpiresAt();
-
-    const verification = await this.prisma.systemEmailVerification.create({
-      data: {
+    const [verification] = await this.db
+      .insert(systemEmailVerification)
+      .values({
         userId: user.id,
         otpHash,
         purpose: OtpPurpose.EMAIL_VERIFICATION,
         expiresAt,
-      },
-      select: {
-        id: true,
-        expiresAt: true,
-        createdAt: true,
-      },
-    });
+        attemptCount: 0,
+      })
+      .returning({
+        id: systemEmailVerification.id,
+        expiresAt: systemEmailVerification.expiresAt,
+        createdAt: systemEmailVerification.createdAt,
+      });
 
     void this.mailService
       .sendEmailVerificationOtp(email, otp)
@@ -298,15 +286,9 @@ export class AuthService {
 
   async validateEmail(email: string) {
     const normalizedEmail = normalizeEmail(email);
-
-    const user = await this.prisma.systemUser.findUnique({
-      where: {
-        email: normalizedEmail,
-      },
-      select: {
-        id: true,
-        status: true,
-      },
+    const user = await this.findUserByEmail(normalizedEmail, {
+      id: true,
+      status: true,
     });
 
     return apiResponse(
@@ -322,13 +304,7 @@ export class AuthService {
 
   async login(dto: LoginDto) {
     const email = normalizeEmail(dto.email);
-
-    const user = await this.prisma.systemUser.findUnique({
-      where: { email },
-      include: {
-        profile: true,
-      },
-    });
+    const user = await this.findUserWithProfileByEmail(email);
 
     if (!user) {
       throw new UnauthorizedException("Invalid email or password.");
@@ -373,8 +349,6 @@ export class AuthService {
       );
     }
 
-    // TODO: before removing this line completely, check if everything checks for it or not.
-    // await this.packageSubscriptions.assertTenantSubscriptionActive(user);
     const activeSubscription =
       await this.packageSubscriptions.findCurrentSubscription(
         user.tenantId ?? user.id,
@@ -387,7 +361,6 @@ export class AuthService {
     }
 
     const selectedBusiness = businesses[0];
-
     const tokens = await this.sessions.issueTokenPair({
       sub: user.id,
       type: user.type,
@@ -411,16 +384,9 @@ export class AuthService {
     dto: RequestEmailChangeOrVerificationDto,
   ) {
     const newEmail = normalizeEmail(dto.email);
-
-    const user = await this.prisma.systemUser.findFirst({
-      where: {
-        id: userId,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        email: true,
-      },
+    const user = await this.findActiveUserById(userId, {
+      id: true,
+      email: true,
     });
 
     if (!user) {
@@ -433,17 +399,7 @@ export class AuthService {
       throw new BadRequestException("New email must be different.");
     }
 
-    const existingUser = await this.prisma.systemUser.findFirst({
-      where: {
-        email: newEmail,
-        id: {
-          not: userId,
-        },
-      },
-      select: {
-        id: true,
-      },
-    });
+    const existingUser = await this.findOtherUserByEmail(newEmail, userId);
 
     if (existingUser) {
       throw new ConflictException(
@@ -454,20 +410,20 @@ export class AuthService {
     const otp = this.otpPolicy.generateOtp();
     const otpHash = await this.hashPassword(otp);
     const expiresAt = this.otpPolicy.getExpiresAt();
-
-    const verification = await this.prisma.systemEmailVerification.create({
-      data: {
+    const [verification] = await this.db
+      .insert(systemEmailVerification)
+      .values({
         userId,
         otpHash,
         purpose: OtpPurpose.EMAIL_CHANGE,
         expiresAt,
-      },
-      select: {
-        id: true,
-        expiresAt: true,
-        createdAt: true,
-      },
-    });
+        attemptCount: 0,
+      })
+      .returning({
+        id: systemEmailVerification.id,
+        expiresAt: systemEmailVerification.expiresAt,
+        createdAt: systemEmailVerification.createdAt,
+      });
 
     void this.mailService
       .sendChangeEmailOtpEmail(newEmail, otp)
@@ -490,16 +446,9 @@ export class AuthService {
 
   async verifyEmailChange(userId: string, dto: VerifyChangeEmailDto) {
     const newEmail = normalizeEmail(dto.email);
-
-    const user = await this.prisma.systemUser.findFirst({
-      where: {
-        id: userId,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        email: true,
-      },
+    const user = await this.findActiveUserById(userId, {
+      id: true,
+      email: true,
     });
 
     if (!user) {
@@ -510,17 +459,7 @@ export class AuthService {
       throw new BadRequestException("New email must be different.");
     }
 
-    const existingUser = await this.prisma.systemUser.findFirst({
-      where: {
-        email: newEmail,
-        id: {
-          not: userId,
-        },
-      },
-      select: {
-        id: true,
-      },
-    });
+    const existingUser = await this.findOtherUserByEmail(newEmail, userId);
 
     if (existingUser) {
       throw new ConflictException(
@@ -528,26 +467,10 @@ export class AuthService {
       );
     }
 
-    const verification = await this.prisma.systemEmailVerification.findFirst({
-      where: {
-        userId,
-        purpose: OtpPurpose.EMAIL_CHANGE,
-        verifiedAt: null,
-        expiresAt: {
-          gt: new Date(),
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-      select: {
-        id: true,
-        otpHash: true,
-        expiresAt: true,
-        attemptCount: true,
-        createdAt: true,
-      },
-    });
+    const verification = await this.findLatestActiveVerification(
+      userId,
+      OtpPurpose.EMAIL_CHANGE,
+    );
 
     if (!verification) {
       throw new BadRequestException(
@@ -563,55 +486,36 @@ export class AuthService {
       );
     }
 
-    const updatedUser = await this.prisma.$transaction(async (tx) => {
-      const updated = await tx.systemUser.update({
-        where: {
-          id: userId,
-        },
-        data: {
+    const updatedUser = await this.db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(systemUser)
+        .set({
           email: newEmail,
           emailVerifiedAt: new Date(),
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          phone: true,
-          type: true,
-          status: true,
-          emailVerifiedAt: true,
-          profile: true,
-        },
-      });
+        })
+        .where(eq(systemUser.id, userId))
+        .returning();
 
-      await tx.systemEmailVerification.update({
-        where: {
-          id: verification.id,
-        },
-        data: {
-          verifiedAt: new Date(),
-        },
-      });
+      await tx
+        .update(systemEmailVerification)
+        .set({ verifiedAt: new Date() })
+        .where(eq(systemEmailVerification.id, verification.id));
 
-      return updated;
+      return this.attachProfile(updated);
     });
 
     return apiResponse(
-      updatedUser,
+      this.pickUserWithProfile(updatedUser),
       "Your email address has been updated successfully and is now verified for this account.",
     );
   }
 
   async requestForgotPasswordOtp(dto: ForgotPasswordDto) {
     const email = normalizeEmail(dto.email);
-
-    const user = await this.prisma.systemUser.findUnique({
-      where: { email },
-      select: {
-        id: true,
-        email: true,
-        status: true,
-      },
+    const user = await this.findUserByEmail(email, {
+      id: true,
+      email: true,
+      status: true,
     });
 
     if (!user) {
@@ -626,12 +530,11 @@ export class AuthService {
     const otpHash = await this.hashPassword(otp);
     const expiresAt = this.otpPolicy.getExpiresAt();
 
-    await this.prisma.systemPasswordReset.create({
-      data: {
-        userId: user.id,
-        otpHash,
-        expiresAt,
-      },
+    await this.db.insert(systemPasswordReset).values({
+      userId: user.id,
+      otpHash,
+      expiresAt,
+      attemptCount: 0,
     });
 
     void this.mailService
@@ -651,14 +554,10 @@ export class AuthService {
 
   async resetForgotPassword(dto: ResetForgotPasswordDto) {
     const email = normalizeEmail(dto.email);
-
-    const user = await this.prisma.systemUser.findUnique({
-      where: { email },
-      select: {
-        id: true,
-        passwordHash: true,
-        status: true,
-      },
+    const user = await this.findUserByEmail(email, {
+      id: true,
+      passwordHash: true,
+      status: true,
     });
 
     if (!user) {
@@ -669,19 +568,19 @@ export class AuthService {
 
     this.assertActiveUser(user);
 
-    const verification = await this.prisma.systemEmailVerification.findFirst({
-      where: {
-        id: dto.verificationId,
-        userId: user.id,
-        purpose: OtpPurpose.PASSWORD_RESET,
-        verifiedAt: {
-          not: null,
-        },
-        expiresAt: {
-          gt: new Date(),
-        },
-      },
-    });
+    const [verification] = await this.db
+      .select()
+      .from(systemEmailVerification)
+      .where(
+        and(
+          eq(systemEmailVerification.id, dto.verificationId),
+          eq(systemEmailVerification.userId, user.id),
+          eq(systemEmailVerification.purpose, OtpPurpose.PASSWORD_RESET),
+          isNotNull(systemEmailVerification.verifiedAt),
+          gt(systemEmailVerification.expiresAt, new Date()),
+        ),
+      )
+      .limit(1);
 
     if (!verification) {
       throw new BadRequestException(
@@ -689,19 +588,19 @@ export class AuthService {
       );
     }
 
-    const resetRecord = await this.prisma.systemPasswordReset.findFirst({
-      where: {
-        userId: user.id,
-        otpHash: verification.otpHash,
-        usedAt: null,
-        expiresAt: {
-          gt: new Date(),
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
+    const [resetRecord] = await this.db
+      .select()
+      .from(systemPasswordReset)
+      .where(
+        and(
+          eq(systemPasswordReset.userId, user.id),
+          eq(systemPasswordReset.otpHash, verification.otpHash),
+          isNull(systemPasswordReset.usedAt),
+          gt(systemPasswordReset.expiresAt, new Date()),
+        ),
+      )
+      .orderBy(desc(systemPasswordReset.createdAt))
+      .limit(1);
 
     if (!resetRecord) {
       throw new BadRequestException(
@@ -722,35 +621,27 @@ export class AuthService {
 
     const passwordHash = await this.hashPassword(dto.password);
 
-    await this.prisma.$transaction([
-      this.prisma.systemUser.update({
-        where: {
-          id: user.id,
-        },
-        data: {
-          passwordHash,
-        },
-      }),
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(systemUser)
+        .set({ passwordHash })
+        .where(eq(systemUser.id, user.id));
 
-      this.prisma.systemPasswordReset.update({
-        where: {
-          id: resetRecord.id,
-        },
-        data: {
-          usedAt: new Date(),
-        },
-      }),
+      await tx
+        .update(systemPasswordReset)
+        .set({ usedAt: new Date() })
+        .where(eq(systemPasswordReset.id, resetRecord.id));
 
-      this.prisma.systemSession.updateMany({
-        where: {
-          userId: user.id,
-          revokedAt: null,
-        },
-        data: {
-          revokedAt: new Date(),
-        },
-      }),
-    ]);
+      await tx
+        .update(systemSession)
+        .set({ revokedAt: new Date() })
+        .where(
+          and(
+            eq(systemSession.userId, user.id),
+            isNull(systemSession.revokedAt),
+          ),
+        );
+    });
 
     return apiResponse(
       { success: true },
@@ -760,13 +651,9 @@ export class AuthService {
 
   async verifyResetPassword(dto: VerifyResetOtpDto) {
     const email = normalizeEmail(dto.email);
-
-    const user = await this.prisma.systemUser.findUnique({
-      where: { email },
-      select: {
-        id: true,
-        status: true,
-      },
+    const user = await this.findUserByEmail(email, {
+      id: true,
+      status: true,
     });
 
     if (!user) {
@@ -777,18 +664,18 @@ export class AuthService {
 
     this.assertActiveUser(user);
 
-    const resetRecord = await this.prisma.systemPasswordReset.findFirst({
-      where: {
-        userId: user.id,
-        usedAt: null,
-        expiresAt: {
-          gt: new Date(),
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
+    const [resetRecord] = await this.db
+      .select()
+      .from(systemPasswordReset)
+      .where(
+        and(
+          eq(systemPasswordReset.userId, user.id),
+          isNull(systemPasswordReset.usedAt),
+          gt(systemPasswordReset.expiresAt, new Date()),
+        ),
+      )
+      .orderBy(desc(systemPasswordReset.createdAt))
+      .limit(1);
 
     if (!resetRecord) {
       throw new BadRequestException(
@@ -807,34 +694,27 @@ export class AuthService {
     );
 
     if (!isOtpMatched) {
-      await this.prisma.systemPasswordReset.update({
-        where: {
-          id: resetRecord.id,
-        },
-        data: {
-          attemptCount: {
-            increment: 1,
-          },
-        },
-      });
+      await this.db
+        .update(systemPasswordReset)
+        .set({ attemptCount: sql`${systemPasswordReset.attemptCount} + 1` })
+        .where(eq(systemPasswordReset.id, resetRecord.id));
 
       throw new BadRequestException(
         "The one-time password is incorrect. Please check the code and try again.",
       );
     }
 
-    const verification = await this.prisma.systemEmailVerification.create({
-      data: {
+    const [verification] = await this.db
+      .insert(systemEmailVerification)
+      .values({
         userId: user.id,
         otpHash: resetRecord.otpHash,
         purpose: OtpPurpose.PASSWORD_RESET,
         expiresAt: resetRecord.expiresAt,
+        attemptCount: 0,
         verifiedAt: new Date(),
-      },
-      select: {
-        id: true,
-      },
-    });
+      })
+      .returning({ id: systemEmailVerification.id });
 
     return apiResponse(
       {
@@ -851,15 +731,10 @@ export class AuthService {
       );
     }
 
-    const existingUser = await this.prisma.systemUser.findUnique({
-      where: {
-        id: user.id,
-      },
-      select: {
-        id: true,
-        passwordHash: true,
-        status: true,
-      },
+    const existingUser = await this.findUserById(user.id, {
+      id: true,
+      passwordHash: true,
+      status: true,
     });
 
     if (!existingUser) {
@@ -878,28 +753,21 @@ export class AuthService {
     }
 
     const newPasswordHash = await this.hashPassword(dto.newPassword);
-
-    const updatedUser = await this.prisma.systemUser.update({
-      where: {
-        id: existingUser.id,
-      },
-      data: {
-        passwordHash: newPasswordHash,
-      },
-      omit: {
-        passwordHash: true,
-      },
-    });
+    const [updatedUser] = await this.db
+      .update(systemUser)
+      .set({ passwordHash: newPasswordHash })
+      .where(eq(systemUser.id, existingUser.id))
+      .returning();
+    const { passwordHash: _, ...safeUser } = updatedUser;
 
     return apiResponse(
-      updatedUser,
+      safeUser,
       "Your password has been changed successfully. Please use the new password the next time you sign in.",
     );
   }
 
   async refresh(dto: RefreshTokenDto) {
     const now = new Date();
-
     const session = await this.sessions.findByRefreshToken(dto.refreshToken);
 
     if (!session) {
@@ -930,28 +798,23 @@ export class AuthService {
     await this.packageSubscriptions.assertTenantSubscriptionActive(user);
 
     const requestedBusinessId = dto.businessId ?? session.businessId;
-
     const selectedBusiness = await this.resolveSelectedBusiness(
       user.id,
       user.type,
       requestedBusinessId,
     );
-
     const tokenBusinessId = selectedBusiness?.id ?? null;
-
     const accessToken = await this.tokens.generateAccessToken({
       sub: user.id,
       type: user.type,
       businessId: tokenBusinessId,
     });
-
     const newRefreshToken = await this.sessions.rotateRefreshSession({
       sessionId: session.id,
       userId: user.id,
       businessId: tokenBusinessId,
       revokedAt: now,
     });
-
     const { passwordHash, ...safeUser } = user;
 
     return apiResponse(
@@ -966,14 +829,7 @@ export class AuthService {
   }
 
   async selectBusiness(userId: string, dto: SelectBusinessDto) {
-    const user = await this.prisma.systemUser.findUnique({
-      where: {
-        id: userId,
-      },
-      omit: {
-        passwordHash: true,
-      },
-    });
+    const user = await this.findUserById(userId);
 
     if (!user) {
       throw new UnauthorizedException("Invalid authenticated user");
@@ -1000,25 +856,20 @@ export class AuthService {
       business.id,
     );
 
+    const { passwordHash: _, ...safeUser } = user;
+
     return apiResponse(
       {
         accessToken,
         selectedBusiness: business,
-        user,
+        user: safeUser,
       },
       "The selected business is now active for your session. Future requests will use this business context.",
     );
   }
 
   async getUser(currentUserPayload: CurrentUserPayload) {
-    const user = await this.prisma.systemUser.findUnique({
-      where: {
-        id: currentUserPayload.id,
-      },
-      include: {
-        profile: true,
-      },
-    });
+    const user = await this.findUserWithProfileById(currentUserPayload.id);
 
     if (!user) {
       throw new NotFoundException("User with the given id does not exist.");
@@ -1039,7 +890,6 @@ export class AuthService {
     }
 
     const businesses = await this.findAccessibleBusinesses(user.id);
-
     const activeSubscription =
       await this.packageSubscriptions.findCurrentSubscription(
         user.tenantId ?? user.id,
@@ -1076,34 +926,24 @@ export class AuthService {
   }
 
   async updateUser(userId: string, dto: UpdateUserDto) {
-    const user = await this.prisma.systemUser.findFirst({
-      where: {
-        id: userId,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        profile: true,
-      },
-    });
+    const user = await this.findActiveUserWithProfileById(userId);
 
     if (!user) {
       throw new UnauthorizedException("Unauthorized access.");
     }
 
     if (dto.phone) {
-      const phoneExists = await this.prisma.systemUser.findFirst({
-        where: {
-          phone: dto.phone,
-          deletedAt: null,
-          id: {
-            not: userId,
-          },
-        },
-        select: {
-          id: true,
-        },
-      });
+      const [phoneExists] = await this.db
+        .select({ id: systemUser.id })
+        .from(systemUser)
+        .where(
+          and(
+            eq(systemUser.phone, dto.phone),
+            isNull(systemUser.deletedAt),
+            ne(systemUser.id, userId),
+          ),
+        )
+        .limit(1);
 
       if (phoneExists) {
         throw new ConflictException(
@@ -1112,38 +952,37 @@ export class AuthService {
       }
     }
 
-    const updatedUser = await this.prisma.systemUser.update({
-      where: {
-        id: userId,
-      },
-      data: {
-        name: dto.name,
-        phone: dto.phone,
+    const updatedUser = await this.db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(systemUser)
+        .set({
+          name: dto.name,
+          phone: dto.phone,
+        })
+        .where(eq(systemUser.id, userId))
+        .returning();
 
-        profile: dto.profile
-          ? {
-              update: {
-                ...dto.profile,
-                dateOfBirth: dto.profile.dateOfBirth
-                  ? new Date(dto.profile.dateOfBirth)
-                  : undefined,
-              },
-            }
-          : undefined,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        type: true,
-        status: true,
-        profile: true,
-      },
+      if (dto.profile) {
+        if (!user.profile) {
+          throw new NotFoundException("User profile not found");
+        }
+
+        await tx
+          .update(systemUserProfile)
+          .set({
+            ...dto.profile,
+            dateOfBirth: dto.profile.dateOfBirth
+              ? new Date(dto.profile.dateOfBirth)
+              : undefined,
+          })
+          .where(eq(systemUserProfile.userId, userId));
+      }
+
+      return this.attachProfile(updated);
     });
 
     return apiResponse(
-      updatedUser,
+      this.pickUserWithProfile(updatedUser),
       "Your profile has been updated successfully. The latest saved profile information is included in this response.",
     );
   }
@@ -1201,76 +1040,213 @@ export class AuthService {
     userId: string,
     businessId: string,
   ): Promise<AuthBusiness | null> {
-    return this.prisma.business.findFirst({
-      where: {
-        id: businessId,
-        deletedAt: null,
-        status: {
-          in: ACCESSIBLE_BUSINESS_STATUSES,
-        },
-        OR: [
-          {
-            ownerUserId: userId,
-          },
-          {
-            members: {
-              some: {
-                userId,
-                status: BusinessMemberStatus.ACTIVE,
-                deletedAt: null,
-              },
-            },
-          },
-        ],
-      },
-      select: this.getBusinessSelect(userId),
-    });
+    const [item] = await this.db
+      .select({
+        id: business.id,
+        name: business.name,
+        ownerUserId: business.ownerUserId,
+      })
+      .from(business)
+      .where(
+        and(
+          eq(business.id, businessId),
+          this.accessibleBusinessCondition(userId),
+        ),
+      )
+      .limit(1);
+
+    return item ? this.attachBusinessMembers(userId, item) : null;
   }
 
   private async findAccessibleBusinesses(
     userId: string,
   ): Promise<AuthBusiness[]> {
-    return this.prisma.business.findMany({
-      where: {
-        deletedAt: null,
-        status: {
-          in: ACCESSIBLE_BUSINESS_STATUSES,
-        },
-        OR: [
-          {
-            ownerUserId: userId,
-          },
-          {
-            members: {
-              some: {
-                userId,
-                status: BusinessMemberStatus.ACTIVE,
-                deletedAt: null,
-              },
-            },
-          },
-        ],
-      },
-      select: this.getBusinessSelect(userId),
-      orderBy: {
-        id: "asc",
-      },
-    });
+    const items = await this.db
+      .select({
+        id: business.id,
+        name: business.name,
+        ownerUserId: business.ownerUserId,
+      })
+      .from(business)
+      .where(this.accessibleBusinessCondition(userId))
+      .orderBy(business.id);
+
+    return Promise.all(
+      items.map((item) => this.attachBusinessMembers(userId, item)),
+    );
   }
 
-  private getBusinessSelect(userId: string) {
+  private accessibleBusinessCondition(userId: string) {
+    return and(
+      isNull(business.deletedAt),
+      eq(business.status, BusinessStatus.ACTIVE),
+      or(
+        eq(business.ownerUserId, userId),
+        exists(
+          this.db
+            .select({ id: businessMember.id })
+            .from(businessMember)
+            .where(
+              and(
+                eq(businessMember.businessId, business.id),
+                eq(businessMember.userId, userId),
+                eq(businessMember.status, BusinessMemberStatus.ACTIVE),
+                isNull(businessMember.deletedAt),
+              ),
+            ),
+        ),
+      ),
+    );
+  }
+
+  private async attachBusinessMembers(
+    userId: string,
+    item: Pick<AuthBusiness, "id" | "name" | "ownerUserId">,
+  ): Promise<AuthBusiness> {
+    const members = await this.db
+      .select({
+        id: businessMember.id,
+        userId: businessMember.userId,
+      })
+      .from(businessMember)
+      .where(
+        and(
+          eq(businessMember.businessId, item.id),
+          eq(businessMember.userId, userId),
+          eq(businessMember.status, BusinessMemberStatus.ACTIVE),
+          isNull(businessMember.deletedAt),
+        ),
+      );
+
     return {
-      id: true,
-      name: true,
-      ownerUserId: true,
-      members: {
-        where: {
-          userId,
-          status: BusinessMemberStatus.ACTIVE,
-          deletedAt: null,
-        },
-      },
-    } as const;
+      ...item,
+      members,
+    };
+  }
+
+  private async findUserIdByEmail(email: string) {
+    return this.db
+      .select({ id: systemUser.id })
+      .from(systemUser)
+      .where(eq(systemUser.email, email))
+      .limit(1)
+      .then(([user]) => user ?? null);
+  }
+
+  private async findUserByEmail<
+    T extends Partial<Record<keyof SystemUser, true>>,
+  >(email: string, _select?: T) {
+    return this.db
+      .select()
+      .from(systemUser)
+      .where(eq(systemUser.email, email))
+      .limit(1)
+      .then(([user]) => user ?? null);
+  }
+
+  private async findUserById<T extends Partial<Record<keyof SystemUser, true>>>(
+    userId: string,
+    _select?: T,
+  ) {
+    return this.db
+      .select()
+      .from(systemUser)
+      .where(eq(systemUser.id, userId))
+      .limit(1)
+      .then(([user]) => user ?? null);
+  }
+
+  private async findActiveUserById<
+    T extends Partial<Record<keyof SystemUser, true>>,
+  >(userId: string, _select?: T) {
+    return this.db
+      .select()
+      .from(systemUser)
+      .where(and(eq(systemUser.id, userId), isNull(systemUser.deletedAt)))
+      .limit(1)
+      .then(([user]) => user ?? null);
+  }
+
+  private async findOtherUserByEmail(email: string, userId: string) {
+    return this.db
+      .select({ id: systemUser.id })
+      .from(systemUser)
+      .where(and(eq(systemUser.email, email), ne(systemUser.id, userId)))
+      .limit(1)
+      .then(([user]) => user ?? null);
+  }
+
+  private async findUserWithProfileByEmail(email: string) {
+    const user = await this.findUserByEmail(email);
+
+    return user ? this.attachProfile(user) : null;
+  }
+
+  private async findUserWithProfileById(userId: string) {
+    const user = await this.findUserById(userId);
+
+    return user ? this.attachProfile(user) : null;
+  }
+
+  private async findActiveUserWithProfileById(userId: string) {
+    const user = await this.findActiveUserById(userId);
+
+    return user ? this.attachProfile(user) : null;
+  }
+
+  private async attachProfile(user: SystemUser): Promise<UserWithProfile> {
+    const [profile] = await this.db
+      .select()
+      .from(systemUserProfile)
+      .where(eq(systemUserProfile.userId, user.id))
+      .limit(1);
+
+    return {
+      ...user,
+      profile: profile ?? null,
+    };
+  }
+
+  private pickUserWithProfile(user: UserWithProfile) {
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      type: user.type,
+      status: user.status,
+      emailVerifiedAt: user.emailVerifiedAt,
+      profile: user.profile,
+    };
+  }
+
+  private async findLatestActiveVerification(
+    userId: string,
+    purpose: OtpPurpose,
+  ) {
+    return this.db
+      .select()
+      .from(systemEmailVerification)
+      .where(
+        and(
+          eq(systemEmailVerification.userId, userId),
+          eq(systemEmailVerification.purpose, purpose),
+          isNull(systemEmailVerification.verifiedAt),
+          gt(systemEmailVerification.expiresAt, new Date()),
+        ),
+      )
+      .orderBy(desc(systemEmailVerification.createdAt))
+      .limit(1)
+      .then(([verification]) => verification ?? null);
+  }
+
+  private incrementEmailVerificationAttempts(verificationId: string) {
+    return this.db
+      .update(systemEmailVerification)
+      .set({
+        attemptCount: sql`${systemEmailVerification.attemptCount} + 1`,
+      })
+      .where(eq(systemEmailVerification.id, verificationId));
   }
 
   private assertActiveUser(user: Pick<SystemUser, "status">) {

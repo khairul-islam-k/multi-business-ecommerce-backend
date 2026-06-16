@@ -1,0 +1,630 @@
+import {
+  boolean,
+  index,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+  varchar,
+  type AnyPgColumn,
+} from "drizzle-orm/pg-core";
+import Decimal from "decimal.js";
+
+import { decimal, type JsonValue } from "./common";
+import { financeAccount, financeTax } from "./finance";
+
+export const OrderCustomerStatus = {
+  ACTIVE: "ACTIVE",
+  INACTIVE: "INACTIVE",
+  BLOCKED: "BLOCKED",
+} as const;
+export type OrderCustomerStatus =
+  (typeof OrderCustomerStatus)[keyof typeof OrderCustomerStatus];
+export const orderCustomerStatusEnum = pgEnum("OrderCustomerStatus", [
+  "ACTIVE",
+  "INACTIVE",
+  "BLOCKED",
+]);
+
+export const OrderAddressType = {
+  HOME: "HOME",
+  OFFICE: "OFFICE",
+  SHIPPING: "SHIPPING",
+  BILLING: "BILLING",
+  OTHER: "OTHER",
+} as const;
+export type OrderAddressType =
+  (typeof OrderAddressType)[keyof typeof OrderAddressType];
+export const orderAddressTypeEnum = pgEnum("OrderAddressType", [
+  "HOME",
+  "OFFICE",
+  "SHIPPING",
+  "BILLING",
+  "OTHER",
+]);
+
+export const OrderCartStatus = {
+  ACTIVE: "ACTIVE",
+  ORDERED: "ORDERED",
+  ABANDONED: "ABANDONED",
+  EXPIRED: "EXPIRED",
+} as const;
+export type OrderCartStatus =
+  (typeof OrderCartStatus)[keyof typeof OrderCartStatus];
+export const orderCartStatusEnum = pgEnum("OrderCartStatus", [
+  "ACTIVE",
+  "ORDERED",
+  "ABANDONED",
+  "EXPIRED",
+]);
+
+export const OrderType = {
+  ONLINE: "ONLINE",
+  POS: "POS",
+  ADMIN: "ADMIN",
+} as const;
+export type OrderType = (typeof OrderType)[keyof typeof OrderType];
+export const orderTypeEnum = pgEnum("OrderType", ["ONLINE", "POS", "ADMIN"]);
+
+export const OrderSource = {
+  WEBSITE: "WEBSITE",
+  POS: "POS",
+  ADMIN_PANEL: "ADMIN_PANEL",
+  MOBILE_APP: "MOBILE_APP",
+} as const;
+export type OrderSource = (typeof OrderSource)[keyof typeof OrderSource];
+export const orderSourceEnum = pgEnum("OrderSource", [
+  "WEBSITE",
+  "POS",
+  "ADMIN_PANEL",
+  "MOBILE_APP",
+]);
+
+export const OrderStatus = {
+  PENDING: "PENDING",
+  CONFIRMED: "CONFIRMED",
+  PROCESSING: "PROCESSING",
+  SHIPPED: "SHIPPED",
+  DELIVERED: "DELIVERED",
+  CANCELLED: "CANCELLED",
+  RETURNED: "RETURNED",
+} as const;
+export type OrderStatus = (typeof OrderStatus)[keyof typeof OrderStatus];
+export const orderStatusEnum = pgEnum("OrderStatus", [
+  "PENDING",
+  "CONFIRMED",
+  "PROCESSING",
+  "SHIPPED",
+  "DELIVERED",
+  "CANCELLED",
+  "RETURNED",
+]);
+
+export const OrderPaymentStatus = {
+  UNPAID: "UNPAID",
+  PARTIALLY_PAID: "PARTIALLY_PAID",
+  PAID: "PAID",
+  FAILED: "FAILED",
+  REFUNDED: "REFUNDED",
+  PARTIALLY_REFUNDED: "PARTIALLY_REFUNDED",
+} as const;
+export type OrderPaymentStatus =
+  (typeof OrderPaymentStatus)[keyof typeof OrderPaymentStatus];
+export const orderPaymentStatusEnum = pgEnum("OrderPaymentStatus", [
+  "UNPAID",
+  "PARTIALLY_PAID",
+  "PAID",
+  "FAILED",
+  "REFUNDED",
+  "PARTIALLY_REFUNDED",
+]);
+
+export const OrderDiscountType = {
+  FIXED: "FIXED",
+  PERCENTAGE: "PERCENTAGE",
+} as const;
+export type OrderDiscountType =
+  (typeof OrderDiscountType)[keyof typeof OrderDiscountType];
+export const orderDiscountTypeEnum = pgEnum("OrderDiscountType", [
+  "FIXED",
+  "PERCENTAGE",
+]);
+
+export const OrderDiscountSource = {
+  MANUAL: "MANUAL",
+  COUPON: "COUPON",
+  PROMOTION: "PROMOTION",
+} as const;
+export type OrderDiscountSource =
+  (typeof OrderDiscountSource)[keyof typeof OrderDiscountSource];
+export const orderDiscountSourceEnum = pgEnum("OrderDiscountSource", [
+  "MANUAL",
+  "COUPON",
+  "PROMOTION",
+]);
+
+export const OrderPaymentMethod = {
+  CASH: "CASH",
+  COD: "COD",
+  BKASH: "BKASH",
+  NAGAD: "NAGAD",
+  CARD: "CARD",
+  BANK_TRANSFER: "BANK_TRANSFER",
+  OTHER: "OTHER",
+} as const;
+export type OrderPaymentMethod =
+  (typeof OrderPaymentMethod)[keyof typeof OrderPaymentMethod];
+export const orderPaymentMethodEnum = pgEnum("OrderPaymentMethod", [
+  "CASH",
+  "COD",
+  "BKASH",
+  "NAGAD",
+  "CARD",
+  "BANK_TRANSFER",
+  "OTHER",
+]);
+
+export const OrderReturnStatus = {
+  REQUESTED: "REQUESTED",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+  COMPLETED: "COMPLETED",
+  CANCELLED: "CANCELLED",
+} as const;
+export type OrderReturnStatus =
+  (typeof OrderReturnStatus)[keyof typeof OrderReturnStatus];
+export const orderReturnStatusEnum = pgEnum("OrderReturnStatus", [
+  "REQUESTED",
+  "APPROVED",
+  "REJECTED",
+  "COMPLETED",
+  "CANCELLED",
+]);
+
+export const OrderRefundMethod = {
+  CASH: "CASH",
+  BKASH: "BKASH",
+  NAGAD: "NAGAD",
+  CARD: "CARD",
+  BANK_TRANSFER: "BANK_TRANSFER",
+  OTHER: "OTHER",
+} as const;
+export type OrderRefundMethod =
+  (typeof OrderRefundMethod)[keyof typeof OrderRefundMethod];
+export const orderRefundMethodEnum = pgEnum("OrderRefundMethod", [
+  "CASH",
+  "BKASH",
+  "NAGAD",
+  "CARD",
+  "BANK_TRANSFER",
+  "OTHER",
+]);
+
+export const OrderRefundStatus = {
+  PENDING: "PENDING",
+  PROCESSING: "PROCESSING",
+  COMPLETED: "COMPLETED",
+  FAILED: "FAILED",
+  CANCELLED: "CANCELLED",
+} as const;
+export type OrderRefundStatus =
+  (typeof OrderRefundStatus)[keyof typeof OrderRefundStatus];
+export const orderRefundStatusEnum = pgEnum("OrderRefundStatus", [
+  "PENDING",
+  "PROCESSING",
+  "COMPLETED",
+  "FAILED",
+  "CANCELLED",
+]);
+
+export const orderCustomer = pgTable(
+  "order_customers",
+  {
+    id: uuid().primaryKey().defaultRandom().notNull(),
+    businessId: uuid("business_id").notNull(),
+    name: varchar({ length: 150 }).notNull(),
+    email: varchar({ length: 150 }),
+    phone: varchar({ length: 30 }),
+    status: orderCustomerStatusEnum().notNull(),
+    note: text(),
+    createdBy: uuid("created_by"),
+    updatedBy: uuid("updated_by"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),
+  },
+  (table) => [
+    index("order_customers_business_id_idx").on(table.businessId),
+    index("order_customers_phone_idx").on(table.phone),
+    index("order_customers_email_idx").on(table.email),
+    index("order_customers_status_idx").on(table.status),
+  ],
+);
+export type OrderCustomer = typeof orderCustomer.$inferSelect;
+export type NewOrderCustomer = typeof orderCustomer.$inferInsert;
+
+export const orderCustomerAddress = pgTable(
+  "order_customer_addresses",
+  {
+    id: uuid().primaryKey().defaultRandom().notNull(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references((): AnyPgColumn => orderCustomer.id, { onDelete: "cascade" }),
+    addressType: orderAddressTypeEnum("address_type").notNull(),
+    name: varchar({ length: 150 }),
+    address: text().notNull(),
+    city: varchar({ length: 100 }),
+    country: varchar({ length: 100 }),
+    isDefault: boolean("is_default").notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),
+  },
+  (table) => [
+    index("order_customer_addresses_customer_id_idx").on(table.customerId),
+    index("order_customer_addresses_address_type_idx").on(table.addressType),
+    index("order_customer_addresses_is_default_idx").on(table.isDefault),
+  ],
+);
+export type OrderCustomerAddress = typeof orderCustomerAddress.$inferSelect;
+export type NewOrderCustomerAddress = typeof orderCustomerAddress.$inferInsert;
+
+export const orderCart = pgTable(
+  "order_carts",
+  {
+    id: uuid().primaryKey().defaultRandom().notNull(),
+    businessId: uuid("business_id").notNull(),
+    customerId: uuid("customer_id").references(
+      (): AnyPgColumn => orderCustomer.id,
+      { onDelete: "set null" },
+    ),
+    sessionId: varchar("session_id", { length: 150 }),
+    status: orderCartStatusEnum().notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+    expiresAt: timestamp("expires_at", { mode: "date" }),
+  },
+  (table) => [
+    index("order_carts_business_id_idx").on(table.businessId),
+    index("order_carts_customer_id_idx").on(table.customerId),
+    index("order_carts_session_id_idx").on(table.sessionId),
+    index("order_carts_status_idx").on(table.status),
+  ],
+);
+export type OrderCart = typeof orderCart.$inferSelect;
+export type NewOrderCart = typeof orderCart.$inferInsert;
+
+export const orderCartItem = pgTable(
+  "order_cart_items",
+  {
+    id: uuid().primaryKey().defaultRandom().notNull(),
+    cartId: uuid("cart_id")
+      .notNull()
+      .references((): AnyPgColumn => orderCart.id, { onDelete: "cascade" }),
+    productId: uuid("product_id").notNull(),
+    variantId: uuid("variant_id"),
+    quantity: decimal({ precision: 14, scale: 3 }).notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("order_cart_items_cart_id_idx").on(table.cartId),
+    index("order_cart_items_product_id_idx").on(table.productId),
+    index("order_cart_items_variant_id_idx").on(table.variantId),
+  ],
+);
+export type OrderCartItem = typeof orderCartItem.$inferSelect;
+export type NewOrderCartItem = typeof orderCartItem.$inferInsert;
+
+export const orderOrder = pgTable(
+  "orders",
+  {
+    id: uuid().primaryKey().defaultRandom().notNull(),
+    businessId: uuid("business_id").notNull(),
+    customerId: uuid("customer_id").references(
+      (): AnyPgColumn => orderCustomer.id,
+      { onDelete: "set null" },
+    ),
+    warehouseId: uuid("warehouse_id"),
+    taxId: uuid("tax_id")
+      .notNull()
+      .references((): AnyPgColumn => financeTax.id, { onDelete: "restrict" }),
+    orderNo: varchar("order_no", { length: 100 }).notNull(),
+    orderType: orderTypeEnum("order_type").notNull(),
+    orderSource: orderSourceEnum("order_source").notNull(),
+    status: orderStatusEnum().notNull(),
+    paymentStatus: orderPaymentStatusEnum("payment_status").notNull(),
+    customerName: varchar("customer_name", { length: 150 }),
+    customerPhone: varchar("customer_phone", { length: 30 }),
+    customerEmail: varchar("customer_email", { length: 150 }),
+    shippingAddressSnapshot: jsonb(
+      "shipping_address_snapshot",
+    ).$type<JsonValue>(),
+    subtotal: decimal({ precision: 12, scale: 2 }).notNull(),
+    discountTotal: decimal("discount_total", {
+      precision: 12,
+      scale: 2,
+    }).notNull(),
+    taxTotal: decimal("tax_total", { precision: 12, scale: 2 }).notNull(),
+    taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
+    shippingCharge: decimal("shipping_charge", {
+      precision: 12,
+      scale: 2,
+    }).notNull(),
+    totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull(),
+    paidAmount: decimal("paid_amount", { precision: 12, scale: 2 }).notNull(),
+    note: text(),
+    createdBy: uuid("created_by"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),
+  },
+  (table) => [
+    uniqueIndex("order_orders_business_id_order_no_unique").on(
+      table.businessId,
+      table.orderNo,
+    ),
+    index("order_orders_business_id_idx").on(table.businessId),
+    index("order_orders_customer_id_idx").on(table.customerId),
+    index("order_orders_warehouse_id_idx").on(table.warehouseId),
+    index("order_orders_tax_id_idx").on(table.taxId),
+    index("order_orders_status_idx").on(table.status),
+    index("order_orders_payment_status_idx").on(table.paymentStatus),
+    index("order_orders_created_at_idx").on(table.createdAt),
+  ],
+);
+export type OrderOrder = typeof orderOrder.$inferSelect;
+export type NewOrderOrder = typeof orderOrder.$inferInsert;
+
+export const orderOrderItem = pgTable(
+  "order_order_items",
+  {
+    id: uuid().primaryKey().defaultRandom().notNull(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references((): AnyPgColumn => orderOrder.id, { onDelete: "cascade" }),
+    productId: uuid("product_id").notNull(),
+    variantId: uuid("variant_id"),
+    quantity: decimal({ precision: 14, scale: 3 }).notNull(),
+    unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
+    discountAmount: decimal("discount_amount", {
+      precision: 12,
+      scale: 2,
+    }).notNull(),
+    taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).notNull(),
+    lineTotal: decimal("line_total", { precision: 12, scale: 2 }).notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("order_order_items_order_id_idx").on(table.orderId),
+    index("order_order_items_product_id_idx").on(table.productId),
+    index("order_order_items_variant_id_idx").on(table.variantId),
+  ],
+);
+export type OrderOrderItem = typeof orderOrderItem.$inferSelect;
+export type NewOrderOrderItem = typeof orderOrderItem.$inferInsert;
+
+export const orderStatusLog = pgTable(
+  "order_status_logs",
+  {
+    id: uuid().primaryKey().defaultRandom().notNull(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references((): AnyPgColumn => orderOrder.id, { onDelete: "cascade" }),
+    fromStatus: orderStatusEnum("from_status"),
+    toStatus: orderStatusEnum("to_status").notNull(),
+    note: text(),
+    changedBy: uuid("changed_by"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("order_status_logs_order_id_idx").on(table.orderId),
+    index("order_status_logs_to_status_idx").on(table.toStatus),
+    index("order_status_logs_created_at_idx").on(table.createdAt),
+  ],
+);
+export type OrderStatusLog = typeof orderStatusLog.$inferSelect;
+export type NewOrderStatusLog = typeof orderStatusLog.$inferInsert;
+
+export const orderDiscount = pgTable(
+  "order_discounts",
+  {
+    id: uuid().primaryKey().defaultRandom().notNull(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references((): AnyPgColumn => orderOrder.id, { onDelete: "cascade" }),
+    discountType: orderDiscountTypeEnum("discount_type").notNull(),
+    discountSource: orderDiscountSourceEnum("discount_source").notNull(),
+    code: varchar({ length: 100 }),
+    amount: decimal({ precision: 12, scale: 2 }).notNull(),
+    note: text(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("order_discounts_order_id_idx").on(table.orderId),
+    index("order_discounts_code_idx").on(table.code),
+  ],
+);
+export type OrderDiscount = typeof orderDiscount.$inferSelect;
+export type NewOrderDiscount = typeof orderDiscount.$inferInsert;
+
+export const orderPayment = pgTable(
+  "order_payments",
+  {
+    id: uuid().primaryKey().defaultRandom().notNull(),
+    businessId: uuid("business_id").notNull(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references((): AnyPgColumn => orderOrder.id, { onDelete: "cascade" }),
+    financeAccountId: uuid("finance_account_id").references(
+      (): AnyPgColumn => financeAccount.id,
+      { onDelete: "restrict" },
+    ),
+    paymentNo: varchar("payment_no", { length: 100 }).notNull(),
+    amount: decimal({ precision: 12, scale: 2 }).notNull(),
+    paymentMethod: orderPaymentMethodEnum("payment_method").notNull(),
+    paymentStatus: orderPaymentStatusEnum("payment_status")
+      .default("UNPAID")
+      .notNull(),
+    transactionReference: varchar("transaction_reference", { length: 150 }),
+    paidAt: timestamp("paid_at", { mode: "date" }),
+    createdBy: uuid("created_by"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("order_payments_business_id_payment_no_unique").on(
+      table.businessId,
+      table.paymentNo,
+    ),
+    index("order_payments_business_id_idx").on(table.businessId),
+    index("order_payments_order_id_idx").on(table.orderId),
+    index("order_payments_finance_account_id_idx").on(table.financeAccountId),
+    index("order_payments_payment_method_idx").on(table.paymentMethod),
+    index("order_payments_payment_status_idx").on(table.paymentStatus),
+    index("order_payments_paid_at_idx").on(table.paidAt),
+  ],
+);
+export type OrderPayment = typeof orderPayment.$inferSelect;
+export type NewOrderPayment = typeof orderPayment.$inferInsert;
+
+export const orderReturn = pgTable(
+  "order_returns",
+  {
+    id: uuid().primaryKey().defaultRandom().notNull(),
+    businessId: uuid("business_id").notNull(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references((): AnyPgColumn => orderOrder.id, { onDelete: "cascade" }),
+    returnNo: varchar("return_no", { length: 100 }).notNull(),
+    status: orderReturnStatusEnum().default("REQUESTED").notNull(),
+    reason: text(),
+    totalAmount: decimal("total_amount", { precision: 12, scale: 2 })
+      .default(new Decimal(0))
+      .notNull(),
+    createdBy: uuid("created_by"),
+    approvedBy: uuid("approved_by"),
+    approvedAt: timestamp("approved_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),
+  },
+  (table) => [
+    uniqueIndex("order_returns_business_id_return_no_unique").on(
+      table.businessId,
+      table.returnNo,
+    ),
+    index("order_returns_business_id_idx").on(table.businessId),
+    index("order_returns_order_id_idx").on(table.orderId),
+    index("order_returns_status_idx").on(table.status),
+  ],
+);
+export type OrderReturn = typeof orderReturn.$inferSelect;
+export type NewOrderReturn = typeof orderReturn.$inferInsert;
+
+export const orderReturnItem = pgTable(
+  "order_return_items",
+  {
+    id: uuid().primaryKey().defaultRandom().notNull(),
+    returnId: uuid("return_id")
+      .notNull()
+      .references((): AnyPgColumn => orderReturn.id, { onDelete: "cascade" }),
+    orderItemId: uuid("order_item_id")
+      .notNull()
+      .references((): AnyPgColumn => orderOrderItem.id, {
+        onDelete: "restrict",
+      }),
+    productId: uuid("product_id").notNull(),
+    variantId: uuid("variant_id"),
+    quantity: decimal({ precision: 14, scale: 3 }).notNull(),
+    unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
+    lineTotal: decimal("line_total", { precision: 12, scale: 2 }).notNull(),
+    reason: text(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("order_return_items_return_id_idx").on(table.returnId),
+    index("order_return_items_order_item_id_idx").on(table.orderItemId),
+    index("order_return_items_product_id_idx").on(table.productId),
+    index("order_return_items_variant_id_idx").on(table.variantId),
+  ],
+);
+export type OrderReturnItem = typeof orderReturnItem.$inferSelect;
+export type NewOrderReturnItem = typeof orderReturnItem.$inferInsert;
+
+export const orderRefund = pgTable(
+  "order_refunds",
+  {
+    id: uuid().primaryKey().defaultRandom().notNull(),
+    businessId: uuid("business_id").notNull(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references((): AnyPgColumn => orderOrder.id, { onDelete: "cascade" }),
+    returnId: uuid("return_id").references((): AnyPgColumn => orderReturn.id, {
+      onDelete: "set null",
+    }),
+    paymentId: uuid("payment_id").references(
+      (): AnyPgColumn => orderPayment.id,
+      { onDelete: "set null" },
+    ),
+    refundNo: varchar("refund_no", { length: 100 }).notNull(),
+    amount: decimal({ precision: 12, scale: 2 }).notNull(),
+    refundMethod: orderRefundMethodEnum("refund_method").notNull(),
+    refundStatus: orderRefundStatusEnum("refund_status")
+      .default("PENDING")
+      .notNull(),
+    transactionReference: varchar("transaction_reference", { length: 150 }),
+    processedBy: uuid("processed_by"),
+    processedAt: timestamp("processed_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("order_refunds_business_id_refund_no_unique").on(
+      table.businessId,
+      table.refundNo,
+    ),
+    index("order_refunds_business_id_idx").on(table.businessId),
+    index("order_refunds_order_id_idx").on(table.orderId),
+    index("order_refunds_return_id_idx").on(table.returnId),
+    index("order_refunds_payment_id_idx").on(table.paymentId),
+    index("order_refunds_refund_status_idx").on(table.refundStatus),
+  ],
+);
+export type OrderRefund = typeof orderRefund.$inferSelect;
+export type NewOrderRefund = typeof orderRefund.$inferInsert;

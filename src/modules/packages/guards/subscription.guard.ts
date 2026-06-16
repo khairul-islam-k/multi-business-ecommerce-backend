@@ -4,7 +4,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
-import { SystemUserType } from "@prisma/client";
+import { SystemUserType } from "@/database/schema";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { PackageSubscriptionService } from "../package-subscription.service";

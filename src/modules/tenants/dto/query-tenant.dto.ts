@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { SystemUserStatus } from "@prisma/client";
+import { SystemUserStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsEnum,

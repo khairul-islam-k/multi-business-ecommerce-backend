@@ -1,66 +1,87 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
+import {
+  financeAccountTransaction,
+  financeExpense,
+  financePayable,
+  financeReceivable,
+  supplierInvoice,
+  supplierPayment,
+} from "@/database/schema";
+import { and, eq } from "drizzle-orm";
 
-import { PrismaService } from "../../../prisma/prisma.service";
+import { DatabaseService } from "../../../database/database.service";
 import { generateRandomCode } from "../../../common/utils/code-generator.util";
 
 const FINANCE_CODE_RETRY_LIMIT = 5;
 
 @Injectable()
 export class FinanceCodeService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly database: DatabaseService) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async generateUniqueTransactionNo(businessId: string) {
     return this.generateUniqueCode(businessId, "TXN", (code) =>
-      this.prisma.financeAccountTransaction.findFirst({
-        where: { businessId, transactionNo: code },
-        select: { id: true },
-      }),
+      this.exists(financeAccountTransaction, businessId, "transactionNo", code),
     );
   }
 
   async generateUniqueExpenseNo(businessId: string) {
     return this.generateUniqueCode(businessId, "EXP", (code) =>
-      this.prisma.financeExpense.findFirst({
-        where: { businessId, expenseNo: code },
-        select: { id: true },
-      }),
+      this.exists(financeExpense, businessId, "expenseNo", code),
     );
   }
 
   async generateUniqueSupplierInvoiceNo(businessId: string) {
     return this.generateUniqueCode(businessId, "SIN", (code) =>
-      this.prisma.supplierInvoice.findFirst({
-        where: { businessId, invoiceNo: code },
-        select: { id: true },
-      }),
+      this.exists(supplierInvoice, businessId, "invoiceNo", code),
     );
   }
 
   async generateUniqueSupplierPaymentNo(businessId: string) {
     return this.generateUniqueCode(businessId, "SPAY", (code) =>
-      this.prisma.supplierPayment.findFirst({
-        where: { businessId, paymentNo: code },
-        select: { id: true },
-      }),
+      this.exists(supplierPayment, businessId, "paymentNo", code),
     );
   }
 
   async generateUniqueReceivableNo(businessId: string) {
     return this.generateUniqueCode(businessId, "REC", (code) =>
-      this.prisma.financeReceivable.findFirst({
-        where: { businessId, receivableNo: code },
-        select: { id: true },
-      }),
+      this.exists(financeReceivable, businessId, "receivableNo", code),
     );
   }
 
   async generateUniquePayableNo(businessId: string) {
     return this.generateUniqueCode(businessId, "PAYB", (code) =>
-      this.prisma.financePayable.findFirst({
-        where: { businessId, payableNo: code },
-        select: { id: true },
-      }),
+      this.exists(financePayable, businessId, "payableNo", code),
     );
+  }
+
+  private exists(
+    table:
+      | typeof financeAccountTransaction
+      | typeof financeExpense
+      | typeof supplierInvoice
+      | typeof supplierPayment
+      | typeof financeReceivable
+      | typeof financePayable,
+    businessId: string,
+    field:
+      | "transactionNo"
+      | "expenseNo"
+      | "invoiceNo"
+      | "paymentNo"
+      | "receivableNo"
+      | "payableNo",
+    code: string,
+  ) {
+    return this.db
+      .select({ id: table.id })
+      .from(table)
+      .where(and(eq(table.businessId, businessId), eq(table[field], code)))
+      .limit(1)
+      .then(([row]) => row ?? null);
   }
 
   private async generateUniqueCode(

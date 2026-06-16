@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { PackageSubscriptionStatus } from "@prisma/client";
+import { PackageSubscriptionStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsEnum,

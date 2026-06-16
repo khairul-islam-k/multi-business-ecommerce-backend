@@ -3,26 +3,29 @@ import {
   FinancePartyType,
   FinanceReceivableStatus,
   FinanceSourceType,
-  Prisma,
-} from "@prisma/client";
+  financeReceivable,
+} from "@/database/schema";
+import Decimal from "decimal.js";
+import { and, eq, ne } from "drizzle-orm";
 
 import { toMoney } from "../domain/money";
 import { getReceivableStatus } from "../domain/receivable-status.policy";
 import { FinanceCodeService } from "./finance-code.service";
 import { normalizeOptionalText } from "../../../common/text/normalizers";
+import type { DatabaseTransaction } from "../../../database/database.service";
 
 @Injectable()
 export class ReceivableSyncService {
   constructor(private readonly financeCodes: FinanceCodeService) {}
 
   async syncOrderReceivable(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
       orderId: string;
       customerId?: string | null;
-      totalAmount: Prisma.Decimal.Value;
-      receivedAmount: Prisma.Decimal.Value;
+      totalAmount: Decimal.Value;
+      receivedAmount: Decimal.Value;
       note?: string | null;
     },
   ) {
@@ -30,52 +33,58 @@ export class ReceivableSyncService {
     const receivedAmount = toMoney(params.receivedAmount);
 
     if (receivedAmount.greaterThanOrEqualTo(totalAmount)) {
-      await tx.financeReceivable.updateMany({
-        where: {
-          businessId: params.businessId,
-          sourceType: FinanceSourceType.ORDER,
-          sourceId: params.orderId,
-          status: {
-            not: FinanceReceivableStatus.CANCELLED,
-          },
-        },
-        data: {
+      await tx
+        .update(financeReceivable)
+        .set({
           receivedAmount,
           status: FinanceReceivableStatus.RECEIVED,
-        },
-      });
+        })
+        .where(
+          and(
+            eq(financeReceivable.businessId, params.businessId),
+            eq(financeReceivable.sourceType, FinanceSourceType.ORDER),
+            eq(financeReceivable.sourceId, params.orderId),
+            ne(financeReceivable.status, FinanceReceivableStatus.CANCELLED),
+          ),
+        );
 
       return null;
     }
 
-    const existing = await tx.financeReceivable.findFirst({
-      where: {
-        businessId: params.businessId,
-        sourceType: FinanceSourceType.ORDER,
-        sourceId: params.orderId,
-        status: {
-          not: FinanceReceivableStatus.CANCELLED,
-        },
-      },
-    });
+    const [existing] = await tx
+      .select()
+      .from(financeReceivable)
+      .where(
+        and(
+          eq(financeReceivable.businessId, params.businessId),
+          eq(financeReceivable.sourceType, FinanceSourceType.ORDER),
+          eq(financeReceivable.sourceId, params.orderId),
+          ne(financeReceivable.status, FinanceReceivableStatus.CANCELLED),
+        ),
+      )
+      .limit(1);
 
     const status = getReceivableStatus(totalAmount, receivedAmount);
 
     if (existing) {
-      return tx.financeReceivable.update({
-        where: { id: existing.id },
-        data: {
+      const [updated] = await tx
+        .update(financeReceivable)
+        .set({
           partyId: params.customerId ?? null,
           totalAmount,
           receivedAmount,
           status,
           note: normalizeOptionalText(params.note),
-        },
-      });
+        })
+        .where(eq(financeReceivable.id, existing.id))
+        .returning();
+
+      return updated;
     }
 
-    return tx.financeReceivable.create({
-      data: {
+    const [created] = await tx
+      .insert(financeReceivable)
+      .values({
         businessId: params.businessId,
         receivableNo: await this.financeCodes.generateUniqueReceivableNo(
           params.businessId,
@@ -88,31 +97,34 @@ export class ReceivableSyncService {
         receivedAmount,
         status,
         note: normalizeOptionalText(params.note),
-      },
-    });
+      })
+      .returning();
+
+    return created;
   }
 
   async createSupplierReturnReceivable(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
       supplierId: string;
       supplierReturnId: string;
-      totalAmount: Prisma.Decimal.Value;
+      totalAmount: Decimal.Value;
       note?: string | null;
     },
   ) {
-    const existing = await tx.financeReceivable.findFirst({
-      where: {
-        businessId: params.businessId,
-        sourceType: FinanceSourceType.SUPPLIER_RETURN,
-        sourceId: params.supplierReturnId,
-        status: {
-          not: FinanceReceivableStatus.CANCELLED,
-        },
-      },
-      select: { id: true },
-    });
+    const [existing] = await tx
+      .select({ id: financeReceivable.id })
+      .from(financeReceivable)
+      .where(
+        and(
+          eq(financeReceivable.businessId, params.businessId),
+          eq(financeReceivable.sourceType, FinanceSourceType.SUPPLIER_RETURN),
+          eq(financeReceivable.sourceId, params.supplierReturnId),
+          ne(financeReceivable.status, FinanceReceivableStatus.CANCELLED),
+        ),
+      )
+      .limit(1);
 
     if (existing) {
       throw new BadRequestException(
@@ -120,8 +132,9 @@ export class ReceivableSyncService {
       );
     }
 
-    return tx.financeReceivable.create({
-      data: {
+    const [created] = await tx
+      .insert(financeReceivable)
+      .values({
         businessId: params.businessId,
         receivableNo: await this.financeCodes.generateUniqueReceivableNo(
           params.businessId,
@@ -130,11 +143,13 @@ export class ReceivableSyncService {
         partyId: params.supplierId,
         sourceType: FinanceSourceType.SUPPLIER_RETURN,
         sourceId: params.supplierReturnId,
-        totalAmount: params.totalAmount,
-        receivedAmount: 0,
+        totalAmount: toMoney(params.totalAmount),
+        receivedAmount: new Decimal(0),
         status: FinanceReceivableStatus.PENDING,
         note: normalizeOptionalText(params.note),
-      },
-    });
+      })
+      .returning();
+
+    return created;
   }
 }

@@ -5,7 +5,7 @@ import {
   SupplierPurchaseOrderStatus,
   SupplierPurchaseReturnStatus,
   SupplierStatus,
-} from "@prisma/client";
+} from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsArray,

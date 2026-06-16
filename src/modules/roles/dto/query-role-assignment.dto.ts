@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { UserRoleMapStatus } from "@prisma/client";
+import { UserRoleMapStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import { IsEnum, IsInt, IsOptional, IsUUID, Max, Min } from "class-validator";
 

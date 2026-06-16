@@ -1,5 +1,30 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import {
+  type InventoryStock,
+  type InventoryStockMovement,
+  inventoryOrderAllocation,
+  inventoryStock,
+  inventoryStockMovement,
+  inventoryWarehouseStock,
+  orderOrder,
+  orderOrderItem,
+  product,
+  productVariant,
+  warehouse,
+} from "@/database/schema";
+import Decimal from "decimal.js";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import {
@@ -9,82 +34,47 @@ import {
   ReserveOrderStockDto,
   UpdateStockAlertDto,
 } from "./dto/stock.dto";
-import { PrismaService } from "../../../prisma/prisma.service";
+import { DatabaseService } from "../../../database/database.service";
 import { InventoryLookupService } from "../common/inventory-lookup.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
 
-const STOCK_INCLUDE = {
-  product: true,
-  variant: true,
-  warehouseStocks: {
-    include: { warehouse: true },
-    orderBy: { updatedAt: "desc" },
-  },
-} satisfies Prisma.InventoryStockInclude;
-
 @Injectable()
 export class StockService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly lookup: InventoryLookupService,
   ) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async findAll(businessId: string, query: QueryStockDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const where = await this.buildStockWhere(businessId, query);
 
-    const where: Prisma.InventoryStockWhereInput = {
-      businessId,
-      ...(query.productId ? { productId: query.productId } : {}),
-      ...(query.variantId ? { variantId: query.variantId } : {}),
-      ...(query.warehouseId
-        ? {
-            warehouseStocks: {
-              some: { warehouseId: query.warehouseId },
-            },
-          }
-        : {}),
-      ...(query.search
-        ? {
-            OR: [
-              {
-                product: {
-                  name: { contains: query.search, mode: "insensitive" },
-                },
-              },
-              {
-                variant: {
-                  title: { contains: query.search, mode: "insensitive" },
-                },
-              },
-              {
-                warehouseStocks: {
-                  some: {
-                    warehouse: {
-                      name: { contains: query.search, mode: "insensitive" },
-                    },
-                  },
-                },
-              },
-            ],
-          }
-        : {}),
-    };
-
-    const [items, total] = await Promise.all([
-      this.prisma.inventoryStock.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { updatedAt: "desc" },
-        include: STOCK_INCLUDE,
-      }),
-      this.prisma.inventoryStock.count({ where }),
+    const [rows, total] = await Promise.all([
+      this.db
+        .select()
+        .from(inventoryStock)
+        .where(where)
+        .orderBy(desc(inventoryStock.updatedAt))
+        .limit(limit)
+        .offset(skip),
+      this.db
+        .select({ value: count() })
+        .from(inventoryStock)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
     ]);
+    const items = await Promise.all(
+      rows.map((stock) => this.withStockRelations(stock)),
+    );
 
     return paginatedResponse(items, {
       page,
@@ -95,16 +85,13 @@ export class StockService {
   }
 
   async findOne(businessId: string, stockId: string) {
-    const stock = await this.prisma.inventoryStock.findFirst({
-      where: { id: stockId, businessId },
-      include: STOCK_INCLUDE,
-    });
+    const stock = await this.findStockRow(businessId, stockId);
 
     if (!stock) {
       throw new NotFoundException("Stock not found");
     }
 
-    return apiResponse(stock);
+    return apiResponse(await this.withStockRelations(stock));
   }
 
   async updateAlert(
@@ -115,58 +102,41 @@ export class StockService {
   ) {
     await this.findStockOrThrow(businessId, stockId);
 
-    const stock = await this.prisma.inventoryStock.update({
-      where: { id: stockId },
-      data: { lowStockAlertQty: dto.lowStockAlertQty },
-      include: STOCK_INCLUDE,
-    });
+    const [stock] = await this.db
+      .update(inventoryStock)
+      .set({ lowStockAlertQty: new Decimal(dto.lowStockAlertQty) })
+      .where(eq(inventoryStock.id, stockId))
+      .returning();
 
-    return apiResponse(stock, "Stock alert updated successfully");
+    return apiResponse(
+      await this.withStockRelations(stock),
+      "Stock alert updated successfully",
+    );
   }
 
   async findMovements(businessId: string, query: QueryStockDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const where = await this.buildMovementWhere(businessId, query);
 
-    const where: Prisma.InventoryStockMovementWhereInput = {
-      businessId,
-      ...(query.warehouseId ? { warehouseId: query.warehouseId } : {}),
-      ...(query.productId ? { productId: query.productId } : {}),
-      ...(query.variantId ? { variantId: query.variantId } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              {
-                product: {
-                  name: { contains: query.search, mode: "insensitive" },
-                },
-              },
-              {
-                variant: {
-                  title: { contains: query.search, mode: "insensitive" },
-                },
-              },
-              {
-                warehouse: {
-                  name: { contains: query.search, mode: "insensitive" },
-                },
-              },
-            ],
-          }
-        : {}),
-    };
-
-    const [items, total] = await Promise.all([
-      this.prisma.inventoryStockMovement.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-        include: { stock: true, warehouse: true, product: true, variant: true },
-      }),
-      this.prisma.inventoryStockMovement.count({ where }),
+    const [rows, total] = await Promise.all([
+      this.db
+        .select()
+        .from(inventoryStockMovement)
+        .where(where)
+        .orderBy(desc(inventoryStockMovement.createdAt))
+        .limit(limit)
+        .offset(skip),
+      this.db
+        .select({ value: count() })
+        .from(inventoryStockMovement)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
     ]);
+    const items = await Promise.all(
+      rows.map((movement) => this.withMovementRelations(movement)),
+    );
 
     return paginatedResponse(items, {
       page,
@@ -183,7 +153,7 @@ export class StockService {
   ) {
     await this.assertOrderItemMatchesRequest(businessId, dto);
 
-    const allocation = await this.prisma.$transaction((tx) =>
+    const allocation = await this.db.transaction((tx) =>
       this.lookup.reserveForOrder(tx, {
         businessId,
         orderId: dto.orderId,
@@ -204,7 +174,7 @@ export class StockService {
     businessId: string,
     dto: ReleaseOrderAllocationDto,
   ) {
-    const allocation = await this.prisma.$transaction((tx) =>
+    const allocation = await this.db.transaction((tx) =>
       this.lookup.releaseOrderReservation(
         tx,
         { businessId, allocationId: dto.allocationId },
@@ -220,7 +190,7 @@ export class StockService {
     businessId: string,
     dto: FulfillOrderAllocationDto,
   ) {
-    const allocation = await this.prisma.$transaction((tx) =>
+    const allocation = await this.db.transaction((tx) =>
       this.lookup.fulfillOrderAllocation(
         tx,
         { businessId, allocationId: dto.allocationId },
@@ -231,34 +201,281 @@ export class StockService {
     return apiResponse(allocation, "Order stock allocation fulfilled");
   }
 
+  private async buildStockWhere(businessId: string, query: QueryStockDto) {
+    const conditions: (SQL | undefined)[] = [
+      eq(inventoryStock.businessId, businessId),
+      query.productId ? eq(inventoryStock.productId, query.productId) : undefined,
+      query.variantId ? eq(inventoryStock.variantId, query.variantId) : undefined,
+    ];
+
+    if (query.warehouseId) {
+      const stockIds = await this.findStockIdsForWarehouse(
+        businessId,
+        query.warehouseId,
+      );
+      conditions.push(
+        stockIds.length > 0
+          ? inArray(inventoryStock.id, stockIds)
+          : sql`false`,
+      );
+    }
+
+    if (query.search) {
+      const stockIds = await this.findStockIdsForSearch(
+        businessId,
+        query.search,
+      );
+      conditions.push(
+        stockIds.length > 0
+          ? inArray(inventoryStock.id, stockIds)
+          : sql`false`,
+      );
+    }
+
+    return and(...conditions);
+  }
+
+  private async buildMovementWhere(businessId: string, query: QueryStockDto) {
+    const conditions: (SQL | undefined)[] = [
+      eq(inventoryStockMovement.businessId, businessId),
+      query.warehouseId
+        ? eq(inventoryStockMovement.warehouseId, query.warehouseId)
+        : undefined,
+      query.productId
+        ? eq(inventoryStockMovement.productId, query.productId)
+        : undefined,
+      query.variantId
+        ? eq(inventoryStockMovement.variantId, query.variantId)
+        : undefined,
+    ];
+
+    if (query.search) {
+      const ids = await this.findEntityIdsForSearch(businessId, query.search);
+      conditions.push(
+        or(
+          ids.productIds.length > 0
+            ? inArray(inventoryStockMovement.productId, ids.productIds)
+            : undefined,
+          ids.variantIds.length > 0
+            ? inArray(inventoryStockMovement.variantId, ids.variantIds)
+            : undefined,
+          ids.warehouseIds.length > 0
+            ? inArray(inventoryStockMovement.warehouseId, ids.warehouseIds)
+            : undefined,
+        ) ?? sql`false`,
+      );
+    }
+
+    return and(...conditions);
+  }
+
+  private async findStockIdsForWarehouse(
+    businessId: string,
+    warehouseId: string,
+  ) {
+    const rows = await this.db
+      .select({ stockId: inventoryWarehouseStock.stockId })
+      .from(inventoryWarehouseStock)
+      .where(
+        and(
+          eq(inventoryWarehouseStock.businessId, businessId),
+          eq(inventoryWarehouseStock.warehouseId, warehouseId),
+        ),
+      );
+
+    return rows.map((row) => row.stockId);
+  }
+
+  private async findStockIdsForSearch(businessId: string, search: string) {
+    const ids = await this.findEntityIdsForSearch(businessId, search);
+    const stockRows = await this.db
+      .select({ id: inventoryStock.id })
+      .from(inventoryStock)
+      .where(
+        and(
+          eq(inventoryStock.businessId, businessId),
+          or(
+            ids.productIds.length > 0
+              ? inArray(inventoryStock.productId, ids.productIds)
+              : undefined,
+            ids.variantIds.length > 0
+              ? inArray(inventoryStock.variantId, ids.variantIds)
+              : undefined,
+            ids.warehouseStockIds.length > 0
+              ? inArray(inventoryStock.id, ids.warehouseStockIds)
+              : undefined,
+          ) ?? sql`false`,
+        ),
+      );
+
+    return stockRows.map((row) => row.id);
+  }
+
+  private async findEntityIdsForSearch(businessId: string, search: string) {
+    const [productRows, variantRows, warehouseRows] = await Promise.all([
+      this.db
+        .select({ id: product.id })
+        .from(product)
+        .where(
+          and(
+            eq(product.businessId, businessId),
+            isNull(product.deletedAt),
+            ilike(product.name, `%${search}%`),
+          ),
+        ),
+      this.db
+        .select({ id: productVariant.id })
+        .from(productVariant)
+        .where(
+          and(
+            eq(productVariant.businessId, businessId),
+            isNull(productVariant.deletedAt),
+            ilike(productVariant.title, `%${search}%`),
+          ),
+        ),
+      this.db
+        .select({ id: warehouse.id })
+        .from(warehouse)
+        .where(
+          and(
+            eq(warehouse.businessId, businessId),
+            isNull(warehouse.deletedAt),
+            ilike(warehouse.name, `%${search}%`),
+          ),
+        ),
+    ]);
+    const warehouseIds = warehouseRows.map((row) => row.id);
+    const warehouseStockRows =
+      warehouseIds.length > 0
+        ? await this.db
+            .select({ stockId: inventoryWarehouseStock.stockId })
+            .from(inventoryWarehouseStock)
+            .where(
+              and(
+                eq(inventoryWarehouseStock.businessId, businessId),
+                inArray(inventoryWarehouseStock.warehouseId, warehouseIds),
+              ),
+            )
+        : [];
+
+    return {
+      productIds: productRows.map((row) => row.id),
+      variantIds: variantRows.map((row) => row.id),
+      warehouseIds,
+      warehouseStockIds: warehouseStockRows.map((row) => row.stockId),
+    };
+  }
+
+  private async findStockRow(businessId: string, stockId: string) {
+    const [stock] = await this.db
+      .select()
+      .from(inventoryStock)
+      .where(
+        and(eq(inventoryStock.id, stockId), eq(inventoryStock.businessId, businessId)),
+      );
+
+    return stock ?? null;
+  }
+
   private async findStockOrThrow(businessId: string, stockId: string) {
-    const stock = await this.prisma.inventoryStock.findFirst({
-      where: { id: stockId, businessId },
-      select: { id: true },
-    });
+    const stock = await this.findStockRow(businessId, stockId);
 
     if (!stock) {
       throw new NotFoundException("Stock not found");
     }
   }
 
+  private async withStockRelations(stock: InventoryStock) {
+    const [productRow, variantRow, warehouseStockRows] = await Promise.all([
+      this.db
+        .select()
+        .from(product)
+        .where(eq(product.id, stock.productId))
+        .then(([row]) => row ?? null),
+      stock.variantId
+        ? this.db
+            .select()
+            .from(productVariant)
+            .where(eq(productVariant.id, stock.variantId))
+            .then(([row]) => row ?? null)
+        : Promise.resolve(null),
+      this.db
+        .select({
+          warehouseStock: inventoryWarehouseStock,
+          warehouse,
+        })
+        .from(inventoryWarehouseStock)
+        .leftJoin(warehouse, eq(warehouse.id, inventoryWarehouseStock.warehouseId))
+        .where(eq(inventoryWarehouseStock.stockId, stock.id))
+        .orderBy(desc(inventoryWarehouseStock.updatedAt)),
+    ]);
+
+    return {
+      ...stock,
+      product: productRow,
+      variant: variantRow,
+      warehouseStocks: warehouseStockRows.map(({ warehouseStock, warehouse }) => ({
+        ...warehouseStock,
+        warehouse,
+      })),
+    };
+  }
+
+  private async withMovementRelations(movement: InventoryStockMovement) {
+    const [stock, warehouseRow, productRow, variantRow] = await Promise.all([
+      this.db
+        .select()
+        .from(inventoryStock)
+        .where(eq(inventoryStock.id, movement.stockId))
+        .then(([row]) => row ?? null),
+      this.db
+        .select()
+        .from(warehouse)
+        .where(eq(warehouse.id, movement.warehouseId))
+        .then(([row]) => row ?? null),
+      this.db
+        .select()
+        .from(product)
+        .where(eq(product.id, movement.productId))
+        .then(([row]) => row ?? null),
+      movement.variantId
+        ? this.db
+            .select()
+            .from(productVariant)
+            .where(eq(productVariant.id, movement.variantId))
+            .then(([row]) => row ?? null)
+        : Promise.resolve(null),
+    ]);
+
+    return {
+      ...movement,
+      stock,
+      warehouse: warehouseRow,
+      product: productRow,
+      variant: variantRow,
+    };
+  }
+
   private async assertOrderItemMatchesRequest(
     businessId: string,
     dto: ReserveOrderStockDto,
   ) {
-    const orderItem = await this.prisma.orderOrderItem.findFirst({
-      where: {
-        id: dto.orderItemId,
-        orderId: dto.orderId,
-        productId: dto.productId,
-        variantId: dto.variantId ?? null,
-        order: {
-          businessId,
-          deletedAt: null,
-        },
-      },
-      select: { id: true },
-    });
+    const [orderItem] = await this.db
+      .select({ id: orderOrderItem.id })
+      .from(orderOrderItem)
+      .innerJoin(orderOrder, eq(orderOrder.id, orderOrderItem.orderId))
+      .where(
+        and(
+          eq(orderOrderItem.id, dto.orderItemId),
+          eq(orderOrderItem.orderId, dto.orderId),
+          eq(orderOrderItem.productId, dto.productId),
+          dto.variantId
+            ? eq(orderOrderItem.variantId, dto.variantId)
+            : isNull(orderOrderItem.variantId),
+          eq(orderOrder.businessId, businessId),
+          isNull(orderOrder.deletedAt),
+        ),
+      );
 
     if (!orderItem) {
       throw new NotFoundException("Order item not found");

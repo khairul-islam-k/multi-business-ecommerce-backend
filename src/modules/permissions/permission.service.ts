@@ -5,47 +5,50 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  type RbacRole,
+  type RbacRolePermission,
   CommonStatus,
   PermissionAction,
-  Prisma,
   RbacFeature,
   SystemUserType,
   UserRoleMapStatus,
-} from "@prisma/client";
+  rbacRole,
+  rbacRolePermission,
+  rbacUserRoleMap,
+} from "@/database/schema";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  exists,
+  gt,
+  isNull,
+  or,
+} from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { AddPermissionDto } from "./dto/add-permission";
 import { PermissionItemDto } from "./dto/permission-item.dto";
 import { QueryPermissionDto } from "./dto/query-permission.dto";
 import { UpdatePermissionDto } from "./dto/update-permission.dto";
-import { PrismaService } from "../../prisma/prisma.service";
+import { DatabaseService } from "../../database/database.service";
 import { BusinessAccessService } from "../access/services/business-access.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
 
-const ROLE_PERMISSION_INCLUDE = {
-  role: {
-    select: {
-      id: true,
-      businessId: true,
-      name: true,
-      status: true,
-    },
-  },
-} satisfies Prisma.RbacRolePermissionInclude;
+type RolePermissionWithRole = RbacRolePermission & {
+  role: Pick<RbacRole, "id" | "businessId" | "name" | "status">;
+};
 
-const ROLE_WITH_PERMISSIONS_INCLUDE = {
-  permissions: {
-    orderBy: [{ feature: "asc" }, { action: "asc" }],
-  },
+type RoleWithPermissions = RbacRole & {
+  permissions: RbacRolePermission[];
   _count: {
-    select: {
-      userRoleMaps: true,
-    },
-  },
-} satisfies Prisma.RbacRoleInclude;
+    userRoleMaps: number;
+  };
+};
 
 type PermissionCheckOptions = {
   isOwner?: boolean;
@@ -55,9 +58,13 @@ type PermissionCheckOptions = {
 @Injectable()
 export class PermissionService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly businessAccess: BusinessAccessService,
   ) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   getAvailablePermissions() {
     return apiResponse({
@@ -73,39 +80,51 @@ export class PermissionService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const where = and(
+      exists(
+        this.db
+          .select({ id: rbacRole.id })
+          .from(rbacRole)
+          .where(
+            and(
+              eq(rbacRole.id, rbacRolePermission.roleId),
+              eq(rbacRole.businessId, businessId),
+              isNull(rbacRole.deletedAt),
+            ),
+          ),
+      ),
+      query.roleId !== undefined
+        ? eq(rbacRolePermission.roleId, query.roleId)
+        : undefined,
+      query.feature !== undefined
+        ? eq(rbacRolePermission.feature, query.feature)
+        : undefined,
+      query.action !== undefined
+        ? eq(rbacRolePermission.action, query.action)
+        : undefined,
+    );
 
-    const where: Prisma.RbacRolePermissionWhereInput = {
-      role: {
-        businessId,
-        deletedAt: null,
-      },
+    const [permissions, total] = await Promise.all([
+      this.db
+        .select()
+        .from(rbacRolePermission)
+        .where(where)
+        .orderBy(
+          asc(rbacRolePermission.roleId),
+          asc(rbacRolePermission.feature),
+          asc(rbacRolePermission.action),
+        )
+        .limit(limit)
+        .offset(skip)
+        .then((rows) => this.withPermissionRoles(rows)),
+      this.db
+        .select({ value: count() })
+        .from(rbacRolePermission)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
+    ]);
 
-      ...(query.roleId !== undefined && {
-        roleId: query.roleId,
-      }),
-
-      ...(query.feature !== undefined && {
-        feature: query.feature,
-      }),
-
-      ...(query.action !== undefined && {
-        action: query.action,
-      }),
-    };
-
-    const items = await this.prisma.rbacRolePermission.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: [{ roleId: "asc" }, { feature: "asc" }, { action: "asc" }],
-      include: ROLE_PERMISSION_INCLUDE,
-    });
-
-    const total = await this.prisma.rbacRolePermission.count({
-      where,
-    });
-
-    return paginatedResponse(items, {
+    return paginatedResponse(permissions, {
       page,
       limit,
       total,
@@ -124,24 +143,21 @@ export class PermissionService {
 
     const permissions = this.normalizePermissions(dto.permissions);
 
-    return this.prisma.$transaction(async (tx) => {
-      await tx.rbacRolePermission.createMany({
-        data: permissions.map((permission) => ({
-          roleId,
-          feature: permission.feature,
-          action: permission.action,
-        })),
-        skipDuplicates: true,
-      });
+    return this.db.transaction(async (tx) => {
+      if (permissions.length > 0) {
+        await tx
+          .insert(rbacRolePermission)
+          .values(
+            permissions.map((permission) => ({
+              roleId,
+              feature: permission.feature,
+              action: permission.action,
+            })),
+          )
+          .onConflictDoNothing();
+      }
 
-      const role = await tx.rbacRole.findFirst({
-        where: {
-          id: roleId,
-          businessId,
-          deletedAt: null,
-        },
-        include: ROLE_WITH_PERMISSIONS_INCLUDE,
-      });
+      const role = await this.getRoleWithPermissionsOrThrow(businessId, roleId);
 
       return apiResponse(role, "Permissions added successfully");
     });
@@ -156,31 +172,22 @@ export class PermissionService {
 
     const permissions = this.normalizePermissions(dto.permissions);
 
-    return this.prisma.$transaction(async (tx) => {
-      await tx.rbacRolePermission.deleteMany({
-        where: {
-          roleId,
-        },
-      });
+    return this.db.transaction(async (tx) => {
+      await tx
+        .delete(rbacRolePermission)
+        .where(eq(rbacRolePermission.roleId, roleId));
 
       if (permissions.length > 0) {
-        await tx.rbacRolePermission.createMany({
-          data: permissions.map((permission) => ({
+        await tx.insert(rbacRolePermission).values(
+          permissions.map((permission) => ({
             roleId,
             feature: permission.feature,
             action: permission.action,
           })),
-        });
+        );
       }
 
-      const role = await tx.rbacRole.findFirst({
-        where: {
-          id: roleId,
-          businessId,
-          deletedAt: null,
-        },
-        include: ROLE_WITH_PERMISSIONS_INCLUDE,
-      });
+      const role = await this.getRoleWithPermissionsOrThrow(businessId, roleId);
 
       return apiResponse(role, "Permissions replaced successfully");
     });
@@ -194,15 +201,18 @@ export class PermissionService {
   ) {
     await this.assertRoleBelongsToBusiness(businessId, roleId);
 
-    const result = await this.prisma.rbacRolePermission.deleteMany({
-      where: {
-        roleId,
-        feature,
-        action,
-      },
-    });
+    const result = await this.db
+      .delete(rbacRolePermission)
+      .where(
+        and(
+          eq(rbacRolePermission.roleId, roleId),
+          eq(rbacRolePermission.feature, feature),
+          eq(rbacRolePermission.action, action),
+        ),
+      )
+      .returning({ id: rbacRolePermission.id });
 
-    if (result.count === 0) {
+    if (result.length === 0) {
       throw new NotFoundException("Permission not found for this role");
     }
 
@@ -238,39 +248,42 @@ export class PermissionService {
     }
 
     const now = new Date();
-
-    const roleMap = await this.prisma.rbacUserRoleMap.findFirst({
-      where: {
-        userId: currentUser.id,
-        status: UserRoleMapStatus.ACTIVE,
-
-        OR: [
-          {
-            expiresAt: null,
-          },
-          {
-            expiresAt: {
-              gt: now,
-            },
-          },
-        ],
-
-        role: {
-          businessId,
-          status: CommonStatus.ACTIVE,
-          deletedAt: null,
-          permissions: {
-            some: {
-              feature,
-              action,
-            },
-          },
-        },
-      },
-      select: {
-        id: true,
-      },
-    });
+    const [roleMap] = await this.db
+      .select({ id: rbacUserRoleMap.id })
+      .from(rbacUserRoleMap)
+      .where(
+        and(
+          eq(rbacUserRoleMap.userId, currentUser.id),
+          eq(rbacUserRoleMap.status, UserRoleMapStatus.ACTIVE),
+          or(isNull(rbacUserRoleMap.expiresAt), gt(rbacUserRoleMap.expiresAt, now)),
+          exists(
+            this.db
+              .select({ id: rbacRole.id })
+              .from(rbacRole)
+              .where(
+                and(
+                  eq(rbacRole.id, rbacUserRoleMap.roleId),
+                  eq(rbacRole.businessId, businessId),
+                  eq(rbacRole.status, CommonStatus.ACTIVE),
+                  isNull(rbacRole.deletedAt),
+                  exists(
+                    this.db
+                      .select({ id: rbacRolePermission.id })
+                      .from(rbacRolePermission)
+                      .where(
+                        and(
+                          eq(rbacRolePermission.roleId, rbacRole.id),
+                          eq(rbacRolePermission.feature, feature),
+                          eq(rbacRolePermission.action, action),
+                        ),
+                      ),
+                  ),
+                ),
+              ),
+          ),
+        ),
+      )
+      .limit(1);
 
     return Boolean(roleMap);
   }
@@ -301,40 +314,91 @@ export class PermissionService {
     businessId: string,
     roleId: string,
   ) {
-    const role = await this.prisma.rbacRole.findFirst({
-      where: {
-        id: roleId,
-        businessId,
-        deletedAt: null,
-      },
-      include: ROLE_WITH_PERMISSIONS_INCLUDE,
-    });
+    const [role] = await this.db
+      .select()
+      .from(rbacRole)
+      .where(
+        and(
+          eq(rbacRole.id, roleId),
+          eq(rbacRole.businessId, businessId),
+          isNull(rbacRole.deletedAt),
+        ),
+      )
+      .limit(1);
 
     if (!role) {
       throw new NotFoundException("Role not found");
     }
 
-    return role;
+    return this.withRolePermissions(role);
   }
 
   private async assertRoleBelongsToBusiness(
     businessId: string,
     roleId: string,
   ) {
-    const role = await this.prisma.rbacRole.findFirst({
-      where: {
-        id: roleId,
-        businessId,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-      },
-    });
+    const [role] = await this.db
+      .select({ id: rbacRole.id })
+      .from(rbacRole)
+      .where(
+        and(
+          eq(rbacRole.id, roleId),
+          eq(rbacRole.businessId, businessId),
+          isNull(rbacRole.deletedAt),
+        ),
+      )
+      .limit(1);
 
     if (!role) {
       throw new NotFoundException("Role not found");
     }
+  }
+
+  private async withPermissionRoles(
+    permissions: RbacRolePermission[],
+  ): Promise<RolePermissionWithRole[]> {
+    return Promise.all(
+      permissions.map(async (permission) => {
+        const [role] = await this.db
+          .select({
+            id: rbacRole.id,
+            businessId: rbacRole.businessId,
+            name: rbacRole.name,
+            status: rbacRole.status,
+          })
+          .from(rbacRole)
+          .where(eq(rbacRole.id, permission.roleId))
+          .limit(1);
+
+        return {
+          ...permission,
+          role,
+        };
+      }),
+    );
+  }
+
+  private async withRolePermissions(role: RbacRole): Promise<RoleWithPermissions> {
+    const [permissions, userRoleMapsCount] = await Promise.all([
+      this.db
+        .select()
+        .from(rbacRolePermission)
+        .where(eq(rbacRolePermission.roleId, role.id))
+        .orderBy(asc(rbacRolePermission.feature), asc(rbacRolePermission.action)),
+      this.db
+        .select({ value: count() })
+        .from(rbacUserRoleMap)
+        .where(eq(rbacUserRoleMap.roleId, role.id))
+        .then(([row]) => row?.value ?? 0),
+    ]);
+
+    return {
+      ...role,
+      permissions,
+      _count: {
+        userRoleMaps: userRoleMapsCount,
+      },
+    };
   }
 
   private normalizePermissions(permissions: PermissionItemDto[]) {

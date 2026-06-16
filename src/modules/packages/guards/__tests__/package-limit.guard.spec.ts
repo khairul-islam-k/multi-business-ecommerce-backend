@@ -1,7 +1,7 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import { ExecutionContext, UnauthorizedException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import { PackageLimitKey } from "@prisma/client";
+import { PackageLimitKey } from "@/database/schema";
 
 import type { PackageLimitRequirement } from "../../decorators/require-package-limit.decorator";
 import { PackageLimitGuard } from "../package-limit.guard";

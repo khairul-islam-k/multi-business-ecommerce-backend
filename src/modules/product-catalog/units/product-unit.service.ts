@@ -3,7 +3,13 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma, ProductSimpleStatus } from "@prisma/client";
+import {
+  type ProductUnit,
+  ProductSimpleStatus,
+  product,
+  productUnit,
+} from "@/database/schema";
+import { and, asc, count, desc, eq, ilike, isNull } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { QueryCatalogDto } from "../common/dto/query-catalog.dto";
@@ -11,23 +17,27 @@ import {
   CreateProductUnitDto,
   UpdateProductUnitDto,
 } from "./dto/product-unit.dto";
-import { PrismaService } from "../../../prisma/prisma.service";
 import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import { DatabaseService } from "../../../database/database.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
 
-const UNIT_INCLUDE = {
-  _count: { select: { products: true } },
-} satisfies Prisma.ProductUnitInclude;
+type UnitWithCount = ProductUnit & {
+  _count: { products: number };
+};
 
 @Injectable()
 export class ProductUnitService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly lookup: ProductCatalogLookupService,
   ) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async create(
     currentUser: CurrentUserPayload,
@@ -35,17 +45,18 @@ export class ProductUnitService {
     dto: CreateProductUnitDto,
   ) {
     try {
-      const unit = await this.prisma.productUnit.create({
-        data: {
+      const [unit] = await this.db
+        .insert(productUnit)
+        .values({
           businessId,
           name: this.lookup.normalizeName(dto.name),
           status: dto.status ?? ProductSimpleStatus.ACTIVE,
           createdBy: currentUser.id,
           updatedBy: currentUser.id,
-        },
-        include: UNIT_INCLUDE,
-      });
-      return apiResponse(unit, "Unit created successfully");
+        })
+        .returning();
+
+      return apiResponse(await this.withUnitCount(unit), "Unit created successfully");
     } catch (error) {
       this.lookup.handleUniqueError(error, "Unit name already exists");
     }
@@ -55,24 +66,33 @@ export class ProductUnitService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const where: Prisma.ProductUnitWhereInput = {
-      businessId,
-      deletedAt: null,
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.search
-        ? { name: { contains: query.search, mode: "insensitive" } }
-        : {}),
-    };
+    const where = and(
+      eq(productUnit.businessId, businessId),
+      isNull(productUnit.deletedAt),
+      query.status ? eq(productUnit.status, query.status) : undefined,
+      query.search ? ilike(productUnit.name, `%${query.search}%`) : undefined,
+    );
+
     const [items, total] = await Promise.all([
-      this.prisma.productUnit.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: query.sortOrder ?? "desc" },
-        include: UNIT_INCLUDE,
-      }),
-      this.prisma.productUnit.count({ where }),
+      this.db
+        .select()
+        .from(productUnit)
+        .where(where)
+        .orderBy(
+          query.sortOrder === "asc"
+            ? asc(productUnit.createdAt)
+            : desc(productUnit.createdAt),
+        )
+        .limit(limit)
+        .offset(skip)
+        .then((rows) => this.withUnitsCount(rows)),
+      this.db
+        .select({ value: count() })
+        .from(productUnit)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
     ]);
+
     return paginatedResponse(items, {
       page,
       limit,
@@ -82,12 +102,13 @@ export class ProductUnitService {
   }
 
   async findOne(businessId: string, unitId: string) {
-    const unit = await this.prisma.productUnit.findFirst({
-      where: { id: unitId, businessId, deletedAt: null },
-      include: UNIT_INCLUDE,
-    });
-    if (!unit) throw new NotFoundException("Unit not found");
-    return apiResponse(unit);
+    const unit = await this.findUnitRow(businessId, unitId);
+
+    if (!unit) {
+      throw new NotFoundException("Unit not found");
+    }
+
+    return apiResponse(await this.withUnitCount(unit));
   }
 
   async update(
@@ -97,19 +118,21 @@ export class ProductUnitService {
     dto: UpdateProductUnitDto,
   ) {
     await this.findUnitOrThrow(businessId, unitId);
+
     try {
-      const unit = await this.prisma.productUnit.update({
-        where: { id: unitId },
-        data: {
+      const [unit] = await this.db
+        .update(productUnit)
+        .set({
           ...(dto.name !== undefined && {
             name: this.lookup.normalizeName(dto.name),
           }),
           ...(dto.status !== undefined && { status: dto.status }),
           updatedBy: currentUser.id,
-        },
-        include: UNIT_INCLUDE,
-      });
-      return apiResponse(unit, "Unit updated successfully");
+        })
+        .where(eq(productUnit.id, unitId))
+        .returning();
+
+      return apiResponse(await this.withUnitCount(unit), "Unit updated successfully");
     } catch (error) {
       this.lookup.handleUniqueError(error, "Unit name already exists");
     }
@@ -123,34 +146,75 @@ export class ProductUnitService {
     await this.findUnitOrThrow(businessId, unitId);
     await this.assertUnitCanBeDeleted(businessId, unitId);
 
-    await this.prisma.productUnit.update({
-      where: { id: unitId },
-      data: {
+    await this.db
+      .update(productUnit)
+      .set({
         status: ProductSimpleStatus.INACTIVE,
         deletedAt: new Date(),
         updatedBy: currentUser.id,
-      },
-    });
+      })
+      .where(eq(productUnit.id, unitId));
+
     return apiResponse(null, "Unit deleted successfully");
   }
 
   private async findUnitOrThrow(businessId: string, unitId: string) {
-    const unit = await this.prisma.productUnit.findFirst({
-      where: { id: unitId, businessId, deletedAt: null },
-      select: { id: true },
-    });
-    if (!unit) throw new NotFoundException("Unit not found");
+    const unit = await this.findUnitRow(businessId, unitId);
+
+    if (!unit) {
+      throw new NotFoundException("Unit not found");
+    }
+  }
+
+  private findUnitRow(businessId: string, unitId: string) {
+    return this.db
+      .select()
+      .from(productUnit)
+      .where(
+        and(
+          eq(productUnit.id, unitId),
+          eq(productUnit.businessId, businessId),
+          isNull(productUnit.deletedAt),
+        ),
+      )
+      .limit(1)
+      .then(([unit]) => unit ?? null);
   }
 
   private async assertUnitCanBeDeleted(businessId: string, unitId: string) {
-    const productCount = await this.prisma.product.count({
-      where: { businessId, unitId, deletedAt: null },
-    });
+    const [{ value }] = await this.db
+      .select({ value: count() })
+      .from(product)
+      .where(
+        and(
+          eq(product.businessId, businessId),
+          eq(product.unitId, unitId),
+          isNull(product.deletedAt),
+        ),
+      );
 
-    if (productCount > 0) {
+    if (value > 0) {
       throw new BadRequestException(
         "Unit cannot be deleted while assigned to active products",
       );
     }
+  }
+
+  private async withUnitsCount(units: ProductUnit[]) {
+    return Promise.all(units.map((unit) => this.withUnitCount(unit)));
+  }
+
+  private async withUnitCount(unit: ProductUnit): Promise<UnitWithCount> {
+    const [{ value }] = await this.db
+      .select({ value: count() })
+      .from(product)
+      .where(eq(product.unitId, unit.id));
+
+    return {
+      ...unit,
+      _count: {
+        products: value,
+      },
+    };
   }
 }

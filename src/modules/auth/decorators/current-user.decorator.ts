@@ -1,5 +1,5 @@
 import { createParamDecorator, ExecutionContext } from "@nestjs/common";
-import { SystemUserStatus, SystemUserType } from "@prisma/client";
+import { SystemUserStatus, SystemUserType } from "@/database/schema";
 
 export type CurrentUserPayload = {
   id: string;

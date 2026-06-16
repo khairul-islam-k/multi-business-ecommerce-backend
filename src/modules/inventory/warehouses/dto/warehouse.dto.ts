@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { WarehouseStatus } from "@prisma/client";
+import { WarehouseStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsEnum,

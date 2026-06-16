@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { InventoryAdjustmentType } from "@prisma/client";
+import { InventoryAdjustmentType } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsArray,

@@ -1,28 +1,25 @@
 import { ForbiddenException, Injectable } from "@nestjs/common";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import {
   BusinessMemberStatus,
   BusinessStatus,
-  Prisma,
+  business,
+  businessMember,
   SystemUserType,
-} from "@prisma/client";
+} from "@/database/schema";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { RequestContextService } from "../../../common/request-context/request-context.service";
-import { PrismaService } from "../../../prisma/prisma.service";
+import { DatabaseService } from "../../../database/database.service";
 import {
   BusinessAccessContext,
   getBusinessAccessCacheKey,
 } from "../../../common/request-context/request-context.types";
 
-const ACCESSIBLE_BUSINESS_STATUSES = [
-  BusinessStatus.TRIAL,
-  BusinessStatus.ACTIVE,
-] satisfies BusinessStatus[];
-
 @Injectable()
 export class BusinessAccessService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly requestContext: RequestContextService,
   ) {}
 
@@ -37,35 +34,30 @@ export class BusinessAccessService {
       return cachedAccess;
     }
 
-    const where: Prisma.BusinessWhereInput = {
-      id: businessId,
-      deletedAt: null,
-      ...(currentUser.type !== SystemUserType.ADMIN && {
-        status: {
-          in: ACCESSIBLE_BUSINESS_STATUSES,
-        },
-        ...this.getBusinessAccessWhere(currentUser),
-      }),
-    };
+    const [matchedBusiness] = await this.database.db
+      .select({
+        id: business.id,
+        ownerUserId: business.ownerUserId,
+      })
+      .from(business)
+      .where(
+        and(
+          eq(business.id, businessId),
+          this.getBusinessAccessCondition(currentUser),
+        ),
+      )
+      .limit(1);
 
-    const business = await this.prisma.business.findFirst({
-      where,
-      select: {
-        id: true,
-        ownerUserId: true,
-      },
-    });
-
-    if (!business) {
+    if (!matchedBusiness) {
       throw new ForbiddenException(
         "You do not have permission for this business",
       );
     }
 
     const accessContext = {
-      businessId: business.id,
+      businessId: matchedBusiness.id,
       isAdmin: currentUser.type === SystemUserType.ADMIN,
-      isOwner: business.ownerUserId === currentUser.id,
+      isOwner: matchedBusiness.ownerUserId === currentUser.id,
     };
 
     this.requestContext.setBusinessAccess(cacheKey, accessContext);
@@ -73,39 +65,25 @@ export class BusinessAccessService {
     return accessContext;
   }
 
-  private getBusinessAccessWhere(
-    currentUser: CurrentUserPayload,
-  ): Prisma.BusinessWhereInput {
+  private getBusinessAccessCondition(currentUser: CurrentUserPayload) {
     if (currentUser.type === SystemUserType.ADMIN) {
-      return {};
+      return undefined;
     }
 
-    return {
-      AND: [
-        {
-          OR: [
-            { status: BusinessStatus.ACTIVE },
-            { status: BusinessStatus.TRIAL },
-          ],
-          deletedAt: null,
-        },
-        {
-          OR: [
-            {
-              ownerUserId: currentUser.id,
-            },
-            {
-              members: {
-                some: {
-                  userId: currentUser.id,
-                  status: BusinessMemberStatus.ACTIVE,
-                  deletedAt: null,
-                },
-              },
-            },
-          ],
-        },
-      ],
-    };
+    return and(
+      eq(business.status, BusinessStatus.ACTIVE),
+      isNull(business.deletedAt),
+      or(
+        eq(business.ownerUserId, currentUser.id),
+        sql`exists (
+          select 1
+          from ${businessMember}
+          where ${businessMember.businessId} = ${business.id}
+            and ${businessMember.userId} = ${currentUser.id}
+            and ${businessMember.status} = ${BusinessMemberStatus.ACTIVE}
+            and ${businessMember.deletedAt} is null
+        )`,
+      ),
+    );
   }
 }

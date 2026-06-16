@@ -1,5 +1,5 @@
 import { SetMetadata } from "@nestjs/common";
-import { PermissionAction, RbacFeature } from "@prisma/client";
+import { PermissionAction, RbacFeature } from "@/database/schema";
 
 export const REQUIRED_PERMISSION_KEY = "required_permission";
 

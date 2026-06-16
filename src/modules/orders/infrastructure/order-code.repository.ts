@@ -1,48 +1,74 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
+import {
+  courierShipment,
+  invoice,
+  orderOrder,
+  orderPayment,
+} from "@/database/schema";
+import { and, eq } from "drizzle-orm";
 
-import { PrismaService } from "../../../prisma/prisma.service";
+import { DatabaseService } from "../../../database/database.service";
 import { generateRandomCode } from "../../../common/utils/code-generator.util";
 
 const CODE_RETRY_LIMIT = 5;
 
 @Injectable()
 export class OrderCodeRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly database: DatabaseService) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   generateUniqueOrderNo(businessId: string) {
-    return this.generateUniqueCode(businessId, "ORD", (code) =>
-      this.prisma.orderOrder.findFirst({
-        where: { businessId, orderNo: code },
-        select: { id: true },
-      }),
-    );
+    return this.generateUniqueCode(businessId, "ORD", async (code) => {
+      const [row] = await this.db
+        .select({ id: orderOrder.id })
+        .from(orderOrder)
+        .where(and(eq(orderOrder.businessId, businessId), eq(orderOrder.orderNo, code)));
+
+      return row ?? null;
+    });
   }
 
   generateUniquePaymentNo(businessId: string) {
-    return this.generateUniqueCode(businessId, "PAY", (code) =>
-      this.prisma.orderPayment.findFirst({
-        where: { businessId, paymentNo: code },
-        select: { id: true },
-      }),
-    );
+    return this.generateUniqueCode(businessId, "PAY", async (code) => {
+      const [row] = await this.db
+        .select({ id: orderPayment.id })
+        .from(orderPayment)
+        .where(
+          and(eq(orderPayment.businessId, businessId), eq(orderPayment.paymentNo, code)),
+        );
+
+      return row ?? null;
+    });
   }
 
   generateUniqueInvoiceNo(businessId: string) {
-    return this.generateUniqueCode(businessId, "INV", (code) =>
-      this.prisma.invoice.findFirst({
-        where: { businessId, invoiceNo: code },
-        select: { id: true },
-      }),
-    );
+    return this.generateUniqueCode(businessId, "INV", async (code) => {
+      const [row] = await this.db
+        .select({ id: invoice.id })
+        .from(invoice)
+        .where(and(eq(invoice.businessId, businessId), eq(invoice.invoiceNo, code)));
+
+      return row ?? null;
+    });
   }
 
   generateUniqueShipmentNo(businessId: string) {
-    return this.generateUniqueCode(businessId, "SHP", (code) =>
-      this.prisma.courierShipment.findFirst({
-        where: { businessId, shipmentNo: code },
-        select: { id: true },
-      }),
-    );
+    return this.generateUniqueCode(businessId, "SHP", async (code) => {
+      const [row] = await this.db
+        .select({ id: courierShipment.id })
+        .from(courierShipment)
+        .where(
+          and(
+            eq(courierShipment.businessId, businessId),
+            eq(courierShipment.shipmentNo, code),
+          ),
+        );
+
+      return row ?? null;
+    });
   }
 
   private async generateUniqueCode(

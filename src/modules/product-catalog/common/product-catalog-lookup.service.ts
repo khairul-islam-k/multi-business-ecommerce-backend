@@ -4,11 +4,30 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma, ProductSimpleStatus } from "@prisma/client";
+import {
+  ProductSimpleStatus,
+  product,
+  productAttribute,
+  productAttributeValue,
+  productBrand,
+  productCategory,
+  productTag,
+  productUnit,
+  productVariant,
+} from "@/database/schema";
+import {
+  and,
+  count,
+  eq,
+  inArray,
+  isNull,
+  ne,
+} from "drizzle-orm";
 
-import { PrismaService } from "../../../prisma/prisma.service";
+import { isUniqueConstraintError } from "../../../common/database/db-error.util";
 import { generateRandomCode } from "../../../common/utils/code-generator.util";
 import { generateRandomSlug } from "../../../common/utils/slug-generator.util";
+import { DatabaseService } from "../../../database/database.service";
 
 const PRODUCT_SLUG_MAX_LENGTH = 220;
 const PRODUCT_SLUG_RETRY_LIMIT = 5;
@@ -16,7 +35,11 @@ const PRODUCT_CODE_RETRY_LIMIT = 5;
 
 @Injectable()
 export class ProductCatalogLookupService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly database: DatabaseService) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async assertCategoryNameAvailable(
     businessId: string,
@@ -24,16 +47,21 @@ export class ProductCatalogLookupService {
     parentId?: string | null,
     excludeCategoryId?: string,
   ) {
-    const category = await this.prisma.productCategory.findFirst({
-      where: {
-        businessId,
-        name: this.normalizeName(name),
-        parentId: parentId ?? null,
-        deletedAt: null,
-        ...(excludeCategoryId ? { id: { not: excludeCategoryId } } : {}),
-      },
-      select: { id: true },
-    });
+    const [category] = await this.db
+      .select({ id: productCategory.id })
+      .from(productCategory)
+      .where(
+        and(
+          eq(productCategory.businessId, businessId),
+          eq(productCategory.name, this.normalizeName(name)),
+          parentId === null || parentId === undefined
+            ? isNull(productCategory.parentId)
+            : eq(productCategory.parentId, parentId),
+          isNull(productCategory.deletedAt),
+          excludeCategoryId ? ne(productCategory.id, excludeCategoryId) : undefined,
+        ),
+      )
+      .limit(1);
 
     if (category) {
       throw new ConflictException(
@@ -55,17 +83,20 @@ export class ProductCatalogLookupService {
       throw new BadRequestException("Category cannot be its own parent");
     }
 
-    const parent = await this.prisma.productCategory.findFirst({
-      where: {
-        id: parentId,
-        businessId,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        parentId: true,
-      },
-    });
+    const [parent] = await this.db
+      .select({
+        id: productCategory.id,
+        parentId: productCategory.parentId,
+      })
+      .from(productCategory)
+      .where(
+        and(
+          eq(productCategory.id, parentId),
+          eq(productCategory.businessId, businessId),
+          isNull(productCategory.deletedAt),
+        ),
+      )
+      .limit(1);
 
     if (!parent) {
       throw new NotFoundException("Parent category not found");
@@ -114,16 +145,19 @@ export class ProductCatalogLookupService {
       return uniqueTagIds;
     }
 
-    const count = await this.prisma.productTag.count({
-      where: {
-        businessId,
-        id: { in: uniqueTagIds },
-        deletedAt: null,
-        status: ProductSimpleStatus.ACTIVE,
-      },
-    });
+    const [{ value }] = await this.db
+      .select({ value: count() })
+      .from(productTag)
+      .where(
+        and(
+          eq(productTag.businessId, businessId),
+          inArray(productTag.id, uniqueTagIds),
+          isNull(productTag.deletedAt),
+          eq(productTag.status, ProductSimpleStatus.ACTIVE),
+        ),
+      );
 
-    if (count !== uniqueTagIds.length) {
+    if (value !== uniqueTagIds.length) {
       throw new BadRequestException("One or more product tags are invalid");
     }
 
@@ -131,19 +165,23 @@ export class ProductCatalogLookupService {
   }
 
   async assertProductExists(businessId: string, productId: string) {
-    const product = await this.prisma.product.findFirst({
-      where: {
-        id: productId,
-        businessId,
-        deletedAt: null,
-      },
-    });
+    const [item] = await this.db
+      .select()
+      .from(product)
+      .where(
+        and(
+          eq(product.id, productId),
+          eq(product.businessId, businessId),
+          isNull(product.deletedAt),
+        ),
+      )
+      .limit(1);
 
-    if (!product) {
+    if (!item) {
       throw new NotFoundException("Product not found");
     }
 
-    return product;
+    return item;
   }
 
   async assertVariantExists(
@@ -151,14 +189,18 @@ export class ProductCatalogLookupService {
     productId: string,
     variantId: string,
   ) {
-    const variant = await this.prisma.productVariant.findFirst({
-      where: {
-        id: variantId,
-        businessId,
-        productId,
-        deletedAt: null,
-      },
-    });
+    const [variant] = await this.db
+      .select()
+      .from(productVariant)
+      .where(
+        and(
+          eq(productVariant.id, variantId),
+          eq(productVariant.businessId, businessId),
+          eq(productVariant.productId, productId),
+          isNull(productVariant.deletedAt),
+        ),
+      )
+      .limit(1);
 
     if (!variant) {
       throw new NotFoundException("Product variant not found");
@@ -178,28 +220,38 @@ export class ProductCatalogLookupService {
       return;
     }
 
-    const [product, variant] = await Promise.all([
-      this.prisma.product.findFirst({
-        where: {
-          businessId,
-          sku: normalizedSku,
-          deletedAt: null,
-          ...(exclude?.productId ? { id: { not: exclude.productId } } : {}),
-        },
-        select: { id: true },
-      }),
-      this.prisma.productVariant.findFirst({
-        where: {
-          businessId,
-          sku: normalizedSku,
-          deletedAt: null,
-          ...(exclude?.variantId ? { id: { not: exclude.variantId } } : {}),
-        },
-        select: { id: true },
-      }),
+    const [existingProduct, existingVariant] = await Promise.all([
+      this.db
+        .select({ id: product.id })
+        .from(product)
+        .where(
+          and(
+            eq(product.businessId, businessId),
+            eq(product.sku, normalizedSku),
+            isNull(product.deletedAt),
+            exclude?.productId ? ne(product.id, exclude.productId) : undefined,
+          ),
+        )
+        .limit(1)
+        .then(([row]) => row ?? null),
+      this.db
+        .select({ id: productVariant.id })
+        .from(productVariant)
+        .where(
+          and(
+            eq(productVariant.businessId, businessId),
+            eq(productVariant.sku, normalizedSku),
+            isNull(productVariant.deletedAt),
+            exclude?.variantId
+              ? ne(productVariant.id, exclude.variantId)
+              : undefined,
+          ),
+        )
+        .limit(1)
+        .then(([row]) => row ?? null),
     ]);
 
-    if (product || variant) {
+    if (existingProduct || existingVariant) {
       throw new ConflictException("SKU already exists for this business");
     }
   }
@@ -215,28 +267,38 @@ export class ProductCatalogLookupService {
       return;
     }
 
-    const [product, variant] = await Promise.all([
-      this.prisma.product.findFirst({
-        where: {
-          businessId,
-          barcode: normalizedBarcode,
-          deletedAt: null,
-          ...(exclude?.productId ? { id: { not: exclude.productId } } : {}),
-        },
-        select: { id: true },
-      }),
-      this.prisma.productVariant.findFirst({
-        where: {
-          businessId,
-          barcode: normalizedBarcode,
-          deletedAt: null,
-          ...(exclude?.variantId ? { id: { not: exclude.variantId } } : {}),
-        },
-        select: { id: true },
-      }),
+    const [existingProduct, existingVariant] = await Promise.all([
+      this.db
+        .select({ id: product.id })
+        .from(product)
+        .where(
+          and(
+            eq(product.businessId, businessId),
+            eq(product.barcode, normalizedBarcode),
+            isNull(product.deletedAt),
+            exclude?.productId ? ne(product.id, exclude.productId) : undefined,
+          ),
+        )
+        .limit(1)
+        .then(([row]) => row ?? null),
+      this.db
+        .select({ id: productVariant.id })
+        .from(productVariant)
+        .where(
+          and(
+            eq(productVariant.businessId, businessId),
+            eq(productVariant.barcode, normalizedBarcode),
+            isNull(productVariant.deletedAt),
+            exclude?.variantId
+              ? ne(productVariant.id, exclude.variantId)
+              : undefined,
+          ),
+        )
+        .limit(1)
+        .then(([row]) => row ?? null),
     ]);
 
-    if (product || variant) {
+    if (existingProduct || existingVariant) {
       throw new ConflictException("Barcode already exists for this business");
     }
   }
@@ -260,28 +322,31 @@ export class ProductCatalogLookupService {
     }
 
     const valueIds = pairs.map((pair) => pair.attributeValueId);
-    const values = await this.prisma.productAttributeValue.findMany({
-      where: {
-        businessId,
-        id: { in: valueIds },
-        deletedAt: null,
-        attribute: {
-          businessId,
-          id: { in: attributeIds },
-          deletedAt: null,
-          status: ProductSimpleStatus.ACTIVE,
-        },
-      },
-      select: {
-        id: true,
-        attributeId: true,
-      },
-    });
+    const values = await this.db
+      .select({
+        id: productAttributeValue.id,
+        attributeId: productAttributeValue.attributeId,
+      })
+      .from(productAttributeValue)
+      .innerJoin(
+        productAttribute,
+        eq(productAttribute.id, productAttributeValue.attributeId),
+      )
+      .where(
+        and(
+          eq(productAttributeValue.businessId, businessId),
+          inArray(productAttributeValue.id, valueIds),
+          isNull(productAttributeValue.deletedAt),
+          eq(productAttribute.businessId, businessId),
+          inArray(productAttribute.id, attributeIds),
+          isNull(productAttribute.deletedAt),
+          eq(productAttribute.status, ProductSimpleStatus.ACTIVE),
+        ),
+      );
 
     const validPairs = new Set(
       values.map((value) => `${value.attributeId}:${value.id}`),
     );
-
     const hasInvalidPair = pairs.some(
       (pair) => !validPairs.has(`${pair.attributeId}:${pair.attributeValueId}`),
     );
@@ -306,17 +371,18 @@ export class ProductCatalogLookupService {
         maxLength: PRODUCT_SLUG_MAX_LENGTH,
       });
 
-      const existingProduct = await this.prisma.product.findFirst({
-        where: {
-          businessId,
-          slug,
-          deletedAt: null,
-          ...(excludeProductId ? { id: { not: excludeProductId } } : {}),
-        },
-        select: {
-          id: true,
-        },
-      });
+      const [existingProduct] = await this.db
+        .select({ id: product.id })
+        .from(product)
+        .where(
+          and(
+            eq(product.businessId, businessId),
+            eq(product.slug, slug),
+            isNull(product.deletedAt),
+            excludeProductId ? ne(product.id, excludeProductId) : undefined,
+          ),
+        )
+        .limit(1);
 
       if (!existingProduct) {
         return slug;
@@ -357,10 +423,7 @@ export class ProductCatalogLookupService {
   }
 
   handleUniqueError(error: unknown, message: string): never {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
+    if (isUniqueConstraintError(error)) {
       throw new ConflictException(message);
     }
 
@@ -368,15 +431,18 @@ export class ProductCatalogLookupService {
   }
 
   private async assertCategoryExists(businessId: string, categoryId: string) {
-    const category = await this.prisma.productCategory.findFirst({
-      where: {
-        id: categoryId,
-        businessId,
-        deletedAt: null,
-        status: ProductSimpleStatus.ACTIVE,
-      },
-      select: { id: true },
-    });
+    const [category] = await this.db
+      .select({ id: productCategory.id })
+      .from(productCategory)
+      .where(
+        and(
+          eq(productCategory.id, categoryId),
+          eq(productCategory.businessId, businessId),
+          isNull(productCategory.deletedAt),
+          eq(productCategory.status, ProductSimpleStatus.ACTIVE),
+        ),
+      )
+      .limit(1);
 
     if (!category) {
       throw new BadRequestException("Category is invalid");
@@ -384,15 +450,18 @@ export class ProductCatalogLookupService {
   }
 
   private async assertBrandExists(businessId: string, brandId: string) {
-    const brand = await this.prisma.productBrand.findFirst({
-      where: {
-        id: brandId,
-        businessId,
-        deletedAt: null,
-        status: ProductSimpleStatus.ACTIVE,
-      },
-      select: { id: true },
-    });
+    const [brand] = await this.db
+      .select({ id: productBrand.id })
+      .from(productBrand)
+      .where(
+        and(
+          eq(productBrand.id, brandId),
+          eq(productBrand.businessId, businessId),
+          isNull(productBrand.deletedAt),
+          eq(productBrand.status, ProductSimpleStatus.ACTIVE),
+        ),
+      )
+      .limit(1);
 
     if (!brand) {
       throw new BadRequestException("Brand is invalid");
@@ -400,15 +469,18 @@ export class ProductCatalogLookupService {
   }
 
   private async assertUnitExists(businessId: string, unitId: string) {
-    const unit = await this.prisma.productUnit.findFirst({
-      where: {
-        id: unitId,
-        businessId,
-        deletedAt: null,
-        status: ProductSimpleStatus.ACTIVE,
-      },
-      select: { id: true },
-    });
+    const [unit] = await this.db
+      .select({ id: productUnit.id })
+      .from(productUnit)
+      .where(
+        and(
+          eq(productUnit.id, unitId),
+          eq(productUnit.businessId, businessId),
+          isNull(productUnit.deletedAt),
+          eq(productUnit.status, ProductSimpleStatus.ACTIVE),
+        ),
+      )
+      .limit(1);
 
     if (!unit) {
       throw new BadRequestException("Unit is invalid");
@@ -430,24 +502,33 @@ export class ProductCatalogLookupService {
   ) {
     for (let attempt = 0; attempt < PRODUCT_CODE_RETRY_LIMIT; attempt++) {
       const code = generateRandomCode(prefix);
-
       const [existingProduct, existingVariant] = await Promise.all([
-        this.prisma.product.findFirst({
-          where: {
-            businessId,
-            [field]: code,
-            deletedAt: null,
-          },
-          select: { id: true },
-        }),
-        this.prisma.productVariant.findFirst({
-          where: {
-            businessId,
-            [field]: code,
-            deletedAt: null,
-          },
-          select: { id: true },
-        }),
+        this.db
+          .select({ id: product.id })
+          .from(product)
+          .where(
+            and(
+              eq(product.businessId, businessId),
+              field === "sku" ? eq(product.sku, code) : eq(product.barcode, code),
+              isNull(product.deletedAt),
+            ),
+          )
+          .limit(1)
+          .then(([row]) => row ?? null),
+        this.db
+          .select({ id: productVariant.id })
+          .from(productVariant)
+          .where(
+            and(
+              eq(productVariant.businessId, businessId),
+              field === "sku"
+                ? eq(productVariant.sku, code)
+                : eq(productVariant.barcode, code),
+              isNull(productVariant.deletedAt),
+            ),
+          )
+          .limit(1)
+          .then(([row]) => row ?? null),
       ]);
 
       if (!existingProduct && !existingVariant) {
@@ -470,16 +551,17 @@ export class ProductCatalogLookupService {
         throw new BadRequestException("Category parent would create a cycle");
       }
 
-      const ancestor = await this.prisma.productCategory.findFirst({
-        where: {
-          id: nextAncestorId,
-          businessId,
-          deletedAt: null,
-        },
-        select: {
-          parentId: true,
-        },
-      });
+      const [ancestor] = await this.db
+        .select({ parentId: productCategory.parentId })
+        .from(productCategory)
+        .where(
+          and(
+            eq(productCategory.id, nextAncestorId),
+            eq(productCategory.businessId, businessId),
+            isNull(productCategory.deletedAt),
+          ),
+        )
+        .limit(1);
 
       nextAncestorId = ancestor?.parentId ?? null;
     }

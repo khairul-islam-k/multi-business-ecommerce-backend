@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import { SystemUserType } from "@prisma/client";
+import { SystemUserType } from "@/database/schema";
 import { isUUID } from "class-validator";
 
 import {

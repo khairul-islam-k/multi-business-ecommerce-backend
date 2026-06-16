@@ -4,7 +4,7 @@ import {
   OrderPaymentMethod,
   OrderPaymentStatus,
   OrderStatus,
-} from "@prisma/client";
+} from "@/database/schema";
 
 import {
   assertOrderCanAcceptPayment,
@@ -36,3 +36,4 @@ describe("order payment policy", () => {
     expect(getOrderPaymentStatus(100, 100)).toBe(OrderPaymentStatus.PAID);
   });
 });
+

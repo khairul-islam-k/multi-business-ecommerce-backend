@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
-import { Prisma } from "@prisma/client";
+import Decimal from "decimal.js";
 
 import { calculateOrderTotals } from "./order-totals.calculator";
 
@@ -12,9 +12,9 @@ describe("calculateOrderTotals", () => {
           variantId: null,
           quantity: 2,
           discountAmount: 10,
-          unitPrice: new Prisma.Decimal(100),
-          taxAmount: new Prisma.Decimal(9),
-          lineTotal: new Prisma.Decimal(199),
+          unitPrice: new Decimal(100),
+          taxAmount: new Decimal(9),
+          lineTotal: new Decimal(199),
         },
       ],
       20,
@@ -27,3 +27,4 @@ describe("calculateOrderTotals", () => {
     expect(totals.totalAmount.toString()).toBe("219");
   });
 });
+

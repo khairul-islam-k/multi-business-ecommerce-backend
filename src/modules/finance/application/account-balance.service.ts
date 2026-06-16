@@ -7,23 +7,27 @@ import {
   FinanceAccountStatus,
   FinanceSourceType,
   FinanceTransactionType,
-  Prisma,
-} from "@prisma/client";
+  financeAccount,
+  financeAccountTransaction,
+} from "@/database/schema";
+import Decimal from "decimal.js";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { assertPositiveMoney, toMoney } from "../domain/money";
 import { FinanceCodeService } from "./finance-code.service";
 import { normalizeOptionalText } from "../../../common/text/normalizers";
+import type { DatabaseTransaction } from "../../../database/database.service";
 
 @Injectable()
 export class AccountBalanceService {
   constructor(private readonly financeCodes: FinanceCodeService) {}
 
   async creditAccount(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
       accountId: string;
-      amount: Prisma.Decimal.Value;
+      amount: Decimal.Value;
       referenceType?: FinanceSourceType;
       referenceId?: string;
       note?: string | null;
@@ -37,11 +41,11 @@ export class AccountBalanceService {
   }
 
   async debitAccount(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
       accountId: string;
-      amount: Prisma.Decimal.Value;
+      amount: Decimal.Value;
       referenceType?: FinanceSourceType;
       referenceId?: string;
       note?: string | null;
@@ -55,11 +59,11 @@ export class AccountBalanceService {
   }
 
   private async moveAccountBalance(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
       accountId: string;
-      amount: Prisma.Decimal.Value;
+      amount: Decimal.Value;
       transactionType: FinanceTransactionType;
       referenceType?: FinanceSourceType;
       referenceId?: string;
@@ -71,14 +75,18 @@ export class AccountBalanceService {
 
     assertPositiveMoney(amount, "Transaction amount must be greater than 0");
 
-    const account = await tx.financeAccount.findFirst({
-      where: {
-        id: params.accountId,
-        businessId: params.businessId,
-        deletedAt: null,
-        status: FinanceAccountStatus.ACTIVE,
-      },
-    });
+    const [account] = await tx
+      .select()
+      .from(financeAccount)
+      .where(
+        and(
+          eq(financeAccount.id, params.accountId),
+          eq(financeAccount.businessId, params.businessId),
+          isNull(financeAccount.deletedAt),
+          eq(financeAccount.status, FinanceAccountStatus.ACTIVE),
+        ),
+      )
+      .limit(1);
 
     if (!account) {
       throw new NotFoundException("Finance account not found");
@@ -94,8 +102,9 @@ export class AccountBalanceService {
       throw new BadRequestException("Finance account balance is insufficient");
     }
 
-    const transaction = await tx.financeAccountTransaction.create({
-      data: {
+    const [transaction] = await tx
+      .insert(financeAccountTransaction)
+      .values({
         businessId: params.businessId,
         accountId: account.id,
         transactionNo: await this.financeCodes.generateUniqueTransactionNo(
@@ -109,15 +118,13 @@ export class AccountBalanceService {
         referenceId: params.referenceId,
         note: normalizeOptionalText(params.note),
         createdBy: params.createdBy,
-      },
-    });
+      })
+      .returning();
 
-    await tx.financeAccount.update({
-      where: { id: account.id },
-      data: {
-        currentBalance: balanceAfter,
-      },
-    });
+    await tx
+      .update(financeAccount)
+      .set({ currentBalance: balanceAfter })
+      .where(eq(financeAccount.id, account.id));
 
     return transaction;
   }

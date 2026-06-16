@@ -3,42 +3,72 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { SupplierStatus } from "@prisma/client";
+import {
+  type Supplier,
+  SupplierStatus,
+  supplier,
+  supplierInvoice,
+  supplierProductMap,
+  supplierPurchaseOrder,
+} from "@/database/schema";
+import { and, count, eq, isNull } from "drizzle-orm";
 
-import { PrismaService } from "../../../prisma/prisma.service";
+import { DatabaseService } from "../../../database/database.service";
 
 @Injectable()
 export class SupplierRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly database: DatabaseService) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async assertSupplierExists(
     businessId: string,
     supplierId: string,
     requireActive = false,
   ) {
-    const supplier = await this.prisma.supplier.findFirst({
-      where: {
-        id: supplierId,
-        businessId,
-        deletedAt: null,
-        ...(requireActive ? { status: SupplierStatus.ACTIVE } : {}),
-      },
-      select: { id: true },
-    });
+    const [supplierRow] = await this.db
+      .select({ id: supplier.id })
+      .from(supplier)
+      .where(
+        and(
+          eq(supplier.id, supplierId),
+          eq(supplier.businessId, businessId),
+          isNull(supplier.deletedAt),
+          requireActive ? eq(supplier.status, SupplierStatus.ACTIVE) : undefined,
+        ),
+      );
 
-    if (!supplier) {
+    if (!supplierRow) {
       throw new NotFoundException("Supplier not found");
     }
   }
 
   async assertSupplierCanBeDeleted(businessId: string, supplierId: string) {
     const referenceCounts = await Promise.all([
-      this.prisma.supplierPurchaseOrder.count({
-        where: { businessId, supplierId, deletedAt: null },
-      }),
-      this.prisma.supplierInvoice.count({
-        where: { businessId, supplierId, deletedAt: null },
-      }),
+      this.db
+        .select({ value: count() })
+        .from(supplierPurchaseOrder)
+        .where(
+          and(
+            eq(supplierPurchaseOrder.businessId, businessId),
+            eq(supplierPurchaseOrder.supplierId, supplierId),
+            isNull(supplierPurchaseOrder.deletedAt),
+          ),
+        )
+        .then(([row]) => row?.value ?? 0),
+      this.db
+        .select({ value: count() })
+        .from(supplierInvoice)
+        .where(
+          and(
+            eq(supplierInvoice.businessId, businessId),
+            eq(supplierInvoice.supplierId, supplierId),
+            isNull(supplierInvoice.deletedAt),
+          ),
+        )
+        .then(([row]) => row?.value ?? 0),
     ]);
 
     if (referenceCounts.some((count) => count > 0)) {
@@ -46,5 +76,28 @@ export class SupplierRepository {
         "Supplier cannot be deleted while referenced by purchase records",
       );
     }
+  }
+
+  async withCounts(supplierRow: Supplier) {
+    const [products, orders] = await Promise.all([
+      this.db
+        .select({ value: count() })
+        .from(supplierProductMap)
+        .where(eq(supplierProductMap.supplierId, supplierRow.id))
+        .then(([row]) => row?.value ?? 0),
+      this.db
+        .select({ value: count() })
+        .from(supplierPurchaseOrder)
+        .where(eq(supplierPurchaseOrder.supplierId, supplierRow.id))
+        .then(([row]) => row?.value ?? 0),
+    ]);
+
+    return {
+      ...supplierRow,
+      _count: {
+        products,
+        orders,
+      },
+    };
   }
 }

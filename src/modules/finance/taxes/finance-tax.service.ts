@@ -4,7 +4,9 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { FinanceTaxStatus, Prisma } from "@prisma/client";
+import { FinanceTaxStatus, financeTax } from "@/database/schema";
+import Decimal from "decimal.js";
+import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import {
@@ -12,7 +14,8 @@ import {
   QueryFinanceTaxDto,
   UpdateFinanceTaxDto,
 } from "./dto/finance-tax.dto";
-import { PrismaService } from "../../../prisma/prisma.service";
+import { DatabaseService } from "../../../database/database.service";
+import { isUniqueConstraintError } from "../../../common/database/db-error.util";
 import {
   apiResponse,
   paginatedResponse,
@@ -20,7 +23,11 @@ import {
 
 @Injectable()
 export class FinanceTaxService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly database: DatabaseService) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async create(
     currentUser: CurrentUserPayload,
@@ -28,21 +35,22 @@ export class FinanceTaxService {
     dto: CreateFinanceTaxDto,
   ) {
     try {
-      const tax = await this.prisma.financeTax.create({
-        data: {
+      const [tax] = await this.db
+        .insert(financeTax)
+        .values({
           businessId,
           name: this.normalizeName(dto.name),
-          rate: dto.rate,
+          rate: new Decimal(dto.rate),
           description: this.normalizeNullableText(dto.description),
           status: dto.status ?? FinanceTaxStatus.ACTIVE,
           createdBy: currentUser.id,
           updatedBy: currentUser.id,
-        },
-      });
+        })
+        .returning();
 
       return apiResponse(tax, "Tax created successfully");
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handleDatabaseError(error);
     }
   }
 
@@ -50,34 +58,31 @@ export class FinanceTaxService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-
-    const where: Prisma.FinanceTaxWhereInput = {
-      businessId,
-      deletedAt: null,
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { name: { contains: query.search, mode: "insensitive" } },
-              {
-                description: {
-                  contains: query.search,
-                  mode: "insensitive",
-                },
-              },
-            ],
-          }
-        : {}),
-    };
+    const where = and(
+      eq(financeTax.businessId, businessId),
+      isNull(financeTax.deletedAt),
+      query.status ? eq(financeTax.status, query.status) : undefined,
+      query.search
+        ? or(
+            ilike(financeTax.name, `%${query.search}%`),
+            ilike(financeTax.description, `%${query.search}%`),
+          )
+        : undefined,
+    );
 
     const [items, total] = await Promise.all([
-      this.prisma.financeTax.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-      }),
-      this.prisma.financeTax.count({ where }),
+      this.db
+        .select()
+        .from(financeTax)
+        .where(where)
+        .orderBy(desc(financeTax.createdAt))
+        .limit(limit)
+        .offset(skip),
+      this.db
+        .select({ value: count() })
+        .from(financeTax)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
     ]);
 
     return paginatedResponse(items, {
@@ -89,9 +94,7 @@ export class FinanceTaxService {
   }
 
   async findOne(businessId: string, taxId: string) {
-    const tax = await this.prisma.financeTax.findFirst({
-      where: { id: taxId, businessId, deletedAt: null },
-    });
+    const tax = await this.findTaxRow(businessId, taxId);
 
     if (!tax) {
       throw new NotFoundException("Tax not found");
@@ -109,22 +112,23 @@ export class FinanceTaxService {
     await this.assertTaxExists(businessId, taxId);
 
     try {
-      const tax = await this.prisma.financeTax.update({
-        where: { id: taxId },
-        data: {
+      const [tax] = await this.db
+        .update(financeTax)
+        .set({
           ...(dto.name !== undefined && { name: this.normalizeName(dto.name) }),
-          ...(dto.rate !== undefined && { rate: dto.rate }),
+          ...(dto.rate !== undefined && { rate: new Decimal(dto.rate) }),
           ...(dto.description !== undefined && {
             description: this.normalizeNullableText(dto.description),
           }),
           ...(dto.status !== undefined && { status: dto.status }),
           updatedBy: currentUser.id,
-        },
-      });
+        })
+        .where(eq(financeTax.id, taxId))
+        .returning();
 
       return apiResponse(tax, "Tax updated successfully");
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handleDatabaseError(error);
     }
   }
 
@@ -135,27 +139,39 @@ export class FinanceTaxService {
   ) {
     await this.assertTaxExists(businessId, taxId);
 
-    await this.prisma.financeTax.update({
-      where: { id: taxId },
-      data: {
+    await this.db
+      .update(financeTax)
+      .set({
         status: FinanceTaxStatus.INACTIVE,
         deletedAt: new Date(),
         updatedBy: currentUser.id,
-      },
-    });
+      })
+      .where(eq(financeTax.id, taxId));
 
     return apiResponse(null, "Tax deleted successfully");
   }
 
   private async assertTaxExists(businessId: string, taxId: string) {
-    const tax = await this.prisma.financeTax.findFirst({
-      where: { id: taxId, businessId, deletedAt: null },
-      select: { id: true },
-    });
+    const tax = await this.findTaxRow(businessId, taxId);
 
     if (!tax) {
       throw new NotFoundException("Tax not found");
     }
+  }
+
+  private findTaxRow(businessId: string, taxId: string) {
+    return this.db
+      .select()
+      .from(financeTax)
+      .where(
+        and(
+          eq(financeTax.id, taxId),
+          eq(financeTax.businessId, businessId),
+          isNull(financeTax.deletedAt),
+        ),
+      )
+      .limit(1)
+      .then(([tax]) => tax ?? null);
   }
 
   private normalizeName(value: string) {
@@ -178,11 +194,8 @@ export class FinanceTaxService {
     return normalizedValue || null;
   }
 
-  private handlePrismaError(error: unknown): never {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
+  private handleDatabaseError(error: unknown): never {
+    if (isUniqueConstraintError(error)) {
       throw new ConflictException("Tax name already exists");
     }
 

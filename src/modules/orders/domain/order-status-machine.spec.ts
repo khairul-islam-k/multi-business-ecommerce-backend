@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@jest/globals";
 import { BadRequestException } from "@nestjs/common";
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus } from "@/database/schema";
 
 import {
   assertCanCancelOrder,

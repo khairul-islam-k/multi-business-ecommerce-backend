@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { PermissionAction, RbacFeature } from "@prisma/client";
+import { PermissionAction, RbacFeature } from "@/database/schema";
 import { IsEnum } from "class-validator";
 
 export class PermissionItemDto {

@@ -6,17 +6,31 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  type JsonValue,
+  type PackagePlan,
+  type PackagePlanFeature,
+  type PackagePlanLimit,
   PackageBillingCycle,
   PackageLimitKey,
   PackageResetCycle,
+  type PackageSubscription,
   PackageSubscriptionStatus,
   PackageStatus,
-  Prisma,
   SystemUserType,
-} from "@prisma/client";
+  packagePlan,
+  packagePlanFeature,
+  packagePlanLimit,
+  packageSubscription,
+  packageTenantCreditLedger,
+} from "@/database/schema";
+import Decimal from "decimal.js";
+import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
-import { PrismaService } from "../../prisma/prisma.service";
+import {
+  type DatabaseTransaction,
+  DatabaseService,
+} from "../../database/database.service";
 
 const ACTIVE_SUBSCRIPTION_STATUSES = [
   PackageSubscriptionStatus.TRIALING,
@@ -26,23 +40,16 @@ const ACTIVE_SUBSCRIPTION_STATUSES = [
 
 const MIN_BILLABLE_AMOUNT = 0.01;
 
-const PLAN_SNAPSHOT_INCLUDE = {
-  limits: true,
-  features: {
-    where: {
-      isActive: true,
-    },
-    orderBy: {
-      sortOrder: "asc",
-    },
-  },
-} satisfies Prisma.PackagePlanInclude;
+type PackageClient = DatabaseService["db"] | DatabaseTransaction;
 
-export const PACKAGE_SUBSCRIPTION_INCLUDE = {
-  package: {
-    include: PLAN_SNAPSHOT_INCLUDE,
-  },
-} satisfies Prisma.PackageSubscriptionInclude;
+export type PackagePlanWithDetails = PackagePlan & {
+  limits: PackagePlanLimit[];
+  features: PackagePlanFeature[];
+};
+
+export type PackageSubscriptionWithPlan = PackageSubscription & {
+  package: PackagePlanWithDetails;
+};
 
 export type PackagePlanSnapshot = {
   planId: string;
@@ -88,7 +95,11 @@ export type PlanChangeCharge = {
 
 @Injectable()
 export class PackageSubscriptionService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly database: DatabaseService) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   resolveTenantId(
     user: Pick<CurrentUserPayload, "id" | "type" | "tenantId">,
@@ -132,19 +143,19 @@ export class PackageSubscriptionService {
     const now = new Date();
 
     if (subscription.currentPeriodEnd <= now) {
-      await this.prisma.packageSubscription.updateMany({
-        where: {
-          id: subscription.id,
-          status: {
-            in: ACTIVE_SUBSCRIPTION_STATUSES,
-          },
-        },
-        data: {
+      await this.db
+        .update(packageSubscription)
+        .set({
           status: PackageSubscriptionStatus.EXPIRED,
           endedAt: now,
           endReason: "Subscription period expired",
-        },
-      });
+        })
+        .where(
+          and(
+            eq(packageSubscription.id, subscription.id),
+            inArray(packageSubscription.status, ACTIVE_SUBSCRIPTION_STATUSES),
+          ),
+        );
 
       throw new ForbiddenException("Tenant subscription has expired");
     }
@@ -153,65 +164,50 @@ export class PackageSubscriptionService {
   }
 
   async findCurrentSubscription(tenantId: string) {
-    return this.prisma.packageSubscription.findFirst({
-      where: {
-        tenantId,
-        status: {
-          in: ACTIVE_SUBSCRIPTION_STATUSES,
-        },
-      },
-      include: PACKAGE_SUBSCRIPTION_INCLUDE,
-      orderBy: {
-        currentPeriodEnd: "desc",
-      },
-    });
+    const [subscription] = await this.db
+      .select()
+      .from(packageSubscription)
+      .where(
+        and(
+          eq(packageSubscription.tenantId, tenantId),
+          inArray(packageSubscription.status, ACTIVE_SUBSCRIPTION_STATUSES),
+        ),
+      )
+      .orderBy(desc(packageSubscription.currentPeriodEnd))
+      .limit(1);
+
+    return subscription
+      ? this.withSubscriptionPlan(this.db, subscription)
+      : null;
   }
 
-  async assignDefaultTrial(tenantId: string, tx?: Prisma.TransactionClient) {
-    const client = tx ?? this.prisma;
-
-    const existingSubscription = await client.packageSubscription.findFirst({
-      where: {
-        tenantId,
-        status: {
-          in: ACTIVE_SUBSCRIPTION_STATUSES,
-        },
-      },
-      orderBy: {
-        currentPeriodEnd: "desc",
-      },
-    });
+  async assignDefaultTrial(tenantId: string, tx?: DatabaseTransaction) {
+    const client = tx ?? this.db;
+    const existingSubscription = await this.findCurrentSubscriptionRow(
+      client,
+      tenantId,
+    );
 
     if (existingSubscription) {
       return existingSubscription;
     }
 
-    const plan = await client.packagePlan.findFirst({
-      where: {
-        isDefault: true,
-        status: PackageStatus.ACTIVE,
-        deletedAt: null,
-      },
-      include: PLAN_SNAPSHOT_INCLUDE,
-      orderBy: {
-        sortOrder: "asc",
-      },
-    });
+    const plan = await this.findDefaultActivePlan(client);
 
     if (!plan) {
       throw new InternalServerErrorException(
         "Unable to continue because no default package plan is configured.",
       );
     }
-    const now = new Date();
-    const trialDays = plan.freeTrialDays;
-    const trialEndsAt = this.addDays(now, trialDays);
 
-    return client.packageSubscription.create({
-      data: {
+    const now = new Date();
+    const trialEndsAt = this.addDays(now, plan.freeTrialDays);
+    const [subscription] = await client
+      .insert(packageSubscription)
+      .values({
         tenantId,
         packageId: plan.id,
-        planSnapshot: this.buildPlanSnapshot(plan, now),
+        planSnapshot: this.buildPlanSnapshot(plan, now) as JsonValue,
         status: PackageSubscriptionStatus.TRIALING,
         billingCycle: plan.billingCycle,
         price: plan.price,
@@ -220,26 +216,21 @@ export class PackageSubscriptionService {
         trialEndsAt,
         currentPeriodStart: now,
         currentPeriodEnd: trialEndsAt,
-      },
-    });
+        autoRenew: false,
+      })
+      .returning();
+
+    return subscription;
   }
 
   async replaceCurrentSubscription(
     tenantId: string,
     planId: string,
-    tx?: Prisma.TransactionClient,
+    tx?: DatabaseTransaction,
     planSnapshot?: PackagePlanSnapshot,
   ) {
-    const client = tx ?? this.prisma;
-
-    const plan = await client.packagePlan.findFirst({
-      where: {
-        id: planId,
-        status: PackageStatus.ACTIVE,
-        deletedAt: null,
-      },
-      include: PLAN_SNAPSHOT_INCLUDE,
-    });
+    const client = tx ?? this.db;
+    const plan = await this.findActivePlanById(client, planId);
 
     if (!plan) {
       throw new NotFoundException("Package plan not found");
@@ -249,72 +240,61 @@ export class PackageSubscriptionService {
     const snapshot = planSnapshot ?? this.buildPlanSnapshot(plan, now);
     const currentPeriodEnd = this.getPeriodEnd(now, snapshot.billingCycle);
 
-    await client.packageSubscription.updateMany({
-      where: {
-        tenantId,
-        status: {
-          in: ACTIVE_SUBSCRIPTION_STATUSES,
-        },
-      },
-      data: {
+    await client
+      .update(packageSubscription)
+      .set({
         status: PackageSubscriptionStatus.SUPERSEDED,
         endedAt: now,
         endReason: "Changed package plan",
-      },
-    });
+      })
+      .where(
+        and(
+          eq(packageSubscription.tenantId, tenantId),
+          inArray(packageSubscription.status, ACTIVE_SUBSCRIPTION_STATUSES),
+        ),
+      );
 
-    return client.packageSubscription.create({
-      data: {
+    const [subscription] = await client
+      .insert(packageSubscription)
+      .values({
         tenantId,
         packageId: plan.id,
-        planSnapshot: snapshot,
+        planSnapshot: snapshot as JsonValue,
         status: PackageSubscriptionStatus.ACTIVE,
         billingCycle: snapshot.billingCycle,
-        price: snapshot.price,
+        price: new Decimal(snapshot.price),
         currencyCode: snapshot.currencyCode,
         startedAt: now,
         currentPeriodStart: now,
         currentPeriodEnd,
-      },
-      include: PACKAGE_SUBSCRIPTION_INCLUDE,
-    });
+        autoRenew: false,
+      })
+      .returning();
+
+    return this.withSubscriptionPlan(client, subscription);
   }
 
   async calculatePlanChangeCharge(
     tenantId: string,
     targetPlanId: string,
     now = new Date(),
-    tx?: Prisma.TransactionClient,
+    tx?: DatabaseTransaction,
   ) {
-    const client = tx ?? this.prisma;
+    const client = tx ?? this.db;
     const existingCreditBalance = await this.getTenantCreditBalance(
       tenantId,
       tx,
     );
-    const targetPlan = await client.packagePlan.findFirst({
-      where: {
-        id: targetPlanId,
-        status: PackageStatus.ACTIVE,
-        deletedAt: null,
-      },
-      include: PLAN_SNAPSHOT_INCLUDE,
-    });
+    const targetPlan = await this.findActivePlanById(client, targetPlanId);
 
     if (!targetPlan) {
       throw new NotFoundException("Package plan not found");
     }
 
-    const currentSubscription = await client.packageSubscription.findFirst({
-      where: {
-        tenantId,
-        status: {
-          in: ACTIVE_SUBSCRIPTION_STATUSES,
-        },
-      },
-      orderBy: {
-        currentPeriodEnd: "desc",
-      },
-    });
+    const currentSubscription = await this.findCurrentSubscriptionRow(
+      client,
+      tenantId,
+    );
 
     if (!currentSubscription) {
       return {
@@ -415,17 +395,114 @@ export class PackageSubscriptionService {
     };
   }
 
-  async getTenantCreditBalance(
-    tenantId: string,
-    tx?: Prisma.TransactionClient,
-  ) {
-    const client = tx ?? this.prisma;
-    const aggregate = await client.packageTenantCreditLedger.aggregate({
-      where: { tenantId },
-      _sum: { amount: true },
-    });
+  async getTenantCreditBalance(tenantId: string, tx?: DatabaseTransaction) {
+    const client = tx ?? this.db;
+    const [aggregate] = await client
+      .select({
+        amount: sql<string>`coalesce(sum(${packageTenantCreditLedger.amount}), 0)`,
+      })
+      .from(packageTenantCreditLedger)
+      .where(eq(packageTenantCreditLedger.tenantId, tenantId));
 
-    return this.roundMoney(Number(aggregate._sum.amount ?? 0));
+    return this.roundMoney(Number(aggregate?.amount ?? 0));
+  }
+
+  private findCurrentSubscriptionRow(client: PackageClient, tenantId: string) {
+    return client
+      .select()
+      .from(packageSubscription)
+      .where(
+        and(
+          eq(packageSubscription.tenantId, tenantId),
+          inArray(packageSubscription.status, ACTIVE_SUBSCRIPTION_STATUSES),
+        ),
+      )
+      .orderBy(desc(packageSubscription.currentPeriodEnd))
+      .limit(1)
+      .then(([subscription]) => subscription ?? null);
+  }
+
+  private async findDefaultActivePlan(client: PackageClient) {
+    const [plan] = await client
+      .select()
+      .from(packagePlan)
+      .where(
+        and(
+          eq(packagePlan.isDefault, true),
+          eq(packagePlan.status, PackageStatus.ACTIVE),
+          isNull(packagePlan.deletedAt),
+        ),
+      )
+      .orderBy(asc(packagePlan.sortOrder))
+      .limit(1);
+
+    return plan ? this.withPlanDetails(client, plan) : null;
+  }
+
+  private async findActivePlanById(client: PackageClient, planId: string) {
+    const [plan] = await client
+      .select()
+      .from(packagePlan)
+      .where(
+        and(
+          eq(packagePlan.id, planId),
+          eq(packagePlan.status, PackageStatus.ACTIVE),
+          isNull(packagePlan.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    return plan ? this.withPlanDetails(client, plan) : null;
+  }
+
+  private async withSubscriptionPlan(
+    client: PackageClient,
+    subscription: PackageSubscription,
+  ): Promise<PackageSubscriptionWithPlan> {
+    const [plan] = await client
+      .select()
+      .from(packagePlan)
+      .where(eq(packagePlan.id, subscription.packageId))
+      .limit(1);
+
+    if (!plan) {
+      throw new InternalServerErrorException(
+        "Subscription package plan could not be loaded.",
+      );
+    }
+
+    return {
+      ...subscription,
+      package: await this.withPlanDetails(client, plan),
+    };
+  }
+
+  private async withPlanDetails(
+    client: PackageClient,
+    plan: PackagePlan,
+  ): Promise<PackagePlanWithDetails> {
+    const [limits, features] = await Promise.all([
+      client
+        .select()
+        .from(packagePlanLimit)
+        .where(eq(packagePlanLimit.packageId, plan.id)),
+      client
+        .select()
+        .from(packagePlanFeature)
+        .where(
+          and(
+            eq(packagePlanFeature.packageId, plan.id),
+            eq(packagePlanFeature.isActive, true),
+          ),
+        )
+        .orderBy(asc(packagePlanFeature.sortOrder)),
+    ]);
+
+    return {
+      ...plan,
+      limits,
+      features,
+    };
   }
 
   private getPeriodEnd(start: Date, billingCycle: PackageBillingCycle) {
@@ -454,9 +531,7 @@ export class PackageSubscriptionService {
   }
 
   private buildPlanSnapshot(
-    plan: Prisma.PackagePlanGetPayload<{
-      include: typeof PLAN_SNAPSHOT_INCLUDE;
-    }>,
+    plan: PackagePlanWithDetails,
     capturedAt: Date,
   ): PackagePlanSnapshot {
     return {
@@ -482,23 +557,6 @@ export class PackageSubscriptionService {
     };
   }
 
-  /**
-   * Calculates how much unused value remains on the tenant's current plan.
-   *
-   * Formula for recurring plans:
-   *   unused balance = current plan price * (remaining period ms / total period ms)
-   *
-   * Checkout then charges:
-   *   amount due = max(target plan full price - unused balance, 0)
-   *
-   * Example: a tenant bought Starter for 30/month, used 5 days of a 30-day
-   * period, then upgrades to Business for 60/month. The unused Starter balance
-   * is 30 * 25/30 = 25, so the upgrade checkout amount is 60 - 25 = 35.
-   *
-   * FREE plans produce no credit. LIFETIME plans do not have a meaningful
-   * period to prorate, so the paid price is treated as the available balance
-   * while the subscription is still active.
-   */
   private calculateUnusedSubscriptionBalance(params: {
     price: number;
     billingCycle: PackageBillingCycle;

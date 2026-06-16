@@ -4,15 +4,28 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  type SupplierInvoice,
+  type SupplierPurchaseOrder,
+  type SupplierPurchaseOrderItem,
+  type SupplierPurchaseReturn,
   FinanceReceivableStatus,
   FinanceSourceType,
   InventoryMovementType,
   InventoryReferenceType,
-  Prisma,
   SupplierInvoiceStatus,
   SupplierPurchaseOrderStatus,
   SupplierPurchaseReturnStatus,
-} from "@prisma/client";
+  financeReceivable,
+  financeTax,
+  supplier,
+  supplierInvoice,
+  supplierPurchaseOrder,
+  supplierPurchaseOrderItem,
+  supplierPurchaseReturn,
+  supplierPurchaseReturnItem,
+} from "@/database/schema";
+import Decimal from "decimal.js";
+import { and, asc, count, desc, eq, ilike, ne, or } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import {
@@ -25,8 +38,7 @@ import {
 } from "../domain/purchase-return.policy";
 import { normalizeNullableText } from "../domain/supplier-contact.policy";
 import { SupplierCodeRepository } from "../infrastructure/supplier-code.repository";
-import { PURCHASE_RETURN_INCLUDE } from "../infrastructure/supplier.selects";
-import { PrismaService } from "../../../prisma/prisma.service";
+import { DatabaseService } from "../../../database/database.service";
 import { FinanceLedgerService } from "../../finance/common/finance-ledger.service";
 import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
 import {
@@ -34,14 +46,23 @@ import {
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
 
+type PurchaseOrderForReturn = SupplierPurchaseOrder & {
+  items: SupplierPurchaseOrderItem[];
+  invoices: SupplierInvoice[];
+};
+
 @Injectable()
 export class PurchaseReturnService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly inventoryLookup: InventoryLookupService,
     private readonly finance: FinanceLedgerService,
     private readonly codes: SupplierCodeRepository,
   ) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async createPurchaseReturn(
     currentUser: CurrentUserPayload,
@@ -51,34 +72,13 @@ export class PurchaseReturnService {
   ) {
     assertPurchaseReturnItems(dto.items);
 
-    const purchaseOrder = await this.prisma.supplierPurchaseOrder.findFirst({
-      where: {
-        id: purchaseOrderId,
-        businessId,
-        deletedAt: null,
-        status: SupplierPurchaseOrderStatus.RECEIVED,
-      },
-      include: {
-        items: true,
-        invoices: {
-          where: {
-            deletedAt: null,
-            status: {
-              not: SupplierInvoiceStatus.CANCELLED,
-            },
-          },
-          orderBy: { createdAt: "desc" },
-        },
-      },
-    });
+    const purchaseOrder = await this.getReceivedPurchaseOrder(
+      businessId,
+      purchaseOrderId,
+    );
+    const supplierInvoiceRow = purchaseOrder.invoices[0];
 
-    if (!purchaseOrder) {
-      throw new NotFoundException("Received purchase order not found");
-    }
-
-    const supplierInvoice = purchaseOrder.invoices[0];
-
-    if (!supplierInvoice) {
+    if (!supplierInvoiceRow) {
       throw new BadRequestException(
         "Purchase order must be received before return",
       );
@@ -91,13 +91,14 @@ export class PurchaseReturnService {
     );
     const totals = calculatePurchaseReturnTotals(items);
 
-    const purchaseReturn = await this.prisma.$transaction(async (tx) => {
-      const createdReturn = await tx.supplierPurchaseReturn.create({
-        data: {
+    const purchaseReturn = await this.db.transaction(async (tx) => {
+      const [createdReturn] = await tx
+        .insert(supplierPurchaseReturn)
+        .values({
           businessId,
           supplierId: purchaseOrder.supplierId,
           purchaseOrderId: purchaseOrder.id,
-          supplierInvoiceId: supplierInvoice.id,
+          supplierInvoiceId: supplierInvoiceRow.id,
           warehouseId: purchaseOrder.warehouseId,
           taxId: purchaseOrder.taxId,
           returnNo: await this.codes.generateUniqueReturnNo(businessId),
@@ -110,20 +111,22 @@ export class PurchaseReturnService {
           taxRate: purchaseOrder.taxRate,
           totalAmount: totals.totalAmount,
           createdBy: currentUser.id,
-          items: {
-            create: items.map((item) => ({
-              productId: item.productId,
-              variantId: item.variantId,
-              quantity: item.quantity,
-              unitCost: item.unitCost,
-              discountAmount: item.discountAmount,
-              taxAmount: item.taxAmount,
-              lineTotal: item.lineTotal,
-              reason: normalizeNullableText(item.reason),
-            })),
-          },
-        },
-      });
+        })
+        .returning();
+
+      await tx.insert(supplierPurchaseReturnItem).values(
+        items.map((item) => ({
+          purchaseReturnId: createdReturn.id,
+          productId: item.productId,
+          variantId: item.variantId,
+          quantity: item.quantity,
+          unitCost: item.unitCost,
+          discountAmount: item.discountAmount,
+          taxAmount: item.taxAmount,
+          lineTotal: item.lineTotal,
+          reason: normalizeNullableText(item.reason),
+        })),
+      );
 
       for (const item of items) {
         await this.inventoryLookup.reserveStock(tx, {
@@ -147,10 +150,7 @@ export class PurchaseReturnService {
         note: dto.reason,
       });
 
-      return tx.supplierPurchaseReturn.findFirst({
-        where: { id: createdReturn.id, businessId },
-        include: PURCHASE_RETURN_INCLUDE,
-      });
+      return this.hydrateReturn(createdReturn);
     });
 
     return apiResponse(
@@ -166,34 +166,38 @@ export class PurchaseReturnService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const where = and(
+      eq(supplierPurchaseReturn.businessId, businessId),
+      query.supplierId
+        ? eq(supplierPurchaseReturn.supplierId, query.supplierId)
+        : undefined,
+      query.purchaseOrderId
+        ? eq(supplierPurchaseReturn.purchaseOrderId, query.purchaseOrderId)
+        : undefined,
+      query.status ? eq(supplierPurchaseReturn.status, query.status) : undefined,
+      query.search
+        ? or(
+            ilike(supplierPurchaseReturn.returnNo, `%${query.search}%`),
+            ilike(supplierPurchaseReturn.reason, `%${query.search}%`),
+          )
+        : undefined,
+    );
 
-    const where: Prisma.SupplierPurchaseReturnWhereInput = {
-      businessId,
-      ...(query.supplierId ? { supplierId: query.supplierId } : {}),
-      ...(query.purchaseOrderId
-        ? { purchaseOrderId: query.purchaseOrderId }
-        : {}),
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { returnNo: { contains: query.search, mode: "insensitive" } },
-              { reason: { contains: query.search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-    };
-
-    const [items, total] = await Promise.all([
-      this.prisma.supplierPurchaseReturn.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-        include: PURCHASE_RETURN_INCLUDE,
-      }),
-      this.prisma.supplierPurchaseReturn.count({ where }),
+    const [rows, total] = await Promise.all([
+      this.db
+        .select()
+        .from(supplierPurchaseReturn)
+        .where(where)
+        .orderBy(desc(supplierPurchaseReturn.createdAt))
+        .limit(limit)
+        .offset(skip),
+      this.db
+        .select({ value: count() })
+        .from(supplierPurchaseReturn)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
     ]);
+    const items = await Promise.all(rows.map((row) => this.hydrateReturn(row)));
 
     return paginatedResponse(items, {
       page,
@@ -204,16 +208,16 @@ export class PurchaseReturnService {
   }
 
   async findPurchaseReturn(businessId: string, purchaseReturnId: string) {
-    const purchaseReturn = await this.prisma.supplierPurchaseReturn.findFirst({
-      where: { id: purchaseReturnId, businessId },
-      include: PURCHASE_RETURN_INCLUDE,
-    });
+    const purchaseReturn = await this.findReturnRow(
+      businessId,
+      purchaseReturnId,
+    );
 
     if (!purchaseReturn) {
       throw new NotFoundException("Supplier purchase return not found");
     }
 
-    return apiResponse(purchaseReturn);
+    return apiResponse(await this.hydrateReturn(purchaseReturn));
   }
 
   async completePurchaseReturn(
@@ -221,20 +225,12 @@ export class PurchaseReturnService {
     businessId: string,
     purchaseReturnId: string,
   ) {
-    const purchaseReturn = await this.prisma.supplierPurchaseReturn.findFirst({
-      where: {
-        id: purchaseReturnId,
-        businessId,
-        status: SupplierPurchaseReturnStatus.PENDING,
-      },
-      include: { items: true },
-    });
+    const purchaseReturn = await this.getPendingReturn(
+      businessId,
+      purchaseReturnId,
+    );
 
-    if (!purchaseReturn) {
-      throw new NotFoundException("Pending supplier purchase return not found");
-    }
-
-    const completedReturn = await this.prisma.$transaction(async (tx) => {
+    const completedReturn = await this.db.transaction(async (tx) => {
       for (const item of purchaseReturn.items) {
         await this.inventoryLookup.deductReservedStock(tx, {
           businessId,
@@ -250,13 +246,13 @@ export class PurchaseReturnService {
         });
       }
 
-      return tx.supplierPurchaseReturn.update({
-        where: { id: purchaseReturn.id },
-        data: {
-          status: SupplierPurchaseReturnStatus.COMPLETED,
-        },
-        include: PURCHASE_RETURN_INCLUDE,
-      });
+      const [updatedReturn] = await tx
+        .update(supplierPurchaseReturn)
+        .set({ status: SupplierPurchaseReturnStatus.COMPLETED })
+        .where(eq(supplierPurchaseReturn.id, purchaseReturn.id))
+        .returning();
+
+      return this.hydrateReturn(updatedReturn);
     });
 
     return apiResponse(
@@ -266,20 +262,12 @@ export class PurchaseReturnService {
   }
 
   async cancelPurchaseReturn(businessId: string, purchaseReturnId: string) {
-    const purchaseReturn = await this.prisma.supplierPurchaseReturn.findFirst({
-      where: {
-        id: purchaseReturnId,
-        businessId,
-        status: SupplierPurchaseReturnStatus.PENDING,
-      },
-      include: { items: true },
-    });
+    const purchaseReturn = await this.getPendingReturn(
+      businessId,
+      purchaseReturnId,
+    );
 
-    if (!purchaseReturn) {
-      throw new NotFoundException("Pending supplier purchase return not found");
-    }
-
-    const cancelledReturn = await this.prisma.$transaction(async (tx) => {
+    const cancelledReturn = await this.db.transaction(async (tx) => {
       for (const item of purchaseReturn.items) {
         await this.inventoryLookup.releaseStockReservation(tx, {
           businessId,
@@ -293,27 +281,25 @@ export class PurchaseReturnService {
         });
       }
 
-      await tx.financeReceivable.updateMany({
-        where: {
-          businessId,
-          sourceType: FinanceSourceType.SUPPLIER_RETURN,
-          sourceId: purchaseReturn.id,
-          status: {
-            not: FinanceReceivableStatus.RECEIVED,
-          },
-        },
-        data: {
-          status: FinanceReceivableStatus.CANCELLED,
-        },
-      });
+      await tx
+        .update(financeReceivable)
+        .set({ status: FinanceReceivableStatus.CANCELLED })
+        .where(
+          and(
+            eq(financeReceivable.businessId, businessId),
+            eq(financeReceivable.sourceType, FinanceSourceType.SUPPLIER_RETURN),
+            eq(financeReceivable.sourceId, purchaseReturn.id),
+            ne(financeReceivable.status, FinanceReceivableStatus.RECEIVED),
+          ),
+        );
 
-      return tx.supplierPurchaseReturn.update({
-        where: { id: purchaseReturn.id },
-        data: {
-          status: SupplierPurchaseReturnStatus.CANCELLED,
-        },
-        include: PURCHASE_RETURN_INCLUDE,
-      });
+      const [updatedReturn] = await tx
+        .update(supplierPurchaseReturn)
+        .set({ status: SupplierPurchaseReturnStatus.CANCELLED })
+        .where(eq(supplierPurchaseReturn.id, purchaseReturn.id))
+        .returning();
+
+      return this.hydrateReturn(updatedReturn);
     });
 
     return apiResponse(
@@ -322,14 +308,135 @@ export class PurchaseReturnService {
     );
   }
 
+  private async getReceivedPurchaseOrder(
+    businessId: string,
+    purchaseOrderId: string,
+  ): Promise<PurchaseOrderForReturn> {
+    const [purchaseOrder] = await this.db
+      .select()
+      .from(supplierPurchaseOrder)
+      .where(
+        and(
+          eq(supplierPurchaseOrder.id, purchaseOrderId),
+          eq(supplierPurchaseOrder.businessId, businessId),
+          eq(supplierPurchaseOrder.status, SupplierPurchaseOrderStatus.RECEIVED),
+        ),
+      );
+
+    if (!purchaseOrder) {
+      throw new NotFoundException("Received purchase order not found");
+    }
+
+    const [items, invoices] = await Promise.all([
+      this.db
+        .select()
+        .from(supplierPurchaseOrderItem)
+        .where(eq(supplierPurchaseOrderItem.purchaseOrderId, purchaseOrder.id)),
+      this.db
+        .select()
+        .from(supplierInvoice)
+        .where(
+          and(
+            eq(supplierInvoice.purchaseOrderId, purchaseOrder.id),
+            ne(supplierInvoice.status, SupplierInvoiceStatus.CANCELLED),
+          ),
+        )
+        .orderBy(desc(supplierInvoice.createdAt)),
+    ]);
+
+    return { ...purchaseOrder, items, invoices };
+  }
+
+  private async getPendingReturn(
+    businessId: string,
+    purchaseReturnId: string,
+  ) {
+    const purchaseReturn = await this.findReturnRow(
+      businessId,
+      purchaseReturnId,
+      SupplierPurchaseReturnStatus.PENDING,
+    );
+
+    if (!purchaseReturn) {
+      throw new NotFoundException("Pending supplier purchase return not found");
+    }
+
+    const items = await this.db
+      .select()
+      .from(supplierPurchaseReturnItem)
+      .where(eq(supplierPurchaseReturnItem.purchaseReturnId, purchaseReturn.id));
+
+    return { ...purchaseReturn, items };
+  }
+
+  private async findReturnRow(
+    businessId: string,
+    purchaseReturnId: string,
+    status?: SupplierPurchaseReturnStatus,
+  ) {
+    const [purchaseReturn] = await this.db
+      .select()
+      .from(supplierPurchaseReturn)
+      .where(
+        and(
+          eq(supplierPurchaseReturn.id, purchaseReturnId),
+          eq(supplierPurchaseReturn.businessId, businessId),
+          status ? eq(supplierPurchaseReturn.status, status) : undefined,
+        ),
+      );
+
+    return purchaseReturn ?? null;
+  }
+
+  private async hydrateReturn(purchaseReturn: SupplierPurchaseReturn) {
+    const [supplierRow, purchaseOrder, supplierInvoiceRow, tax, items] =
+      await Promise.all([
+        this.db
+          .select()
+          .from(supplier)
+          .where(eq(supplier.id, purchaseReturn.supplierId))
+          .then(([row]) => row ?? null),
+        purchaseReturn.purchaseOrderId
+          ? this.db
+              .select()
+              .from(supplierPurchaseOrder)
+              .where(eq(supplierPurchaseOrder.id, purchaseReturn.purchaseOrderId))
+              .then(([row]) => row ?? null)
+          : Promise.resolve(null),
+        purchaseReturn.supplierInvoiceId
+          ? this.db
+              .select()
+              .from(supplierInvoice)
+              .where(eq(supplierInvoice.id, purchaseReturn.supplierInvoiceId))
+              .then(([row]) => row ?? null)
+          : Promise.resolve(null),
+        purchaseReturn.taxId
+          ? this.db
+              .select()
+              .from(financeTax)
+              .where(eq(financeTax.id, purchaseReturn.taxId))
+              .then(([row]) => row ?? null)
+          : Promise.resolve(null),
+        this.db
+          .select()
+          .from(supplierPurchaseReturnItem)
+          .where(eq(supplierPurchaseReturnItem.purchaseReturnId, purchaseReturn.id))
+          .orderBy(asc(supplierPurchaseReturnItem.createdAt)),
+      ]);
+
+    return {
+      ...purchaseReturn,
+      supplier: supplierRow,
+      purchaseOrder,
+      supplierInvoice: supplierInvoiceRow,
+      tax,
+      items,
+    };
+  }
+
   private async buildPurchaseReturnItems(
     businessId: string,
-    purchaseOrder: Prisma.SupplierPurchaseOrderGetPayload<{
-      include: {
-        items: true;
-        invoices: true;
-      };
-    }>,
+    purchaseOrder: PurchaseOrderForReturn,
     requestedItems: {
       productId: string;
       variantId?: string | null;
@@ -343,32 +450,32 @@ export class PurchaseReturnService {
         item,
       ]),
     );
-    const existingReturnItems =
-      await this.prisma.supplierPurchaseReturnItem.findMany({
-        where: {
-          purchaseReturn: {
-            businessId,
-            purchaseOrderId: purchaseOrder.id,
-            status: {
-              not: SupplierPurchaseReturnStatus.CANCELLED,
-            },
-          },
-        },
-        select: {
-          productId: true,
-          variantId: true,
-          quantity: true,
-        },
-      });
-    const returnedQuantityByItem = new Map<string, Prisma.Decimal>();
+    const existingReturnItems = await this.db
+      .select({
+        productId: supplierPurchaseReturnItem.productId,
+        variantId: supplierPurchaseReturnItem.variantId,
+        quantity: supplierPurchaseReturnItem.quantity,
+      })
+      .from(supplierPurchaseReturnItem)
+      .innerJoin(
+        supplierPurchaseReturn,
+        eq(supplierPurchaseReturn.id, supplierPurchaseReturnItem.purchaseReturnId),
+      )
+      .where(
+        and(
+          eq(supplierPurchaseReturn.businessId, businessId),
+          eq(supplierPurchaseReturn.purchaseOrderId, purchaseOrder.id),
+          ne(supplierPurchaseReturn.status, SupplierPurchaseReturnStatus.CANCELLED),
+        ),
+      );
+    const returnedQuantityByItem = new Map<string, Decimal>();
 
     for (const item of existingReturnItems) {
       const itemKey = this.inventoryLookup.buildStockItemKey(
         item.productId,
         item.variantId,
       );
-      const current =
-        returnedQuantityByItem.get(itemKey) ?? new Prisma.Decimal(0);
+      const current = returnedQuantityByItem.get(itemKey) ?? new Decimal(0);
 
       returnedQuantityByItem.set(itemKey, current.plus(item.quantity));
     }
@@ -389,10 +496,10 @@ export class PurchaseReturnService {
         );
       }
 
-      const quantity = new Prisma.Decimal(requestedItem.quantity);
+      const quantity = new Decimal(requestedItem.quantity);
       const alreadyReturned =
-        returnedQuantityByItem.get(itemKey) ?? new Prisma.Decimal(0);
-      const remainingReturnable = new Prisma.Decimal(
+        returnedQuantityByItem.get(itemKey) ?? new Decimal(0);
+      const remainingReturnable = new Decimal(
         purchaseOrderItem.quantityReceived,
       ).minus(alreadyReturned);
 
@@ -402,10 +509,8 @@ export class PurchaseReturnService {
         );
       }
 
-      const orderedQuantity = new Prisma.Decimal(
-        purchaseOrderItem.quantityOrdered,
-      );
-      const discountPerUnit = new Prisma.Decimal(
+      const orderedQuantity = new Decimal(purchaseOrderItem.quantityOrdered);
+      const discountPerUnit = new Decimal(
         purchaseOrderItem.discountAmount,
       ).div(orderedQuantity);
       const subtotal = quantity.mul(purchaseOrderItem.unitCost);

@@ -4,36 +4,40 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  type InventoryStockAdjustment,
   InventoryAdjustmentStatus,
   InventoryAdjustmentType,
   InventoryMovementType,
   InventoryReferenceType,
-  Prisma,
-} from "@prisma/client";
+  inventoryStockAdjustment,
+  inventoryStockAdjustmentItem,
+  warehouse,
+} from "@/database/schema";
+import Decimal from "decimal.js";
+import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import {
   CreateStockAdjustmentDto,
   QueryStockAdjustmentDto,
 } from "./dto/stock-adjustment.dto";
-import { PrismaService } from "../../../prisma/prisma.service";
+import { DatabaseService } from "../../../database/database.service";
 import { InventoryLookupService } from "../common/inventory-lookup.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
 
-const ADJUSTMENT_INCLUDE = {
-  warehouse: true,
-  items: { orderBy: { createdAt: "asc" } },
-} satisfies Prisma.InventoryStockAdjustmentInclude;
-
 @Injectable()
 export class StockAdjustmentService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly lookup: InventoryLookupService,
   ) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async create(
     currentUser: CurrentUserPayload,
@@ -63,26 +67,36 @@ export class StockAdjustmentService {
         return {
           productId: item.productId,
           variantId: item.variantId ?? null,
-          oldQuantity: warehouseStock?.totalQuantity ?? 0,
-          adjustmentQty: item.adjustmentQty,
+          oldQuantity: warehouseStock?.totalQuantity ?? new Decimal(0),
+          adjustmentQty: new Decimal(item.adjustmentQty),
           reason: this.lookup.normalizeNullableText(item.reason),
         };
       }),
     );
 
     try {
-      const adjustment = await this.prisma.inventoryStockAdjustment.create({
-        data: {
-          businessId,
-          warehouseId: dto.warehouseId,
-          adjustmentNo,
-          adjustmentType: dto.adjustmentType,
-          reason: this.lookup.normalizeNullableText(dto.reason),
-          status: InventoryAdjustmentStatus.DRAFT,
-          createdBy: currentUser.id,
-          items: { create: items },
-        },
-        include: ADJUSTMENT_INCLUDE,
+      const adjustment = await this.db.transaction(async (tx) => {
+        const [createdAdjustment] = await tx
+          .insert(inventoryStockAdjustment)
+          .values({
+            businessId,
+            warehouseId: dto.warehouseId,
+            adjustmentNo,
+            adjustmentType: dto.adjustmentType,
+            reason: this.lookup.normalizeNullableText(dto.reason),
+            status: InventoryAdjustmentStatus.DRAFT,
+            createdBy: currentUser.id,
+          })
+          .returning();
+
+        await tx.insert(inventoryStockAdjustmentItem).values(
+          items.map((item) => ({
+            adjustmentId: createdAdjustment.id,
+            ...item,
+          })),
+        );
+
+        return this.findAdjustmentWithRelations(createdAdjustment.id);
       });
 
       return apiResponse(adjustment, "Stock adjustment created successfully");
@@ -98,35 +112,39 @@ export class StockAdjustmentService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const where = and(
+      eq(inventoryStockAdjustment.businessId, businessId),
+      isNull(inventoryStockAdjustment.deletedAt),
+      query.warehouseId
+        ? eq(inventoryStockAdjustment.warehouseId, query.warehouseId)
+        : undefined,
+      query.search
+        ? or(
+            ilike(inventoryStockAdjustment.adjustmentNo, `%${query.search}%`),
+            ilike(inventoryStockAdjustment.reason, `%${query.search}%`),
+          )
+        : undefined,
+    );
 
-    const where: Prisma.InventoryStockAdjustmentWhereInput = {
-      businessId,
-      deletedAt: null,
-      ...(query.warehouseId ? { warehouseId: query.warehouseId } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              {
-                adjustmentNo: {
-                  contains: query.search,
-                  mode: "insensitive",
-                },
-              },
-              { reason: { contains: query.search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-    };
-
-    const items = await this.prisma.inventoryStockAdjustment.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { createdAt: "desc" },
-      include: ADJUSTMENT_INCLUDE,
-    });
-
-    const total = await this.prisma.inventoryStockAdjustment.count({ where });
+    const [rows, total] = await Promise.all([
+      this.db
+        .select()
+        .from(inventoryStockAdjustment)
+        .where(where)
+        .orderBy(desc(inventoryStockAdjustment.createdAt))
+        .limit(limit)
+        .offset(skip),
+      this.db
+        .select({ value: count() })
+        .from(inventoryStockAdjustment)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
+    ]);
+    const items = await Promise.all(
+      rows.map((adjustment) =>
+        this.withAdjustmentRelations(adjustment),
+      ),
+    );
 
     return paginatedResponse(items, {
       page,
@@ -137,10 +155,10 @@ export class StockAdjustmentService {
   }
 
   async findOne(businessId: string, adjustmentId: string) {
-    const adjustment = await this.prisma.inventoryStockAdjustment.findFirst({
-      where: { id: adjustmentId, businessId, deletedAt: null },
-      include: ADJUSTMENT_INCLUDE,
-    });
+    const adjustment = await this.findAdjustmentWithRelations(
+      adjustmentId,
+      businessId,
+    );
 
     if (!adjustment) {
       throw new NotFoundException("Stock adjustment not found");
@@ -159,12 +177,12 @@ export class StockAdjustmentService {
       adjustmentId,
     );
 
-    const approvedAdjustment = await this.prisma.$transaction(async (tx) => {
+    const approvedAdjustment = await this.db.transaction(async (tx) => {
       for (const item of adjustment.items) {
         const quantityDelta =
           adjustment.adjustmentType === InventoryAdjustmentType.INCREASE
             ? item.adjustmentQty
-            : new Prisma.Decimal(item.adjustmentQty).negated();
+            : new Decimal(item.adjustmentQty).negated();
 
         await this.lookup.applyStockDelta(tx, {
           businessId,
@@ -183,15 +201,17 @@ export class StockAdjustmentService {
         });
       }
 
-      return tx.inventoryStockAdjustment.update({
-        where: { id: adjustmentId },
-        data: {
+      const [updatedAdjustment] = await tx
+        .update(inventoryStockAdjustment)
+        .set({
           status: InventoryAdjustmentStatus.APPROVED,
           approvedBy: currentUser.id,
           approvedAt: new Date(),
-        },
-        include: ADJUSTMENT_INCLUDE,
-      });
+        })
+        .where(eq(inventoryStockAdjustment.id, adjustmentId))
+        .returning();
+
+      return this.withAdjustmentRelations(updatedAdjustment);
     });
 
     return apiResponse(approvedAdjustment, "Stock adjustment approved");
@@ -204,37 +224,79 @@ export class StockAdjustmentService {
   ) {
     await this.getDraftAdjustmentOrThrow(businessId, adjustmentId);
 
-    const adjustment = await this.prisma.inventoryStockAdjustment.update({
-      where: { id: adjustmentId },
-      data: {
+    const [adjustment] = await this.db
+      .update(inventoryStockAdjustment)
+      .set({
         status: InventoryAdjustmentStatus.CANCELLED,
         approvedBy: currentUser.id,
-      },
-      include: ADJUSTMENT_INCLUDE,
-    });
+      })
+      .where(eq(inventoryStockAdjustment.id, adjustmentId))
+      .returning();
 
-    return apiResponse(adjustment, "Stock adjustment cancelled");
+    return apiResponse(
+      await this.withAdjustmentRelations(adjustment),
+      "Stock adjustment cancelled",
+    );
   }
 
   private async getDraftAdjustmentOrThrow(
     businessId: string,
     adjustmentId: string,
   ) {
-    const adjustment = await this.prisma.inventoryStockAdjustment.findFirst({
-      where: {
-        id: adjustmentId,
-        businessId,
-        deletedAt: null,
-        status: InventoryAdjustmentStatus.DRAFT,
-      },
-      include: { items: true },
-    });
+    const adjustment = await this.findAdjustmentWithRelations(
+      adjustmentId,
+      businessId,
+      InventoryAdjustmentStatus.DRAFT,
+    );
 
     if (!adjustment) {
       throw new NotFoundException("Draft stock adjustment not found");
     }
 
     return adjustment;
+  }
+
+  private async findAdjustmentWithRelations(
+    adjustmentId: string,
+    businessId?: string,
+    status?: InventoryAdjustmentStatus,
+  ) {
+    const [adjustment] = await this.db
+      .select()
+      .from(inventoryStockAdjustment)
+      .where(
+        and(
+          eq(inventoryStockAdjustment.id, adjustmentId),
+          businessId
+            ? eq(inventoryStockAdjustment.businessId, businessId)
+            : undefined,
+          isNull(inventoryStockAdjustment.deletedAt),
+          status ? eq(inventoryStockAdjustment.status, status) : undefined,
+        ),
+      );
+
+    return adjustment ? this.withAdjustmentRelations(adjustment) : null;
+  }
+
+  private async withAdjustmentRelations(adjustment: InventoryStockAdjustment) {
+    const [warehouseRow, items] = await Promise.all([
+      this.db
+        .select()
+        .from(warehouse)
+        .where(eq(warehouse.id, adjustment.warehouseId))
+        .then(([row]) => row ?? null),
+      this.db
+        .select()
+        .from(inventoryStockAdjustmentItem)
+        .where(eq(inventoryStockAdjustmentItem.adjustmentId, adjustment.id))
+        .orderBy(asc(inventoryStockAdjustmentItem.createdAt)),
+    ]);
+
+    return {
+      ...adjustment,
+      warehouse: warehouseRow,
+      items,
+    };
   }
 
   private assertItems(

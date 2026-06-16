@@ -6,14 +6,38 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  type PermissionAction,
+  type RbacFeature,
+  type RbacRole,
+  type RbacRolePermission,
+  type RbacUserRoleMap,
+  type SystemUser,
   BusinessMemberStatus,
   BusinessStatus,
   CommonStatus,
-  Prisma,
   SystemUserStatus,
   SystemUserType,
   UserRoleMapStatus,
-} from "@prisma/client";
+  business,
+  businessMember,
+  rbacRole,
+  rbacRolePermission,
+  rbacUserRoleMap,
+  systemUser,
+} from "@/database/schema";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  ilike,
+  inArray,
+  isNull,
+  ne,
+  or,
+} from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { AssignRoleDto } from "./dto/assign-role.dto";
@@ -23,82 +47,49 @@ import { QueryRoleDto } from "./dto/query-role.dto";
 import { RolePermissionDto } from "./dto/role-permission.dto";
 import { UpdateRoleAssignmentDto } from "./dto/update-role-assignment.dto";
 import { UpdateRoleDto } from "./dto/update-role.dto";
-import { PrismaService } from "../../prisma/prisma.service";
+import { DatabaseService } from "../../database/database.service";
+import { isUniqueConstraintError } from "../../common/database/db-error.util";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
 
 const ACCESSIBLE_BUSINESS_STATUSES = [
-  BusinessStatus.TRIAL,
   BusinessStatus.ACTIVE,
 ] satisfies BusinessStatus[];
 
-const RBAC_ROLE_INCLUDE = {
-  createdBy: {
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      type: true,
-      status: true,
-    },
-  },
-  updatedBy: {
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      type: true,
-      status: true,
-    },
-  },
-  permissions: {
-    orderBy: [{ feature: "asc" }, { action: "asc" }],
-  },
-  _count: {
-    select: {
-      userRoleMaps: true,
-    },
-  },
-} satisfies Prisma.RbacRoleInclude;
+type UserSummary = Pick<
+  SystemUser,
+  "id" | "name" | "email" | "type" | "status"
+>;
 
-const RBAC_ROLE_ASSIGNMENT_INCLUDE = {
-  user: {
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      type: true,
-      status: true,
-    },
-  },
-  role: {
-    select: {
-      id: true,
-      businessId: true,
-      name: true,
-      description: true,
-      status: true,
-      permissions: {
-        orderBy: [{ feature: "asc" }, { action: "asc" }],
-      },
-    },
-  },
-  assignedByUser: {
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      type: true,
-      status: true,
-    },
-  },
-} satisfies Prisma.RbacUserRoleMapInclude;
+type RoleWithDetails = RbacRole & {
+  createdBy: UserSummary | null;
+  updatedBy: UserSummary | null;
+  permissions: RbacRolePermission[];
+  _count: {
+    userRoleMaps: number;
+  };
+};
+
+type AssignmentWithDetails = RbacUserRoleMap & {
+  user: UserSummary | null;
+  role: Pick<
+    RbacRole,
+    "id" | "businessId" | "name" | "description" | "status"
+  > & {
+    permissions: RbacRolePermission[];
+  };
+  assignedByUser: UserSummary | null;
+};
 
 @Injectable()
 export class RoleService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly database: DatabaseService) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async create(
     currentUser: CurrentUserPayload,
@@ -111,31 +102,35 @@ export class RoleService {
     const permissions = this.normalizePermissions(dto.permissions ?? []);
 
     try {
-      const role = await this.prisma.rbacRole.create({
-        data: {
-          businessId,
-          name,
-          description: this.normalizeNullableText(dto.description),
-          status: dto.status ?? CommonStatus.ACTIVE,
+      const role = await this.db.transaction(async (tx) => {
+        const [created] = await tx
+          .insert(rbacRole)
+          .values({
+            businessId,
+            name,
+            description: this.normalizeNullableText(dto.description),
+            status: dto.status ?? CommonStatus.ACTIVE,
+            createdById: currentUser.id,
+            updatedById: currentUser.id,
+          })
+          .returning();
 
-          createdById: currentUser.id,
-          updatedById: currentUser.id,
+        if (permissions.length > 0) {
+          await tx.insert(rbacRolePermission).values(
+            permissions.map((permission) => ({
+              roleId: created.id,
+              feature: permission.feature,
+              action: permission.action,
+            })),
+          );
+        }
 
-          ...(permissions.length > 0 && {
-            permissions: {
-              create: permissions.map((permission) => ({
-                feature: permission.feature,
-                action: permission.action,
-              })),
-            },
-          }),
-        },
-        include: RBAC_ROLE_INCLUDE,
+        return this.withRoleDetails(created);
       });
 
       return apiResponse(role, "Role created successfully");
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handleDatabaseError(error);
     }
   }
 
@@ -147,59 +142,39 @@ export class RoleService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-
     const sortBy = query.sortBy ?? "createdAt";
     const sortOrder = query.sortOrder ?? "desc";
-
     const canIncludeDeleted =
       currentUser.type === SystemUserType.ADMIN && query.includeDeleted;
+    const where = and(
+      eq(rbacRole.businessId, businessId),
+      !canIncludeDeleted ? isNull(rbacRole.deletedAt) : undefined,
+      query.status ? eq(rbacRole.status, query.status) : undefined,
+      query.search
+        ? or(
+            ilike(rbacRole.name, `%${query.search}%`),
+            ilike(rbacRole.description, `%${query.search}%`),
+          )
+        : undefined,
+    );
 
-    const where: Prisma.RbacRoleWhereInput = {
-      businessId,
+    const [roles, total] = await Promise.all([
+      this.db
+        .select()
+        .from(rbacRole)
+        .where(where)
+        .orderBy(this.roleOrderBy(sortBy, sortOrder))
+        .limit(limit)
+        .offset(skip)
+        .then((rows) => this.withRolesDetails(rows)),
+      this.db
+        .select({ value: count() })
+        .from(rbacRole)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
+    ]);
 
-      ...(!canIncludeDeleted && {
-        deletedAt: null,
-      }),
-
-      ...(query.status && {
-        status: query.status,
-      }),
-
-      ...(query.search && {
-        OR: [
-          {
-            name: {
-              contains: query.search,
-              mode: "insensitive",
-            },
-          },
-          {
-            description: {
-              contains: query.search,
-              mode: "insensitive",
-            },
-          },
-        ],
-      }),
-    };
-
-    const orderBy: Prisma.RbacRoleOrderByWithRelationInput = {
-      [sortBy]: sortOrder,
-    };
-
-    const items = await this.prisma.rbacRole.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy,
-      include: RBAC_ROLE_INCLUDE,
-    });
-
-    const total = await this.prisma.rbacRole.count({
-      where,
-    });
-
-    return paginatedResponse(items, {
+    return paginatedResponse(roles, {
       page,
       limit,
       total,
@@ -234,59 +209,43 @@ export class RoleService {
       : [];
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
-        await tx.rbacRole.update({
-          where: {
-            id: roleId,
-          },
-          data: {
-            ...(name !== undefined && {
-              name,
-            }),
-
+      return await this.db.transaction(async (tx) => {
+        const [updated] = await tx
+          .update(rbacRole)
+          .set({
+            ...(name !== undefined && { name }),
             ...(dto.description !== undefined && {
               description: this.normalizeNullableText(dto.description),
             }),
-
-            ...(dto.status !== undefined && {
-              status: dto.status,
-            }),
-
+            ...(dto.status !== undefined && { status: dto.status }),
             updatedById: currentUser.id,
-          },
-        });
+          })
+          .where(eq(rbacRole.id, roleId))
+          .returning();
 
         if (shouldReplacePermissions) {
-          await tx.rbacRolePermission.deleteMany({
-            where: {
-              roleId,
-            },
-          });
+          await tx
+            .delete(rbacRolePermission)
+            .where(eq(rbacRolePermission.roleId, roleId));
 
           if (permissions.length > 0) {
-            await tx.rbacRolePermission.createMany({
-              data: permissions.map((permission) => ({
+            await tx.insert(rbacRolePermission).values(
+              permissions.map((permission) => ({
                 roleId,
                 feature: permission.feature,
                 action: permission.action,
               })),
-            });
+            );
           }
         }
 
-        const role = await tx.rbacRole.findFirst({
-          where: {
-            id: roleId,
-            businessId,
-            deletedAt: null,
-          },
-          include: RBAC_ROLE_INCLUDE,
-        });
-
-        return apiResponse(role, "Role updated successfully");
+        return apiResponse(
+          await this.withRoleDetails(updated),
+          "Role updated successfully",
+        );
       });
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handleDatabaseError(error);
     }
   }
 
@@ -297,30 +256,31 @@ export class RoleService {
   ) {
     await this.assertRoleBelongsToBusiness(businessId, roleId);
 
-    await this.prisma.$transaction(async (tx) => {
-      const activeAssignmentCount = await tx.rbacUserRoleMap.count({
-        where: {
-          roleId,
-          status: UserRoleMapStatus.ACTIVE,
-        },
-      });
+    await this.db.transaction(async (tx) => {
+      const [activeAssignmentCount] = await tx
+        .select({ value: count() })
+        .from(rbacUserRoleMap)
+        .where(
+          and(
+            eq(rbacUserRoleMap.roleId, roleId),
+            eq(rbacUserRoleMap.status, UserRoleMapStatus.ACTIVE),
+          ),
+        );
 
-      if (activeAssignmentCount > 0) {
+      if ((activeAssignmentCount?.value ?? 0) > 0) {
         throw new BadRequestException(
           "Role cannot be deleted while assigned to active users",
         );
       }
 
-      await tx.rbacRole.update({
-        where: {
-          id: roleId,
-        },
-        data: {
+      await tx
+        .update(rbacRole)
+        .set({
           status: CommonStatus.INACTIVE,
           deletedAt: new Date(),
           updatedById: currentUser.id,
-        },
-      });
+        })
+        .where(eq(rbacRole.id, roleId));
     });
 
     return apiResponse(null, "Role deleted successfully");
@@ -336,88 +296,97 @@ export class RoleService {
     await this.assertUserBelongsToBusiness(dto.userId, businessId);
     this.assertValidExpiryDate(dto.expiresAt);
 
-    const existingMap = await this.prisma.rbacUserRoleMap.findUnique({
-      where: {
-        userId_roleId: {
-          userId: dto.userId,
-          roleId,
-        },
-      },
-      select: {
-        id: true,
-      },
-    });
+    const [existingMap] = await this.db
+      .select({ id: rbacUserRoleMap.id })
+      .from(rbacUserRoleMap)
+      .where(
+        and(
+          eq(rbacUserRoleMap.userId, dto.userId),
+          eq(rbacUserRoleMap.roleId, roleId),
+        ),
+      )
+      .limit(1);
 
     if (existingMap) {
-      const assignment = await this.prisma.rbacUserRoleMap.update({
-        where: {
-          id: existingMap.id,
-        },
-        data: {
+      const [assignment] = await this.db
+        .update(rbacUserRoleMap)
+        .set({
           status: UserRoleMapStatus.ACTIVE,
           assignedBy: currentUser.id,
           assignedAt: new Date(),
           expiresAt: dto.expiresAt ?? null,
-        },
-        include: RBAC_ROLE_ASSIGNMENT_INCLUDE,
-      });
+        })
+        .where(eq(rbacUserRoleMap.id, existingMap.id))
+        .returning();
 
-      return apiResponse(assignment, "Role assigned successfully");
+      return apiResponse(
+        await this.withAssignmentDetails(assignment),
+        "Role assigned successfully",
+      );
     }
 
-    const assignment = await this.prisma.rbacUserRoleMap.create({
-      data: {
+    const [assignment] = await this.db
+      .insert(rbacUserRoleMap)
+      .values({
         userId: dto.userId,
         roleId,
         status: UserRoleMapStatus.ACTIVE,
         assignedBy: currentUser.id,
         expiresAt: dto.expiresAt ?? null,
-      },
-      include: RBAC_ROLE_ASSIGNMENT_INCLUDE,
-    });
+      })
+      .returning();
 
-    return apiResponse(assignment, "Role assigned successfully");
+    return apiResponse(
+      await this.withAssignmentDetails(assignment),
+      "Role assigned successfully",
+    );
   }
 
   async findAssignments(businessId: string, query: QueryRoleAssignmentsDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const where = and(
+      exists(
+        this.db
+          .select({ id: rbacRole.id })
+          .from(rbacRole)
+          .where(
+            and(
+              eq(rbacRole.id, rbacUserRoleMap.roleId),
+              eq(rbacRole.businessId, businessId),
+              isNull(rbacRole.deletedAt),
+            ),
+          ),
+      ),
+      query.userId !== undefined
+        ? eq(rbacUserRoleMap.userId, query.userId)
+        : undefined,
+      query.roleId !== undefined
+        ? eq(rbacUserRoleMap.roleId, query.roleId)
+        : undefined,
+      query.status !== undefined
+        ? eq(rbacUserRoleMap.status, query.status)
+        : undefined,
+    );
 
-    const where: Prisma.RbacUserRoleMapWhereInput = {
-      role: {
-        businessId,
-        deletedAt: null,
-      },
+    const [assignments, total] = await Promise.all([
+      this.db
+        .select()
+        .from(rbacUserRoleMap)
+        .where(where)
+        .orderBy(desc(rbacUserRoleMap.assignedAt))
+        .limit(limit)
+        .offset(skip)
+        .then((rows) => this.withAssignmentsDetails(rows)),
+      this.db
+        .select({ value: count() })
+        .from(rbacUserRoleMap)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
+    ]);
 
-      ...(query.userId !== undefined && {
-        userId: query.userId,
-      }),
-
-      ...(query.roleId !== undefined && {
-        roleId: query.roleId,
-      }),
-
-      ...(query.status !== undefined && {
-        status: query.status,
-      }),
-    };
-
-    const items = await this.prisma.rbacUserRoleMap.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: {
-        assignedAt: "desc",
-      },
-      include: RBAC_ROLE_ASSIGNMENT_INCLUDE,
-    });
-
-    const total = await this.prisma.rbacUserRoleMap.count({
-      where,
-    });
-
-    return paginatedResponse(items, {
+    return paginatedResponse(assignments, {
       page,
       limit,
       total,
@@ -433,72 +402,71 @@ export class RoleService {
     await this.assertAssignmentBelongsToBusiness(businessId, assignmentId);
     this.assertValidExpiryDate(dto.expiresAt ?? undefined);
 
-    const assignment = await this.prisma.rbacUserRoleMap.update({
-      where: {
-        id: assignmentId,
-      },
-      data: {
-        ...(dto.status !== undefined && {
-          status: dto.status,
-        }),
+    const [assignment] = await this.db
+      .update(rbacUserRoleMap)
+      .set({
+        ...(dto.status !== undefined && { status: dto.status }),
+        ...(dto.expiresAt !== undefined && { expiresAt: dto.expiresAt }),
+      })
+      .where(eq(rbacUserRoleMap.id, assignmentId))
+      .returning();
 
-        ...(dto.expiresAt !== undefined && {
-          expiresAt: dto.expiresAt,
-        }),
-      },
-      include: RBAC_ROLE_ASSIGNMENT_INCLUDE,
-    });
-
-    return apiResponse(assignment, "Role assignment updated successfully");
+    return apiResponse(
+      await this.withAssignmentDetails(assignment),
+      "Role assignment updated successfully",
+    );
   }
 
   async revokeAssignment(businessId: string, assignmentId: string) {
     await this.assertAssignmentBelongsToBusiness(businessId, assignmentId);
 
-    const assignment = await this.prisma.rbacUserRoleMap.update({
-      where: {
-        id: assignmentId,
-      },
-      data: {
-        status: UserRoleMapStatus.REVOKED,
-      },
-      include: RBAC_ROLE_ASSIGNMENT_INCLUDE,
-    });
+    const [assignment] = await this.db
+      .update(rbacUserRoleMap)
+      .set({ status: UserRoleMapStatus.REVOKED })
+      .where(eq(rbacUserRoleMap.id, assignmentId))
+      .returning();
 
-    return apiResponse(assignment, "Role assignment revoked successfully");
+    return apiResponse(
+      await this.withAssignmentDetails(assignment),
+      "Role assignment revoked successfully",
+    );
   }
 
   private async getRoleOrThrow(businessId: string, roleId: string) {
-    const role = await this.prisma.rbacRole.findFirst({
-      where: {
-        id: roleId,
-        businessId,
-        deletedAt: null,
-      },
-      include: RBAC_ROLE_INCLUDE,
-    });
+    const [role] = await this.db
+      .select()
+      .from(rbacRole)
+      .where(
+        and(
+          eq(rbacRole.id, roleId),
+          eq(rbacRole.businessId, businessId),
+          isNull(rbacRole.deletedAt),
+        ),
+      )
+      .limit(1);
 
     if (!role) {
       throw new NotFoundException("Role not found");
     }
 
-    return role;
+    return this.withRoleDetails(role);
   }
 
   private async assertRoleBelongsToBusiness(
     businessId: string,
     roleId: string,
   ) {
-    const role = await this.prisma.rbacRole.findFirst({
-      where: {
-        id: roleId,
-        businessId,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-      },
-    });
+    const [role] = await this.db
+      .select({ id: rbacRole.id })
+      .from(rbacRole)
+      .where(
+        and(
+          eq(rbacRole.id, roleId),
+          eq(rbacRole.businessId, businessId),
+          isNull(rbacRole.deletedAt),
+        ),
+      )
+      .limit(1);
 
     if (!role) {
       throw new NotFoundException("Role not found");
@@ -509,18 +477,27 @@ export class RoleService {
     businessId: string,
     assignmentId: string,
   ) {
-    const assignment = await this.prisma.rbacUserRoleMap.findFirst({
-      where: {
-        id: assignmentId,
-        role: {
-          businessId,
-          deletedAt: null,
-        },
-      },
-      select: {
-        id: true,
-      },
-    });
+    const [assignment] = await this.db
+      .select({ id: rbacUserRoleMap.id })
+      .from(rbacUserRoleMap)
+      .where(
+        and(
+          eq(rbacUserRoleMap.id, assignmentId),
+          exists(
+            this.db
+              .select({ id: rbacRole.id })
+              .from(rbacRole)
+              .where(
+                and(
+                  eq(rbacRole.id, rbacUserRoleMap.roleId),
+                  eq(rbacRole.businessId, businessId),
+                  isNull(rbacRole.deletedAt),
+                ),
+              ),
+          ),
+        ),
+      )
+      .limit(1);
 
     if (!assignment) {
       throw new NotFoundException("Role assignment not found");
@@ -531,50 +508,51 @@ export class RoleService {
     userId: string,
     businessId: string,
   ) {
-    const user = await this.prisma.systemUser.findFirst({
-      where: {
-        id: userId,
-        status: SystemUserStatus.ACTIVE,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-      },
-    });
+    const [user] = await this.db
+      .select({ id: systemUser.id })
+      .from(systemUser)
+      .where(
+        and(
+          eq(systemUser.id, userId),
+          eq(systemUser.status, SystemUserStatus.ACTIVE),
+          isNull(systemUser.deletedAt),
+        ),
+      )
+      .limit(1);
 
     if (!user) {
       throw new NotFoundException("User not found");
     }
 
-    const business = await this.prisma.business.findFirst({
-      where: {
-        id: businessId,
-        deletedAt: null,
-        status: {
-          in: ACCESSIBLE_BUSINESS_STATUSES,
-        },
+    const [businessAccess] = await this.db
+      .select({ id: business.id })
+      .from(business)
+      .where(
+        and(
+          eq(business.id, businessId),
+          isNull(business.deletedAt),
+          inArray(business.status, ACCESSIBLE_BUSINESS_STATUSES),
+          or(
+            eq(business.ownerUserId, userId),
+            exists(
+              this.db
+                .select({ id: businessMember.id })
+                .from(businessMember)
+                .where(
+                  and(
+                    eq(businessMember.businessId, business.id),
+                    eq(businessMember.userId, userId),
+                    eq(businessMember.status, BusinessMemberStatus.ACTIVE),
+                    isNull(businessMember.deletedAt),
+                  ),
+                ),
+            ),
+          ),
+        ),
+      )
+      .limit(1);
 
-        OR: [
-          {
-            ownerUserId: userId,
-          },
-          {
-            members: {
-              some: {
-                userId,
-                status: BusinessMemberStatus.ACTIVE,
-                deletedAt: null,
-              },
-            },
-          },
-        ],
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    if (!business) {
+    if (!businessAccess) {
       throw new ForbiddenException("User does not belong to this business");
     }
   }
@@ -584,26 +562,142 @@ export class RoleService {
     name: string,
     ignoreRoleId?: string,
   ) {
-    const existingRole = await this.prisma.rbacRole.findFirst({
-      where: {
-        businessId,
-        name,
-        deletedAt: null,
-
-        ...(ignoreRoleId && {
-          id: {
-            not: ignoreRoleId,
-          },
-        }),
-      },
-      select: {
-        id: true,
-      },
-    });
+    const [existingRole] = await this.db
+      .select({ id: rbacRole.id })
+      .from(rbacRole)
+      .where(
+        and(
+          eq(rbacRole.businessId, businessId),
+          eq(rbacRole.name, name),
+          isNull(rbacRole.deletedAt),
+          ignoreRoleId ? ne(rbacRole.id, ignoreRoleId) : undefined,
+        ),
+      )
+      .limit(1);
 
     if (existingRole) {
       throw new ConflictException("Role name already exists");
     }
+  }
+
+  private async withRolesDetails(roles: RbacRole[]) {
+    return Promise.all(roles.map((role) => this.withRoleDetails(role)));
+  }
+
+  private async withRoleDetails(role: RbacRole): Promise<RoleWithDetails> {
+    const [createdBy, updatedBy, permissions, userRoleMapsCount] =
+      await Promise.all([
+        role.createdById ? this.findUserSummary(role.createdById) : null,
+        role.updatedById ? this.findUserSummary(role.updatedById) : null,
+        this.db
+          .select()
+          .from(rbacRolePermission)
+          .where(eq(rbacRolePermission.roleId, role.id))
+          .orderBy(
+            asc(rbacRolePermission.feature),
+            asc(rbacRolePermission.action),
+          ),
+        this.db
+          .select({ value: count() })
+          .from(rbacUserRoleMap)
+          .where(eq(rbacUserRoleMap.roleId, role.id))
+          .then(([row]) => row?.value ?? 0),
+      ]);
+
+    return {
+      ...role,
+      createdBy,
+      updatedBy,
+      permissions,
+      _count: {
+        userRoleMaps: userRoleMapsCount,
+      },
+    };
+  }
+
+  private async withAssignmentsDetails(assignments: RbacUserRoleMap[]) {
+    return Promise.all(
+      assignments.map((assignment) => this.withAssignmentDetails(assignment)),
+    );
+  }
+
+  private async withAssignmentDetails(
+    assignment: RbacUserRoleMap,
+  ): Promise<AssignmentWithDetails> {
+    const [user, role, assignedByUser] = await Promise.all([
+      this.findUserSummary(assignment.userId),
+      this.findAssignmentRole(assignment.roleId),
+      assignment.assignedBy
+        ? this.findUserSummary(assignment.assignedBy)
+        : null,
+    ]);
+
+    return {
+      ...assignment,
+      user,
+      role,
+      assignedByUser,
+    };
+  }
+
+  private async findAssignmentRole(roleId: string) {
+    const [role] = await this.db
+      .select({
+        id: rbacRole.id,
+        businessId: rbacRole.businessId,
+        name: rbacRole.name,
+        description: rbacRole.description,
+        status: rbacRole.status,
+      })
+      .from(rbacRole)
+      .where(eq(rbacRole.id, roleId))
+      .limit(1);
+
+    if (!role) {
+      throw new NotFoundException("Role not found");
+    }
+
+    const permissions = await this.db
+      .select()
+      .from(rbacRolePermission)
+      .where(eq(rbacRolePermission.roleId, role.id))
+      .orderBy(asc(rbacRolePermission.feature), asc(rbacRolePermission.action));
+
+    return {
+      ...role,
+      permissions,
+    };
+  }
+
+  private findUserSummary(userId: string) {
+    return this.db
+      .select({
+        id: systemUser.id,
+        name: systemUser.name,
+        email: systemUser.email,
+        type: systemUser.type,
+        status: systemUser.status,
+      })
+      .from(systemUser)
+      .where(eq(systemUser.id, userId))
+      .limit(1)
+      .then(([user]) => user ?? null);
+  }
+
+  private roleOrderBy(
+    sortBy: NonNullable<QueryRoleDto["sortBy"]>,
+    sortOrder: NonNullable<QueryRoleDto["sortOrder"]>,
+  ) {
+    const column =
+      sortBy === "name"
+        ? rbacRole.name
+        : sortBy === "status"
+          ? rbacRole.status
+          : sortBy === "updatedAt"
+            ? rbacRole.updatedAt
+            : rbacRole.createdAt;
+
+    return sortOrder === "asc" ? asc(column) : desc(column);
   }
 
   private normalizeRoleName(name: string) {
@@ -660,11 +754,8 @@ export class RoleService {
     }
   }
 
-  private handlePrismaError(error: unknown): never {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
+  private handleDatabaseError(error: unknown): never {
+    if (isUniqueConstraintError(error)) {
       throw new ConflictException("Role name already exists");
     }
 

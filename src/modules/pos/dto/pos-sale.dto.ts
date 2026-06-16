@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { OrderPaymentMethod } from "@prisma/client";
+import { OrderPaymentMethod } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsArray,

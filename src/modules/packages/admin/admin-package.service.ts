@@ -4,11 +4,36 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  type PackagePayment,
+  type PackagePlan,
+  type PackagePlanFeature,
+  type PackagePlanLimit,
+  type PackageSubscription,
+  type PackageUsageCounter,
   PackagePaymentStatus,
   PackageStatus,
   PackageSubscriptionStatus,
-  Prisma,
-} from "@prisma/client";
+  packagePayment,
+  packagePlan,
+  packagePlanFeature,
+  packagePlanLimit,
+  packageSubscription,
+  packageUsageCounter,
+  systemUser,
+} from "@/database/schema";
+import Decimal from "decimal.js";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  isNull,
+  lte,
+  ne,
+  or,
+} from "drizzle-orm";
 
 import { QueryPackageDto } from "../dto/query-package.dto";
 import {
@@ -21,57 +46,78 @@ import {
   CreateTenantSubscriptionDto,
   QueryPackageSubscriptionDto,
 } from "./dto/package-subscription.dto";
-import { PrismaService } from "../../../prisma/prisma.service";
+import {
+  type DatabaseTransaction,
+  DatabaseService,
+} from "../../../database/database.service";
 import { PackageSubscriptionService } from "../package-subscription.service";
+import { isUniqueConstraintError } from "../../../common/database/db-error.util";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
 
-const PACKAGE_PLAN_INCLUDE = {
-  limits: true,
-  features: {
-    orderBy: {
-      sortOrder: "asc",
-    },
-  },
+type PackagePlanWithAdminDetails = PackagePlan & {
+  limits: PackagePlanLimit[];
+  features: PackagePlanFeature[];
   _count: {
-    select: {
-      subscriptions: true,
-    },
-  },
-} satisfies Prisma.PackagePlanInclude;
+    subscriptions: number;
+  };
+};
+
+type SubscriptionTenant = {
+  id: string;
+  name: string;
+  email: string;
+  status: string;
+};
+
+type SubscriptionWithDetails = PackageSubscription & {
+  tenant: SubscriptionTenant | null;
+  package: PackagePlanWithAdminDetails;
+};
+
+type SubscriptionWithFullDetails = SubscriptionWithDetails & {
+  usageCounters: PackageUsageCounter[];
+  mockPayments: PackagePayment[];
+};
 
 @Injectable()
 export class AdminPackageService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly subscriptions: PackageSubscriptionService,
   ) {}
 
+  private get db() {
+    return this.database.db;
+  }
+
   async createPlan(dto: CreatePackagePlanDto) {
     try {
-      const plan = await this.prisma.$transaction(async (tx) => {
+      const plan = await this.db.transaction(async (tx) => {
         if (dto.isDefault) {
           await this.clearDefaultPlan(tx);
         }
 
-        return tx.packagePlan.create({
-          data: {
+        const [created] = await tx
+          .insert(packagePlan)
+          .values({
             name: dto.name.trim(),
             description: dto.description?.trim() || null,
-            price: dto.price,
+            price: new Decimal(dto.price),
             billingCycle: dto.billingCycle,
             currencyCode: this.normalizeCurrency(dto.currencyCode),
             freeTrialDays: dto.freeTrialDays ?? 0,
             isDefault: dto.isDefault ?? false,
             status: dto.status ?? PackageStatus.ACTIVE,
             sortOrder: dto.sortOrder ?? 0,
-            limits: this.buildLimitCreate(dto.limits),
-            features: this.buildFeatureCreate(dto.features),
-          },
-          include: PACKAGE_PLAN_INCLUDE,
-        });
+          })
+          .returning();
+
+        await this.insertPlanChildren(tx, created.id, dto);
+
+        return this.withPlanDetails(created);
       });
 
       return apiResponse(plan, "Package plan created successfully");
@@ -84,42 +130,34 @@ export class AdminPackageService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const where = and(
+      isNull(packagePlan.deletedAt),
+      query.status ? eq(packagePlan.status, query.status) : undefined,
+      query.search
+        ? or(
+            ilike(packagePlan.name, `%${query.search}%`),
+            ilike(packagePlan.description, `%${query.search}%`),
+          )
+        : undefined,
+    );
 
-    const where: Prisma.PackagePlanWhereInput = {
-      deletedAt: null,
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              {
-                name: {
-                  contains: query.search,
-                  mode: "insensitive",
-                },
-              },
-              {
-                description: {
-                  contains: query.search,
-                  mode: "insensitive",
-                },
-              },
-            ],
-          }
-        : {}),
-    };
-
-    const [items, total] = await Promise.all([
-      this.prisma.packagePlan.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
-        include: PACKAGE_PLAN_INCLUDE,
-      }),
-      this.prisma.packagePlan.count({ where }),
+    const [plans, total] = await Promise.all([
+      this.db
+        .select()
+        .from(packagePlan)
+        .where(where)
+        .orderBy(asc(packagePlan.sortOrder), desc(packagePlan.createdAt))
+        .limit(limit)
+        .offset(skip)
+        .then((rows) => this.withPlansDetails(rows)),
+      this.db
+        .select({ value: count() })
+        .from(packagePlan)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
+    return paginatedResponse(plans, {
       page,
       limit,
       total,
@@ -128,56 +166,44 @@ export class AdminPackageService {
   }
 
   async findPlan(planId: string) {
-    const plan = await this.prisma.packagePlan.findFirst({
-      where: {
-        id: planId,
-        deletedAt: null,
-      },
-      include: PACKAGE_PLAN_INCLUDE,
-    });
+    const plan = await this.findPlanRow(planId);
 
     if (!plan) {
       throw new NotFoundException("Package plan not found");
     }
 
-    return apiResponse(plan);
+    return apiResponse(await this.withPlanDetails(plan));
   }
 
   async updatePlan(planId: string, dto: UpdatePackagePlanDto) {
     await this.assertPlanExists(planId);
 
     try {
-      const plan = await this.prisma.$transaction(async (tx) => {
+      const plan = await this.db.transaction(async (tx) => {
         if (dto.isDefault) {
           await this.clearDefaultPlan(tx, planId);
         }
 
         if (dto.limits !== undefined) {
-          await tx.packagePlanLimit.deleteMany({
-            where: {
-              packageId: planId,
-            },
-          });
+          await tx
+            .delete(packagePlanLimit)
+            .where(eq(packagePlanLimit.packageId, planId));
         }
 
         if (dto.features !== undefined) {
-          await tx.packagePlanFeature.deleteMany({
-            where: {
-              packageId: planId,
-            },
-          });
+          await tx
+            .delete(packagePlanFeature)
+            .where(eq(packagePlanFeature.packageId, planId));
         }
 
-        return tx.packagePlan.update({
-          where: {
-            id: planId,
-          },
-          data: {
+        const [updated] = await tx
+          .update(packagePlan)
+          .set({
             ...(dto.name !== undefined && { name: dto.name.trim() }),
             ...(dto.description !== undefined && {
               description: dto.description?.trim() || null,
             }),
-            ...(dto.price !== undefined && { price: dto.price }),
+            ...(dto.price !== undefined && { price: new Decimal(dto.price) }),
             ...(dto.billingCycle !== undefined && {
               billingCycle: dto.billingCycle,
             }),
@@ -190,15 +216,13 @@ export class AdminPackageService {
             ...(dto.isDefault !== undefined && { isDefault: dto.isDefault }),
             ...(dto.status !== undefined && { status: dto.status }),
             ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
-            ...(dto.limits !== undefined && {
-              limits: this.buildLimitCreate(dto.limits),
-            }),
-            ...(dto.features !== undefined && {
-              features: this.buildFeatureCreate(dto.features),
-            }),
-          },
-          include: PACKAGE_PLAN_INCLUDE,
-        });
+          })
+          .where(eq(packagePlan.id, planId))
+          .returning();
+
+        await this.insertPlanChildren(tx, planId, dto);
+
+        return this.withPlanDetails(updated);
       });
 
       return apiResponse(plan, "Package plan updated successfully");
@@ -210,16 +234,14 @@ export class AdminPackageService {
   async deletePlan(planId: string) {
     await this.assertPlanExists(planId);
 
-    await this.prisma.packagePlan.update({
-      where: {
-        id: planId,
-      },
-      data: {
+    await this.db
+      .update(packagePlan)
+      .set({
         status: PackageStatus.ARCHIVED,
         isDefault: false,
         deletedAt: new Date(),
-      },
-    });
+      })
+      .where(eq(packagePlan.id, planId));
 
     return apiResponse(null, "Package plan deleted successfully");
   }
@@ -240,45 +262,30 @@ export class AdminPackageService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const where = and(
+      query.status ? eq(packageSubscription.status, query.status) : undefined,
+      query.tenantId
+        ? eq(packageSubscription.tenantId, query.tenantId)
+        : undefined,
+    );
 
-    const where: Prisma.PackageSubscriptionWhereInput = {
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.tenantId ? { tenantId: query.tenantId } : {}),
-    };
-
-    const [items, total] = await Promise.all([
-      this.prisma.packageSubscription.findMany({
-        where,
-        skip,
-        take: limit,
-        include: {
-          tenant: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              status: true,
-            },
-          },
-          package: {
-            include: {
-              features: {
-                orderBy: {
-                  sortOrder: "asc",
-                },
-              },
-              limits: true,
-            },
-          },
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      }),
-      this.prisma.packageSubscription.count({ where }),
+    const [subscriptions, total] = await Promise.all([
+      this.db
+        .select()
+        .from(packageSubscription)
+        .where(where)
+        .orderBy(desc(packageSubscription.createdAt))
+        .limit(limit)
+        .offset(skip)
+        .then((rows) => this.withSubscriptionsDetails(rows)),
+      this.db
+        .select({ value: count() })
+        .from(packageSubscription)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
+    return paginatedResponse(subscriptions, {
       page,
       limit,
       total,
@@ -287,57 +294,28 @@ export class AdminPackageService {
   }
 
   async findSubscription(subscriptionId: string) {
-    const subscription = await this.prisma.packageSubscription.findUnique({
-      where: {
-        id: subscriptionId,
-      },
-      include: {
-        tenant: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            status: true,
-          },
-        },
-        package: {
-          include: {
-            limits: true,
-            features: {
-              orderBy: {
-                sortOrder: "asc",
-              },
-            },
-          },
-        },
-        usageCounters: true,
-        mockPayments: {
-          orderBy: {
-            createdAt: "desc",
-          },
-        },
-      },
-    });
+    const [subscription] = await this.db
+      .select()
+      .from(packageSubscription)
+      .where(eq(packageSubscription.id, subscriptionId))
+      .limit(1);
 
     if (!subscription) {
       throw new NotFoundException("Subscription not found");
     }
 
-    return apiResponse(subscription);
+    return apiResponse(await this.withSubscriptionFullDetails(subscription));
   }
 
   async changeTenantSubscriptionPlan(
     subscriptionId: string,
     dto: ChangeTenantSubscriptionPlanDto,
   ) {
-    const subscription = await this.prisma.packageSubscription.findUnique({
-      where: {
-        id: subscriptionId,
-      },
-      select: {
-        tenantId: true,
-      },
-    });
+    const [subscription] = await this.db
+      .select({ tenantId: packageSubscription.tenantId })
+      .from(packageSubscription)
+      .where(eq(packageSubscription.id, subscriptionId))
+      .limit(1);
 
     if (!subscription) {
       throw new NotFoundException("Subscription not found");
@@ -359,26 +337,25 @@ export class AdminPackageService {
     subscriptionId: string,
     dto: CancelPackageSubscriptionDto,
   ) {
-    const subscription = await this.prisma.packageSubscription.findUnique({
-      where: {
-        id: subscriptionId,
-      },
-    });
+    const [subscription] = await this.db
+      .select()
+      .from(packageSubscription)
+      .where(eq(packageSubscription.id, subscriptionId))
+      .limit(1);
 
     if (!subscription) {
       throw new NotFoundException("Subscription not found");
     }
 
-    const updatedSubscription = await this.prisma.packageSubscription.update({
-      where: {
-        id: subscriptionId,
-      },
-      data: {
+    const [updatedSubscription] = await this.db
+      .update(packageSubscription)
+      .set({
         status: PackageSubscriptionStatus.CANCELLED,
         endedAt: new Date(),
         endReason: dto.reason?.trim() || "Cancelled by admin",
-      },
-    });
+      })
+      .where(eq(packageSubscription.id, subscriptionId))
+      .returning();
 
     return apiResponse(
       updatedSubscription,
@@ -387,76 +364,190 @@ export class AdminPackageService {
   }
 
   async expirePendingMockPayments() {
-    const result = await this.prisma.packageMockPayment.updateMany({
-      where: {
-        status: PackagePaymentStatus.PENDING,
-        expiresAt: {
-          lte: new Date(),
-        },
-      },
-      data: {
-        status: PackagePaymentStatus.EXPIRED,
-      },
-    });
+    const expired = await this.db
+      .update(packagePayment)
+      .set({ status: PackagePaymentStatus.EXPIRED })
+      .where(
+        and(
+          eq(packagePayment.status, PackagePaymentStatus.PENDING),
+          lte(packagePayment.expiresAt, new Date()),
+        ),
+      )
+      .returning({ id: packagePayment.id });
 
-    return apiResponse(result, "Expired pending package mock payments");
+    return apiResponse(
+      { count: expired.length },
+      "Expired pending package mock payments",
+    );
   }
 
   private async assertPlanExists(planId: string) {
-    const plan = await this.prisma.packagePlan.findFirst({
-      where: {
-        id: planId,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-      },
-    });
+    const plan = await this.findPlanRow(planId);
 
     if (!plan) {
       throw new NotFoundException("Package plan not found");
     }
   }
 
-  private clearDefaultPlan(
-    tx: Prisma.TransactionClient,
-    exceptPlanId?: string,
+  private findPlanRow(planId: string) {
+    return this.db
+      .select()
+      .from(packagePlan)
+      .where(and(eq(packagePlan.id, planId), isNull(packagePlan.deletedAt)))
+      .limit(1)
+      .then(([plan]) => plan ?? null);
+  }
+
+  private clearDefaultPlan(tx: DatabaseTransaction, exceptPlanId?: string) {
+    return tx
+      .update(packagePlan)
+      .set({ isDefault: false })
+      .where(
+        and(
+          eq(packagePlan.isDefault, true),
+          exceptPlanId ? ne(packagePlan.id, exceptPlanId) : undefined,
+        ),
+      );
+  }
+
+  private async insertPlanChildren(
+    tx: DatabaseTransaction,
+    planId: string,
+    dto: Pick<CreatePackagePlanDto, "limits" | "features">,
   ) {
-    return tx.packagePlan.updateMany({
-      where: {
-        isDefault: true,
-        ...(exceptPlanId ? { id: { not: exceptPlanId } } : {}),
-      },
-      data: {
-        isDefault: false,
-      },
-    });
+    if (dto.limits?.length) {
+      await tx.insert(packagePlanLimit).values(
+        dto.limits.map((limit) => ({
+          packageId: planId,
+          limitKey: limit.limitKey,
+          limitValue: limit.limitValue,
+          resetCycle: limit!.resetCycle!,
+          description: limit.description?.trim() || null,
+        })),
+      );
+    }
+
+    if (dto.features?.length) {
+      await tx.insert(packagePlanFeature).values(
+        dto.features.map((feature, index) => ({
+          packageId: planId,
+          title: feature.title.trim(),
+          description: feature.description?.trim() || null,
+          sortOrder: feature.sortOrder ?? index,
+          isActive: feature.isActive ?? true,
+        })),
+      );
+    }
   }
 
-  private buildLimitCreate(limits?: CreatePackagePlanDto["limits"]) {
-    return limits?.length
-      ? {
-          create: limits.map((limit) => ({
-            limitKey: limit.limitKey,
-            limitValue: limit.limitValue,
-            resetCycle: limit.resetCycle,
-            description: limit.description?.trim() || null,
-          })),
-        }
-      : undefined;
+  private async withPlansDetails(plans: PackagePlan[]) {
+    return Promise.all(plans.map((plan) => this.withPlanDetails(plan)));
   }
 
-  private buildFeatureCreate(features?: CreatePackagePlanDto["features"]) {
-    return features?.length
-      ? {
-          create: features.map((feature, index) => ({
-            title: feature.title.trim(),
-            description: feature.description?.trim() || null,
-            sortOrder: feature.sortOrder ?? index,
-            isActive: feature.isActive ?? true,
-          })),
-        }
-      : undefined;
+  private async withPlanDetails(
+    plan: PackagePlan,
+  ): Promise<PackagePlanWithAdminDetails> {
+    const [limits, features, subscriptionCount] = await Promise.all([
+      this.db
+        .select()
+        .from(packagePlanLimit)
+        .where(eq(packagePlanLimit.packageId, plan.id)),
+      this.db
+        .select()
+        .from(packagePlanFeature)
+        .where(eq(packagePlanFeature.packageId, plan.id))
+        .orderBy(asc(packagePlanFeature.sortOrder)),
+      this.db
+        .select({ value: count() })
+        .from(packageSubscription)
+        .where(eq(packageSubscription.packageId, plan.id))
+        .then(([row]) => row?.value ?? 0),
+    ]);
+
+    return {
+      ...plan,
+      limits,
+      features,
+      _count: {
+        subscriptions: subscriptionCount,
+      },
+    };
+  }
+
+  private async withSubscriptionsDetails(
+    subscriptions: PackageSubscription[],
+  ): Promise<SubscriptionWithDetails[]> {
+    return Promise.all(
+      subscriptions.map((subscription) =>
+        this.withSubscriptionDetails(subscription),
+      ),
+    );
+  }
+
+  private async withSubscriptionDetails(
+    subscription: PackageSubscription,
+  ): Promise<SubscriptionWithDetails> {
+    const [tenant, plan] = await Promise.all([
+      this.findTenant(subscription.tenantId),
+      this.findPackagePlanOrThrow(subscription.packageId),
+    ]);
+
+    return {
+      ...subscription,
+      tenant,
+      package: await this.withPlanDetails(plan),
+    };
+  }
+
+  private async withSubscriptionFullDetails(
+    subscription: PackageSubscription,
+  ): Promise<SubscriptionWithFullDetails> {
+    const [details, usageCounters, mockPayments] = await Promise.all([
+      this.withSubscriptionDetails(subscription),
+      this.db
+        .select()
+        .from(packageUsageCounter)
+        .where(eq(packageUsageCounter.subscriptionId, subscription.id)),
+      this.db
+        .select()
+        .from(packagePayment)
+        .where(eq(packagePayment.subscriptionId, subscription.id))
+        .orderBy(desc(packagePayment.createdAt)),
+    ]);
+
+    return {
+      ...details,
+      usageCounters,
+      mockPayments,
+    };
+  }
+
+  private findTenant(tenantId: string) {
+    return this.db
+      .select({
+        id: systemUser.id,
+        name: systemUser.name,
+        email: systemUser.email,
+        status: systemUser.status,
+      })
+      .from(systemUser)
+      .where(eq(systemUser.id, tenantId))
+      .limit(1)
+      .then(([tenant]) => tenant ?? null);
+  }
+
+  private async findPackagePlanOrThrow(planId: string) {
+    const [plan] = await this.db
+      .select()
+      .from(packagePlan)
+      .where(eq(packagePlan.id, planId))
+      .limit(1);
+
+    if (!plan) {
+      throw new NotFoundException("Package plan not found");
+    }
+
+    return plan;
   }
 
   private normalizeCurrency(currencyCode?: string) {
@@ -464,10 +555,7 @@ export class AdminPackageService {
   }
 
   private handleUniqueError(error: unknown, message: string): never {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
+    if (isUniqueConstraintError(error)) {
       throw new ConflictException(message);
     }
 

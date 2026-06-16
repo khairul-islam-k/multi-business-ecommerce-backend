@@ -1,12 +1,16 @@
 import { Injectable } from "@nestjs/common";
-import { FinanceSourceType, Prisma } from "@prisma/client";
+import { FinanceSourceType } from "@/database/schema";
+import Decimal from "decimal.js";
 
 import { AccountBalanceService } from "../application/account-balance.service";
 import { FinanceCodeService } from "../application/finance-code.service";
 import { PayableSyncService } from "../application/payable-sync.service";
 import { ReceivableSyncService } from "../application/receivable-sync.service";
 import { TaxLookupService } from "../application/tax-lookup.service";
-import { PrismaService } from "../../../prisma/prisma.service";
+import type {
+  Database,
+  DatabaseTransaction,
+} from "../../../database/database.service";
 
 @Injectable()
 export class FinanceLedgerService {
@@ -19,7 +23,7 @@ export class FinanceLedgerService {
   ) {}
 
   async assertActiveTax(
-    client: Prisma.TransactionClient | PrismaService,
+    client: Database | DatabaseTransaction | undefined,
     businessId: string,
     taxId: string,
   ) {
@@ -27,11 +31,11 @@ export class FinanceLedgerService {
   }
 
   async creditAccount(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
       accountId: string;
-      amount: Prisma.Decimal.Value;
+      amount: Decimal.Value;
       referenceType?: FinanceSourceType;
       referenceId?: string;
       note?: string | null;
@@ -42,11 +46,11 @@ export class FinanceLedgerService {
   }
 
   async debitAccount(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
       accountId: string;
-      amount: Prisma.Decimal.Value;
+      amount: Decimal.Value;
       referenceType?: FinanceSourceType;
       referenceId?: string;
       note?: string | null;
@@ -57,13 +61,13 @@ export class FinanceLedgerService {
   }
 
   async syncOrderReceivable(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
       orderId: string;
       customerId?: string | null;
-      totalAmount: Prisma.Decimal.Value;
-      receivedAmount: Prisma.Decimal.Value;
+      totalAmount: Decimal.Value;
+      receivedAmount: Decimal.Value;
       note?: string | null;
     },
   ) {
@@ -71,12 +75,12 @@ export class FinanceLedgerService {
   }
 
   async createSupplierInvoicePayable(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
       supplierId: string;
       supplierInvoiceId: string;
-      totalAmount: Prisma.Decimal.Value;
+      totalAmount: Decimal.Value;
       note?: string | null;
     },
   ) {
@@ -84,12 +88,12 @@ export class FinanceLedgerService {
   }
 
   async createSupplierReturnReceivable(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
       supplierId: string;
       supplierReturnId: string;
-      totalAmount: Prisma.Decimal.Value;
+      totalAmount: Decimal.Value;
       note?: string | null;
     },
   ) {
@@ -97,11 +101,11 @@ export class FinanceLedgerService {
   }
 
   async syncSupplierInvoicePayablePayment(
-    tx: Prisma.TransactionClient,
+    tx: DatabaseTransaction,
     params: {
       businessId: string;
       supplierInvoiceId: string;
-      paidAmount: Prisma.Decimal.Value;
+      paidAmount: Decimal.Value;
     },
   ) {
     return this.payables.syncSupplierInvoicePayablePayment(tx, params);

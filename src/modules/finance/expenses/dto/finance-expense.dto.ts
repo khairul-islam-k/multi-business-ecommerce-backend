@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 import {
   FinanceExpenseCategoryStatus,
   FinanceExpenseStatus,
-} from "@prisma/client";
+} from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsDate,

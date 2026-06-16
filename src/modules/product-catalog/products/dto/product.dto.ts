@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { CatalogProductStatus } from "@prisma/client";
+import { CatalogProductStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsArray,

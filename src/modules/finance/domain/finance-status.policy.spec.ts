@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
-import { FinancePayableStatus, FinanceReceivableStatus } from "@prisma/client";
+import { FinancePayableStatus, FinanceReceivableStatus } from "@/database/schema";
 
 import { getPayableStatus } from "./payable-status.policy";
 import { getReceivableStatus } from "./receivable-status.policy";

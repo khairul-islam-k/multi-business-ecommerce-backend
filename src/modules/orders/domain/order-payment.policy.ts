@@ -1,10 +1,10 @@
 import { BadRequestException } from "@nestjs/common";
+import Decimal from "decimal.js";
 import {
   OrderPaymentMethod,
   OrderPaymentStatus,
   OrderStatus,
-  Prisma,
-} from "@prisma/client";
+} from "@/database/schema";
 
 import type { OrderPaymentInputDto } from "../dto/order.dto";
 
@@ -53,11 +53,11 @@ export function assertSettlementPayment(
 }
 
 export function getOrderPaymentStatus(
-  totalAmount: Prisma.Decimal.Value,
-  paidAmount: Prisma.Decimal.Value,
+  totalAmount: Decimal.Value,
+  paidAmount: Decimal.Value,
 ) {
-  const paid = new Prisma.Decimal(paidAmount);
-  const total = new Prisma.Decimal(totalAmount);
+  const paid = new Decimal(paidAmount);
+  const total = new Decimal(totalAmount);
 
   return paid.isZero()
     ? OrderPaymentStatus.UNPAID
@@ -65,3 +65,4 @@ export function getOrderPaymentStatus(
       ? OrderPaymentStatus.PARTIALLY_PAID
       : OrderPaymentStatus.PAID;
 }
+

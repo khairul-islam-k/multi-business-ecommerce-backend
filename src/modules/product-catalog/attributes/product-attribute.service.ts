@@ -3,33 +3,58 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma, ProductSimpleStatus } from "@prisma/client";
+import {
+  type ProductAttribute,
+  type ProductAttributeValue,
+  ProductSimpleStatus,
+  productAttribute,
+  productAttributeValue,
+  productVariantAttribute,
+} from "@/database/schema";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  ilike,
+  isNull,
+  ne,
+  or,
+} from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import {
   CreateProductAttributeDto,
   CreateProductAttributeValueDto,
+  ProductAttributeSortBy,
   QueryProductAttributeDto,
   UpdateProductAttributeDto,
   UpdateProductAttributeValueDto,
 } from "./dto/product-attribute.dto";
-import { PrismaService } from "../../../prisma/prisma.service";
 import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import { CatalogSortOrder } from "../common/dto/query-catalog.dto";
+import { DatabaseService } from "../../../database/database.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
 
-const ATTRIBUTE_INCLUDE = {
-  values: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } },
-} satisfies Prisma.ProductAttributeInclude;
+type AttributeWithValues = ProductAttribute & {
+  values: ProductAttributeValue[];
+};
 
 @Injectable()
 export class ProductAttributeService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly lookup: ProductCatalogLookupService,
   ) {}
+
+  private get db() {
+    return this.database.db;
+  }
 
   async create(
     currentUser: CurrentUserPayload,
@@ -41,26 +66,31 @@ export class ProductAttributeService {
     const values = this.normalizeValues(dto.values);
 
     try {
-      const attribute = await this.prisma.productAttribute.create({
-        data: {
-          businessId,
-          name: this.lookup.normalizeName(dto.name),
-          status: dto.status ?? ProductSimpleStatus.ACTIVE,
-          createdBy: currentUser.id,
-          updatedBy: currentUser.id,
-          values:
-            values.length > 0
-              ? {
-                  create: values.map((value) => ({
-                    businessId,
-                    value,
-                    createdBy: currentUser.id,
-                    updatedBy: currentUser.id,
-                  })),
-                }
-              : undefined,
-        },
-        include: ATTRIBUTE_INCLUDE,
+      const attribute = await this.db.transaction(async (tx) => {
+        const [created] = await tx
+          .insert(productAttribute)
+          .values({
+            businessId,
+            name: this.lookup.normalizeName(dto.name),
+            status: dto.status ?? ProductSimpleStatus.ACTIVE,
+            createdBy: currentUser.id,
+            updatedBy: currentUser.id,
+          })
+          .returning();
+
+        if (values.length > 0) {
+          await tx.insert(productAttributeValue).values(
+            values.map((value) => ({
+              businessId,
+              attributeId: created.id,
+              value,
+              createdBy: currentUser.id,
+              updatedBy: currentUser.id,
+            })),
+          );
+        }
+
+        return this.withAttributeValues(created);
       });
 
       return apiResponse(attribute, "Product attribute created successfully");
@@ -76,38 +106,45 @@ export class ProductAttributeService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const sortBy = query.sortBy ?? "name";
-    const sortOrder = query.sortOrder ?? "asc";
-    const where: Prisma.ProductAttributeWhereInput = {
-      businessId,
-      deletedAt: null,
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { name: { contains: query.search, mode: "insensitive" } },
-              {
-                values: {
-                  some: {
-                    value: { contains: query.search, mode: "insensitive" },
-                    deletedAt: null,
-                  },
-                },
-              },
-            ],
-          }
-        : {}),
-    };
+    const sortBy = query.sortBy ?? ProductAttributeSortBy.NAME;
+    const sortOrder = query.sortOrder ?? CatalogSortOrder.ASC;
+    const where = and(
+      eq(productAttribute.businessId, businessId),
+      isNull(productAttribute.deletedAt),
+      query.status ? eq(productAttribute.status, query.status) : undefined,
+      query.search
+        ? or(
+            ilike(productAttribute.name, `%${query.search}%`),
+            exists(
+              this.db
+                .select({ id: productAttributeValue.id })
+                .from(productAttributeValue)
+                .where(
+                  and(
+                    eq(productAttributeValue.attributeId, productAttribute.id),
+                    ilike(productAttributeValue.value, `%${query.search}%`),
+                    isNull(productAttributeValue.deletedAt),
+                  ),
+                ),
+            ),
+          )
+        : undefined,
+    );
 
     const [items, total] = await Promise.all([
-      this.prisma.productAttribute.findMany({
-        where,
-        skip,
-        take: limit,
-        include: ATTRIBUTE_INCLUDE,
-        orderBy: [{ [sortBy]: sortOrder }, { createdAt: "asc" }],
-      }),
-      this.prisma.productAttribute.count({ where }),
+      this.db
+        .select()
+        .from(productAttribute)
+        .where(where)
+        .orderBy(this.attributeOrderBy(sortBy, sortOrder), asc(productAttribute.createdAt))
+        .limit(limit)
+        .offset(skip)
+        .then((rows) => this.withAttributesValues(rows)),
+      this.db
+        .select({ value: count() })
+        .from(productAttribute)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
     ]);
 
     return paginatedResponse(items, {
@@ -141,19 +178,22 @@ export class ProductAttributeService {
     }
 
     try {
-      const attribute = await this.prisma.productAttribute.update({
-        where: { id: attributeId },
-        data: {
+      const [attribute] = await this.db
+        .update(productAttribute)
+        .set({
           ...(dto.name !== undefined && {
             name: this.lookup.normalizeName(dto.name),
           }),
           ...(dto.status !== undefined && { status: dto.status }),
           updatedBy: currentUser.id,
-        },
-        include: ATTRIBUTE_INCLUDE,
-      });
+        })
+        .where(eq(productAttribute.id, attributeId))
+        .returning();
 
-      return apiResponse(attribute, "Product attribute updated successfully");
+      return apiResponse(
+        await this.withAttributeValues(attribute),
+        "Product attribute updated successfully",
+      );
     } catch (error) {
       this.lookup.handleUniqueError(error, "Product attribute already exists");
     }
@@ -167,23 +207,29 @@ export class ProductAttributeService {
     await this.findAttributeOrThrow(businessId, attributeId);
     await this.assertAttributeCanBeDeleted(attributeId);
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.productAttributeValue.updateMany({
-        where: { attributeId, deletedAt: null },
-        data: {
-          deletedAt: new Date(),
+    await this.db.transaction(async (tx) => {
+      const deletedAt = new Date();
+      await tx
+        .update(productAttributeValue)
+        .set({
+          deletedAt,
           updatedBy: currentUser.id,
-        },
-      });
+        })
+        .where(
+          and(
+            eq(productAttributeValue.attributeId, attributeId),
+            isNull(productAttributeValue.deletedAt),
+          ),
+        );
 
-      await tx.productAttribute.update({
-        where: { id: attributeId },
-        data: {
+      await tx
+        .update(productAttribute)
+        .set({
           status: ProductSimpleStatus.INACTIVE,
-          deletedAt: new Date(),
+          deletedAt,
           updatedBy: currentUser.id,
-        },
-      });
+        })
+        .where(eq(productAttribute.id, attributeId));
     });
 
     return apiResponse(null, "Product attribute deleted successfully");
@@ -198,15 +244,16 @@ export class ProductAttributeService {
     await this.findAttributeOrThrow(businessId, attributeId);
 
     try {
-      const value = await this.prisma.productAttributeValue.create({
-        data: {
+      const [value] = await this.db
+        .insert(productAttributeValue)
+        .values({
           businessId,
           attributeId,
           value: this.lookup.normalizeName(dto.value),
           createdBy: currentUser.id,
           updatedBy: currentUser.id,
-        },
-      });
+        })
+        .returning();
 
       return apiResponse(value, "Product attribute value created successfully");
     } catch (error) {
@@ -227,15 +274,16 @@ export class ProductAttributeService {
     await this.findValueOrThrow(businessId, attributeId, valueId);
 
     try {
-      const value = await this.prisma.productAttributeValue.update({
-        where: { id: valueId },
-        data: {
+      const [value] = await this.db
+        .update(productAttributeValue)
+        .set({
           ...(dto.value !== undefined && {
             value: this.lookup.normalizeName(dto.value),
           }),
           updatedBy: currentUser.id,
-        },
-      });
+        })
+        .where(eq(productAttributeValue.id, valueId))
+        .returning();
 
       return apiResponse(value, "Product attribute value updated successfully");
     } catch (error) {
@@ -255,30 +303,35 @@ export class ProductAttributeService {
     await this.findValueOrThrow(businessId, attributeId, valueId);
     await this.assertAttributeValueCanBeDeleted(attributeId, valueId);
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.productAttributeValue.update({
-        where: { id: valueId },
-        data: {
-          deletedAt: new Date(),
-          updatedBy: currentUser.id,
-        },
-      });
-    });
+    await this.db
+      .update(productAttributeValue)
+      .set({
+        deletedAt: new Date(),
+        updatedBy: currentUser.id,
+      })
+      .where(eq(productAttributeValue.id, valueId));
 
     return apiResponse(null, "Product attribute value deleted successfully");
   }
 
   private async findAttributeOrThrow(businessId: string, attributeId: string) {
-    const attribute = await this.prisma.productAttribute.findFirst({
-      where: { id: attributeId, businessId, deletedAt: null },
-      include: ATTRIBUTE_INCLUDE,
-    });
+    const [attribute] = await this.db
+      .select()
+      .from(productAttribute)
+      .where(
+        and(
+          eq(productAttribute.id, attributeId),
+          eq(productAttribute.businessId, businessId),
+          isNull(productAttribute.deletedAt),
+        ),
+      )
+      .limit(1);
 
     if (!attribute) {
       throw new NotFoundException("Product attribute not found");
     }
 
-    return attribute;
+    return this.withAttributeValues(attribute);
   }
 
   private async findValueOrThrow(
@@ -288,9 +341,18 @@ export class ProductAttributeService {
   ) {
     await this.findAttributeOrThrow(businessId, attributeId);
 
-    const value = await this.prisma.productAttributeValue.findFirst({
-      where: { id: valueId, businessId, attributeId, deletedAt: null },
-    });
+    const [value] = await this.db
+      .select()
+      .from(productAttributeValue)
+      .where(
+        and(
+          eq(productAttributeValue.id, valueId),
+          eq(productAttributeValue.businessId, businessId),
+          eq(productAttributeValue.attributeId, attributeId),
+          isNull(productAttributeValue.deletedAt),
+        ),
+      )
+      .limit(1);
 
     if (!value) {
       throw new NotFoundException("Product attribute value not found");
@@ -304,15 +366,20 @@ export class ProductAttributeService {
     name: string,
     excludeAttributeId?: string,
   ) {
-    const attribute = await this.prisma.productAttribute.findFirst({
-      where: {
-        businessId,
-        name: this.lookup.normalizeName(name),
-        deletedAt: null,
-        ...(excludeAttributeId ? { id: { not: excludeAttributeId } } : {}),
-      },
-      select: { id: true },
-    });
+    const [attribute] = await this.db
+      .select({ id: productAttribute.id })
+      .from(productAttribute)
+      .where(
+        and(
+          eq(productAttribute.businessId, businessId),
+          eq(productAttribute.name, this.lookup.normalizeName(name)),
+          isNull(productAttribute.deletedAt),
+          excludeAttributeId
+            ? ne(productAttribute.id, excludeAttributeId)
+            : undefined,
+        ),
+      )
+      .limit(1);
 
     if (attribute) {
       throw new BadRequestException(
@@ -337,11 +404,12 @@ export class ProductAttributeService {
   }
 
   private async assertAttributeCanBeDeleted(attributeId: string) {
-    const variantCount = await this.prisma.productVariantAttribute.count({
-      where: { attributeId },
-    });
+    const [{ value }] = await this.db
+      .select({ value: count() })
+      .from(productVariantAttribute)
+      .where(eq(productVariantAttribute.attributeId, attributeId));
 
-    if (variantCount > 0) {
+    if (value > 0) {
       throw new BadRequestException(
         "Product attribute cannot be deleted while assigned to variants",
       );
@@ -352,14 +420,58 @@ export class ProductAttributeService {
     attributeId: string,
     valueId: string,
   ) {
-    const variantCount = await this.prisma.productVariantAttribute.count({
-      where: { attributeId, attributeValueId: valueId },
-    });
+    const [{ value }] = await this.db
+      .select({ value: count() })
+      .from(productVariantAttribute)
+      .where(
+        and(
+          eq(productVariantAttribute.attributeId, attributeId),
+          eq(productVariantAttribute.attributeValueId, valueId),
+        ),
+      );
 
-    if (variantCount > 0) {
+    if (value > 0) {
       throw new BadRequestException(
         "Product attribute value cannot be deleted while assigned to variants",
       );
     }
+  }
+
+  private async withAttributesValues(attributes: ProductAttribute[]) {
+    return Promise.all(
+      attributes.map((attribute) => this.withAttributeValues(attribute)),
+    );
+  }
+
+  private async withAttributeValues(
+    attribute: ProductAttribute,
+  ): Promise<AttributeWithValues> {
+    const values = await this.db
+      .select()
+      .from(productAttributeValue)
+      .where(
+        and(
+          eq(productAttributeValue.attributeId, attribute.id),
+          isNull(productAttributeValue.deletedAt),
+        ),
+      )
+      .orderBy(asc(productAttributeValue.createdAt));
+
+    return {
+      ...attribute,
+      values,
+    };
+  }
+
+  private attributeOrderBy(
+    sortBy: NonNullable<QueryProductAttributeDto["sortBy"]>,
+    sortOrder: NonNullable<QueryProductAttributeDto["sortOrder"]>,
+  ) {
+    const column =
+      sortBy === ProductAttributeSortBy.CREATED_AT
+          ? productAttribute.createdAt
+          : productAttribute.name;
+
+    return sortOrder === "asc" ? asc(column) : desc(column);
   }
 }
