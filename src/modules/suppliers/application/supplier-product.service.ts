@@ -1,5 +1,10 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { SupplierProductMapStatus, supplierProductMap } from "@/database/schema";
+import {
+  SupplierProductMapStatus,
+  product,
+  productVariant,
+  supplierProductMap,
+} from "@/database/schema";
 import Decimal from "decimal.js";
 import { and, desc, eq } from "drizzle-orm";
 
@@ -77,13 +82,22 @@ export class SupplierProductService {
     await this.suppliers.assertSupplierExists(businessId, supplierId);
 
     const products = await this.db
-      .select()
+      .select({
+        supplierProduct: supplierProductMap,
+        product: product,
+        variant: productVariant,
+      })
       .from(supplierProductMap)
       .where(
         and(
           eq(supplierProductMap.businessId, businessId),
           eq(supplierProductMap.supplierId, supplierId),
         ),
+      )
+      .innerJoin(product, eq(supplierProductMap.productId, product.id))
+      .leftJoin(
+        productVariant,
+        eq(supplierProductMap.variantId, productVariant.id),
       )
       .orderBy(desc(supplierProductMap.createdAt));
 

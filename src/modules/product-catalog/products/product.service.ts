@@ -481,7 +481,10 @@ export class ProductService {
     }
   }
 
-  private countInventoryStockReferences(businessId: string, productId: string) {
+  private async countInventoryStockReferences(
+    businessId: string,
+    productId: string,
+  ) {
     return this.db
       .select({ value: count() })
       .from(inventoryStock)
