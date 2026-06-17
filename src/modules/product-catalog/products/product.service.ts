@@ -14,6 +14,7 @@ import {
   type ProductVariant,
   type ProductVariantAttribute,
   CatalogProductStatus,
+  ProductReviewStatus,
   courierShipmentItem,
   inventoryOrderAllocation,
   inventoryStock,
@@ -31,6 +32,7 @@ import {
   productBrand,
   productCategory,
   productImage,
+  productReview,
   productTag,
   productTagMap,
   productUnit,
@@ -45,6 +47,7 @@ import Decimal from "decimal.js";
 import {
   and,
   asc,
+  avg,
   count,
   desc,
   eq,
@@ -86,6 +89,11 @@ type ProductVariantWithDetails = ProductVariant & {
   images: ProductImage[];
 };
 
+type ProductReviewSummary = {
+  reviewCount: number;
+  averageRating: number;
+};
+
 type ProductWithDetails = Product & {
   category: ProductCategory | null;
   brand: ProductBrand | null;
@@ -93,6 +101,7 @@ type ProductWithDetails = Product & {
   tags: ProductTagWithTag[];
   images: ProductImage[];
   variants: ProductVariantWithDetails[];
+  reviewSummary: ProductReviewSummary;
 };
 
 type ProductWithStock = ProductWithDetails & {
@@ -172,7 +181,7 @@ export class ProductService {
       });
 
       return apiResponse(
-        await this.enrichProductStock(created),
+        await this.enrichProductStock(await this.enrichProductRating(created)),
         "Product created successfully",
       );
     } catch (error) {
@@ -255,6 +264,7 @@ export class ProductService {
         .limit(limit)
         .offset(skip)
         .then((rows) => this.getProductsDetails(rows))
+        .then((rows) => this.enrichProductsRating(rows))
         .then((rows) => this.enrichProductsStock(rows)),
       this.db
         .select({ value: count() })
@@ -279,7 +289,9 @@ export class ProductService {
     }
 
     return apiResponse(
-      await this.enrichProductStock(await this.getProductDetails(row)),
+      await this.enrichProductStock(
+        await this.enrichProductRating(await this.getProductDetails(row)),
+      ),
     );
   }
 
@@ -354,7 +366,7 @@ export class ProductService {
       });
 
       return apiResponse(
-        await this.enrichProductStock(updated),
+        await this.enrichProductStock(await this.enrichProductRating(updated)),
         "Product updated successfully",
       );
     } catch (error) {
@@ -547,6 +559,56 @@ export class ProductService {
       .then(([row]) => row?.value ?? 0);
   }
 
+  private async enrichProductRating(product: ProductWithDetails) {
+    const [rated] = await this.enrichProductsRating([product]);
+
+    return rated;
+  }
+
+  private async enrichProductsRating(
+    products: ProductWithDetails[],
+  ): Promise<ProductWithDetails[]> {
+    if (products.length === 0) {
+      return [];
+    }
+
+    const productIds = products.map((item) => item.id);
+    const summaries = await this.db
+      .select({
+        productId: productReview.productId,
+        reviewCount: count(),
+        averageRating: avg(productReview.rating),
+      })
+      .from(productReview)
+      .where(
+        and(
+          eq(productReview.businessId, products[0].businessId),
+          inArray(productReview.productId, productIds),
+          eq(productReview.status, ProductReviewStatus.APPROVED),
+          isNull(productReview.deletedAt),
+        ),
+      )
+      .groupBy(productReview.productId);
+
+    const summaryByProductId = new Map(
+      summaries.map((summary) => [
+        summary.productId,
+        {
+          reviewCount: summary.reviewCount,
+          averageRating: summary.averageRating
+            ? Number(Number(summary.averageRating).toFixed(2))
+            : 0,
+        },
+      ]),
+    );
+
+    return products.map((item) => ({
+      ...item,
+      reviewSummary:
+        summaryByProductId.get(item.id) ?? this.getEmptyReviewSummary(),
+    }));
+  }
+
   private async enrichProductStock(product: ProductWithDetails) {
     const [stock] = await this.enrichProductsStock([product]);
 
@@ -626,6 +688,14 @@ export class ProductService {
       tags,
       images,
       variants,
+      reviewSummary: this.getEmptyReviewSummary(),
+    };
+  }
+
+  private getEmptyReviewSummary(): ProductReviewSummary {
+    return {
+      reviewCount: 0,
+      averageRating: 0,
     };
   }
 
