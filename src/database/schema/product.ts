@@ -53,6 +53,19 @@ export const productVariantStatusEnum = pgEnum("ProductVariantStatus", [
   "INACTIVE",
 ]);
 
+export const ProductReviewStatus = {
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+} as const;
+export type ProductReviewStatus =
+  (typeof ProductReviewStatus)[keyof typeof ProductReviewStatus];
+export const productReviewStatusEnum = pgEnum("ProductReviewStatus", [
+  "PENDING",
+  "APPROVED",
+  "REJECTED",
+]);
+
 export const productCategory = pgTable(
   "product_categories",
   {
@@ -456,3 +469,45 @@ export const productTagMap = pgTable(
 );
 export type ProductTagMap = typeof productTagMap.$inferSelect;
 export type NewProductTagMap = typeof productTagMap.$inferInsert;
+
+export const productReview = pgTable(
+  "product_reviews",
+  {
+    id: uuid().primaryKey().defaultRandom().notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
+    productId: uuid("product_id")
+      .notNull()
+      .references((): AnyPgColumn => product.id, { onDelete: "cascade" }),
+    variantId: uuid("variant_id").references(
+      (): AnyPgColumn => productVariant.id,
+      { onDelete: "set null" },
+    ),
+    rating: integer().notNull(),
+    title: varchar({ length: 150 }),
+    comment: text(),
+    reviewerName: varchar("reviewer_name", { length: 150 }).notNull(),
+    reviewerEmail: varchar("reviewer_email", { length: 150 }),
+    reviewerPhone: varchar("reviewer_phone", { length: 30 }),
+    status: productReviewStatusEnum().notNull(),
+    createdBy: uuid("created_by"),
+    updatedBy: uuid("updated_by"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),
+  },
+  (table) => [
+    index("product_reviews_business_id_idx").on(table.businessId),
+    index("product_reviews_product_id_idx").on(table.productId),
+    index("product_reviews_variant_id_idx").on(table.variantId),
+    index("product_reviews_status_idx").on(table.status),
+    index("product_reviews_rating_idx").on(table.rating),
+    index("product_reviews_deleted_at_idx").on(table.deletedAt),
+  ],
+);
+export type ProductReview = typeof productReview.$inferSelect;
+export type NewProductReview = typeof productReview.$inferInsert;

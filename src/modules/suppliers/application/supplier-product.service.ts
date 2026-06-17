@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import {
   SupplierProductMapStatus,
   product,
@@ -82,6 +86,45 @@ export class SupplierProductService {
     } catch (error) {
       this.handleUniqueError(error, "Supplier product already exists");
     }
+  }
+
+  async findProduct(
+    businessId: string,
+    supplierId: string,
+    productMapId: string,
+  ) {
+    const where = and(
+      eq(supplierProductMap.id, productMapId),
+      eq(supplierProductMap.businessId, businessId),
+      eq(supplier.businessId, businessId),
+      isNull(supplier.deletedAt),
+      eq(product.businessId, businessId),
+      isNull(product.deletedAt),
+      eq(supplier.id, supplierId),
+    );
+
+    const [item] = await this.db
+      .select({
+        supplierProduct: supplierProductMap,
+        supplier,
+        product,
+        variant: productVariant,
+      })
+      .from(supplierProductMap)
+      .innerJoin(supplier, eq(supplierProductMap.supplierId, supplier.id))
+      .innerJoin(product, eq(supplierProductMap.productId, product.id))
+      .leftJoin(
+        productVariant,
+        eq(supplierProductMap.variantId, productVariant.id),
+      )
+      .where(where)
+      .limit(1);
+
+    if (!item) {
+      throw new NotFoundException("Supplier product not found");
+    }
+
+    return apiResponse(item);
   }
 
   async findProducts(

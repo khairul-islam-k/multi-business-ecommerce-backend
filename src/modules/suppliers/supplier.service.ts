@@ -77,6 +77,14 @@ export class SupplierService {
     return this.products.addProduct(businessId, supplierId, dto);
   }
 
+  async findProduct(
+    businessId: string,
+    supplierId: string,
+    productMapId: string,
+  ) {
+    return this.products.findProduct(businessId, supplierId, productMapId);
+  }
+
   async findProducts(
     businessId: string,
     supplierId: string,

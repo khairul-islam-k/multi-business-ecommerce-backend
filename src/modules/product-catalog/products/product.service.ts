@@ -209,7 +209,13 @@ export class ProductService {
             this.db
               .select({ id: inventoryWarehouseStock.id })
               .from(inventoryWarehouseStock)
-              .where(eq(inventoryWarehouseStock.productId, product.id)),
+              .where(
+                and(
+                  eq(inventoryWarehouseStock.businessId, businessId),
+                  eq(inventoryWarehouseStock.productId, product.id),
+                  eq(inventoryWarehouseStock.warehouseId, query.warehouseId),
+                ),
+              ),
           )
         : undefined,
       search
@@ -563,7 +569,12 @@ export class ProductService {
         quantityReserved: inventoryStock.quantityReserved,
       })
       .from(inventoryStock)
-      .where(inArray(inventoryStock.productId, productIds));
+      .where(
+        and(
+          eq(inventoryStock.businessId, products[0].businessId),
+          inArray(inventoryStock.productId, productIds),
+        ),
+      );
 
     return products.map((item) => {
       const productStocks = stocks.filter(

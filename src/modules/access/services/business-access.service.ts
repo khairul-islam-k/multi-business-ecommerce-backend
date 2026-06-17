@@ -65,7 +65,7 @@ export class BusinessAccessService {
     return accessContext;
   }
 
-  private getBusinessAccessCondition(currentUser: CurrentUserPayload) {
+  getBusinessAccessCondition(currentUser: CurrentUserPayload) {
     if (currentUser.type === SystemUserType.ADMIN) {
       return undefined;
     }

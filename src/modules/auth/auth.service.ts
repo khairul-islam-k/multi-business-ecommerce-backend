@@ -568,34 +568,15 @@ export class AuthService {
 
     this.assertActiveUser(user);
 
-    const [verification] = await this.db
-      .select()
-      .from(systemEmailVerification)
-      .where(
-        and(
-          eq(systemEmailVerification.id, dto.verificationId),
-          eq(systemEmailVerification.userId, user.id),
-          eq(systemEmailVerification.purpose, OtpPurpose.PASSWORD_RESET),
-          isNotNull(systemEmailVerification.verifiedAt),
-          gt(systemEmailVerification.expiresAt, new Date()),
-        ),
-      )
-      .limit(1);
-
-    if (!verification) {
-      throw new BadRequestException(
-        "The one-time password is invalid or has expired. Please request a new code and try again.",
-      );
-    }
-
     const [resetRecord] = await this.db
       .select()
       .from(systemPasswordReset)
       .where(
         and(
+          eq(systemPasswordReset.id, dto.resetRequestId),
           eq(systemPasswordReset.userId, user.id),
-          eq(systemPasswordReset.otpHash, verification.otpHash),
           isNull(systemPasswordReset.usedAt),
+          isNotNull(systemPasswordReset.verifiedAt),
           gt(systemPasswordReset.expiresAt, new Date()),
         ),
       )
@@ -704,21 +685,15 @@ export class AuthService {
       );
     }
 
-    const [verification] = await this.db
-      .insert(systemEmailVerification)
-      .values({
-        userId: user.id,
-        otpHash: resetRecord.otpHash,
-        purpose: OtpPurpose.PASSWORD_RESET,
-        expiresAt: resetRecord.expiresAt,
-        attemptCount: 0,
-        verifiedAt: new Date(),
-      })
-      .returning({ id: systemEmailVerification.id });
+    const [verifiedReset] = await this.db
+      .update(systemPasswordReset)
+      .set({ verifiedAt: new Date() })
+      .where(eq(systemPasswordReset.id, resetRecord.id))
+      .returning({ id: systemPasswordReset.id });
 
     return apiResponse(
       {
-        verificationId: verification.id,
+        resetRequestId: verifiedReset.id,
       },
       "OTP has been verified successfully.",
     );

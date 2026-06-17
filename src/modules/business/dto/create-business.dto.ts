@@ -29,6 +29,102 @@ export class CreateBusinessSettingDto {
   @MaxLength(20)
   invoicePrefix?: string;
 
+  @ApiPropertyOptional({ example: "PAY" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  paymentPrefix?: string;
+
+  @ApiPropertyOptional({ example: "SHP" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  shipmentPrefix?: string;
+
+  @ApiPropertyOptional({ example: "PO" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  purchaseOrderPrefix?: string;
+
+  @ApiPropertyOptional({ example: "RET" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  purchaseReturnPrefix?: string;
+
+  @ApiPropertyOptional({ example: "ADJ" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  stockAdjustmentPrefix?: string;
+
+  @ApiPropertyOptional({ example: "TRF" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  stockTransferPrefix?: string;
+
+  @ApiPropertyOptional({ example: "EXP" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  expensePrefix?: string;
+
+  @ApiPropertyOptional({ example: "SIN" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  supplierInvoicePrefix?: string;
+
+  @ApiPropertyOptional({ example: "SPAY" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  supplierPaymentPrefix?: string;
+
+  @ApiPropertyOptional({ example: "REC" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  receivablePrefix?: string;
+
+  @ApiPropertyOptional({ example: "PAYB" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  payablePrefix?: string;
+
+  @ApiPropertyOptional({ example: "TXN" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  transactionPrefix?: string;
+
+  @ApiPropertyOptional({ example: "SKU" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  productSkuPrefix?: string;
+
+  @ApiPropertyOptional({ example: "BAR" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  productBarcodePrefix?: string;
+
+  @ApiPropertyOptional({ example: "SKU" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  variantSkuPrefix?: string;
+
+  @ApiPropertyOptional({ example: "BAR" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  variantBarcodePrefix?: string;
+
   @ApiPropertyOptional({ example: 5 })
   @IsOptional()
   @Type(() => Number)

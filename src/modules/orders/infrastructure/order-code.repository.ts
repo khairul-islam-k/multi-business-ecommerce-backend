@@ -9,19 +9,29 @@ import { and, eq } from "drizzle-orm";
 
 import { DatabaseService } from "../../../database/database.service";
 import { generateRandomCode } from "../../../common/utils/code-generator.util";
+import { BusinessCodePrefixService } from "../../../common/code/business-code-prefix.service";
 
 const CODE_RETRY_LIMIT = 5;
 
 @Injectable()
 export class OrderCodeRepository {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly prefixes: BusinessCodePrefixService,
+  ) {}
 
   private get db() {
     return this.database.db;
   }
 
-  generateUniqueOrderNo(businessId: string) {
-    return this.generateUniqueCode(businessId, "ORD", async (code) => {
+  async generateUniqueOrderNo(businessId: string) {
+    const prefix = await this.prefixes.resolve(
+      businessId,
+      "orderPrefix",
+      "ORD",
+    );
+
+    return this.generateUniqueCode(businessId, prefix, async (code) => {
       const [row] = await this.db
         .select({ id: order.id })
         .from(order)
@@ -31,8 +41,14 @@ export class OrderCodeRepository {
     });
   }
 
-  generateUniquePaymentNo(businessId: string) {
-    return this.generateUniqueCode(businessId, "PAY", async (code) => {
+  async generateUniquePaymentNo(businessId: string) {
+    const prefix = await this.prefixes.resolve(
+      businessId,
+      "paymentPrefix",
+      "PAY",
+    );
+
+    return this.generateUniqueCode(businessId, prefix, async (code) => {
       const [row] = await this.db
         .select({ id: orderPayment.id })
         .from(orderPayment)
@@ -47,8 +63,14 @@ export class OrderCodeRepository {
     });
   }
 
-  generateUniqueInvoiceNo(businessId: string) {
-    return this.generateUniqueCode(businessId, "INV", async (code) => {
+  async generateUniqueInvoiceNo(businessId: string) {
+    const prefix = await this.prefixes.resolve(
+      businessId,
+      "invoicePrefix",
+      "INV",
+    );
+
+    return this.generateUniqueCode(businessId, prefix, async (code) => {
       const [row] = await this.db
         .select({ id: invoice.id })
         .from(invoice)
@@ -60,8 +82,14 @@ export class OrderCodeRepository {
     });
   }
 
-  generateUniqueShipmentNo(businessId: string) {
-    return this.generateUniqueCode(businessId, "SHP", async (code) => {
+  async generateUniqueShipmentNo(businessId: string) {
+    const prefix = await this.prefixes.resolve(
+      businessId,
+      "shipmentPrefix",
+      "SHP",
+    );
+
+    return this.generateUniqueCode(businessId, prefix, async (code) => {
       const [row] = await this.db
         .select({ id: courierShipment.id })
         .from(courierShipment)

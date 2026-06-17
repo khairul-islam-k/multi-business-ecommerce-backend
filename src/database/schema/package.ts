@@ -64,6 +64,7 @@ export const PackageLimitKey = {
   MAX_PRODUCTS: "MAX_PRODUCTS",
   MAX_EMPLOYEES: "MAX_EMPLOYEES",
   MAX_BUSINESSES: "MAX_BUSINESSES",
+  MAX_WEBSITES: "MAX_WEBSITES",
 } as const;
 export type PackageLimitKey =
   (typeof PackageLimitKey)[keyof typeof PackageLimitKey];
@@ -72,6 +73,7 @@ export const packageLimitKeyEnum = pgEnum("PackageLimitKey", [
   "MAX_PRODUCTS",
   "MAX_EMPLOYEES",
   "MAX_BUSINESSES",
+  "MAX_WEBSITES",
 ]);
 
 export const PackageSubscriptionStatus = {

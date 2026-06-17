@@ -11,49 +11,89 @@ import { and, eq } from "drizzle-orm";
 
 import { DatabaseService } from "../../../database/database.service";
 import { generateRandomCode } from "../../../common/utils/code-generator.util";
+import { BusinessCodePrefixService } from "../../../common/code/business-code-prefix.service";
 
 const FINANCE_CODE_RETRY_LIMIT = 5;
 
 @Injectable()
 export class FinanceCodeService {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly prefixes: BusinessCodePrefixService,
+  ) {}
 
   private get db() {
     return this.database.db;
   }
 
   async generateUniqueTransactionNo(businessId: string) {
-    return this.generateUniqueCode(businessId, "TXN", (code) =>
+    const prefix = await this.prefixes.resolve(
+      businessId,
+      "transactionPrefix",
+      "TXN",
+    );
+
+    return this.generateUniqueCode(businessId, prefix, (code) =>
       this.exists(financeAccountTransaction, businessId, "transactionNo", code),
     );
   }
 
   async generateUniqueExpenseNo(businessId: string) {
-    return this.generateUniqueCode(businessId, "EXP", (code) =>
+    const prefix = await this.prefixes.resolve(
+      businessId,
+      "expensePrefix",
+      "EXP",
+    );
+
+    return this.generateUniqueCode(businessId, prefix, (code) =>
       this.exists(financeExpense, businessId, "expenseNo", code),
     );
   }
 
   async generateUniqueSupplierInvoiceNo(businessId: string) {
-    return this.generateUniqueCode(businessId, "SIN", (code) =>
+    const prefix = await this.prefixes.resolve(
+      businessId,
+      "supplierInvoicePrefix",
+      "SIN",
+    );
+
+    return this.generateUniqueCode(businessId, prefix, (code) =>
       this.exists(supplierInvoice, businessId, "invoiceNo", code),
     );
   }
 
   async generateUniqueSupplierPaymentNo(businessId: string) {
-    return this.generateUniqueCode(businessId, "SPAY", (code) =>
+    const prefix = await this.prefixes.resolve(
+      businessId,
+      "supplierPaymentPrefix",
+      "SPAY",
+    );
+
+    return this.generateUniqueCode(businessId, prefix, (code) =>
       this.exists(supplierPayment, businessId, "paymentNo", code),
     );
   }
 
   async generateUniqueReceivableNo(businessId: string) {
-    return this.generateUniqueCode(businessId, "REC", (code) =>
+    const prefix = await this.prefixes.resolve(
+      businessId,
+      "receivablePrefix",
+      "REC",
+    );
+
+    return this.generateUniqueCode(businessId, prefix, (code) =>
       this.exists(financeReceivable, businessId, "receivableNo", code),
     );
   }
 
   async generateUniquePayableNo(businessId: string) {
-    return this.generateUniqueCode(businessId, "PAYB", (code) =>
+    const prefix = await this.prefixes.resolve(
+      businessId,
+      "payablePrefix",
+      "PAYB",
+    );
+
+    return this.generateUniqueCode(businessId, prefix, (code) =>
       this.exists(financePayable, businessId, "payableNo", code),
     );
   }

@@ -335,15 +335,9 @@ export class ProductVariantService {
       isNull(productVariant.deletedAt),
       search
         ? or(
-            exists(
-              this.db
-                .select({ id: inventoryWarehouseStock.id })
-                .from(inventoryWarehouseStock)
-                .where(
-                  eq(inventoryWarehouseStock.variantId, productVariant.id),
-                ),
-            ),
             ilike(productVariant.title, `%${search}%`),
+            ilike(productVariant.sku, `%${search}%`),
+            ilike(productVariant.barcode, `%${search}%`),
             exists(
               this.db
                 .select({ id: productVariantAttribute.id })

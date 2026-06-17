@@ -28,6 +28,7 @@ import { normalizeOptionalText } from "../../../common/text/normalizers";
 import { generateRandomCode } from "../../../common/utils/code-generator.util";
 import { isUniqueConstraintError } from "../../../common/database/db-error.util";
 import { StockItemRef } from "./inventory.types";
+import { BusinessCodePrefixService } from "../../../common/code/business-code-prefix.service";
 
 const INVENTORY_CODE_RETRY_LIMIT = 5;
 
@@ -38,6 +39,7 @@ export class InventoryLookupService {
     private readonly catalogLookup: ProductCatalogLookupService,
     private readonly stockMutation: StockMutationService,
     private readonly stockReservation: StockReservationService,
+    private readonly prefixes: BusinessCodePrefixService,
   ) {}
 
   private get db() {
@@ -215,8 +217,14 @@ export class InventoryLookupService {
   }
 
   async generateUniqueAdjustmentNo(businessId: string) {
+    const prefix = await this.prefixes.resolve(
+      businessId,
+      "stockAdjustmentPrefix",
+      "ADJ",
+    );
+
     for (let attempt = 0; attempt < INVENTORY_CODE_RETRY_LIMIT; attempt++) {
-      const adjustmentNo = generateRandomCode("ADJ");
+      const adjustmentNo = generateRandomCode(prefix);
       const [existingAdjustment] = await this.db
         .select({ id: inventoryStockAdjustment.id })
         .from(inventoryStockAdjustment)
@@ -236,8 +244,14 @@ export class InventoryLookupService {
   }
 
   async generateUniqueTransferNo(businessId: string) {
+    const prefix = await this.prefixes.resolve(
+      businessId,
+      "stockTransferPrefix",
+      "TRF",
+    );
+
     for (let attempt = 0; attempt < INVENTORY_CODE_RETRY_LIMIT; attempt++) {
-      const transferNo = generateRandomCode("TRF");
+      const transferNo = generateRandomCode(prefix);
       const [existingTransfer] = await this.db
         .select({ id: inventoryStockTransfer.id })
         .from(inventoryStockTransfer)

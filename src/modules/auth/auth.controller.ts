@@ -126,7 +126,7 @@ export class AuthController {
   @ApiOperation({
     summary: "Verify reset password OTP",
     description:
-      "Checks the password reset OTP before allowing a new password to be saved. A successful response returns a verification id that must be used in the final password reset step.",
+      "Checks the password reset OTP before allowing a new password to be saved. A successful response returns a reset request id that must be used in the final password reset step.",
   })
   verifyResetPassword(@Body() dto: VerifyResetOtpDto) {
     return this.authService.verifyResetPassword(dto);

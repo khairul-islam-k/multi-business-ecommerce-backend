@@ -17,7 +17,7 @@ import {
   warehouse,
 } from "@/database/schema";
 import Decimal from "decimal.js";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 
 import type { DatabaseTransaction } from "../../../database/database.service";
 import { buildStockItemKey } from "../domain/stock-item-key";
@@ -78,21 +78,12 @@ export class StockReservationService {
       })
       .returning();
 
-    await tx
-      .update(inventoryStock)
-      .set({
-        quantityReserved: new Decimal(stock.quantityReserved).plus(quantity),
-      })
-      .where(eq(inventoryStock.id, stock.id));
-
-    await tx
-      .update(inventoryWarehouseStock)
-      .set({
-        quantityReserved: new Decimal(warehouseStock.quantityReserved).plus(
-          quantity,
-        ),
-      })
-      .where(eq(inventoryWarehouseStock.id, warehouseStock.id));
+    await this.reserveAvailableQuantity(
+      tx,
+      stock.id,
+      warehouseStock.id,
+      quantity,
+    );
 
     await tx.insert(inventoryStockMovement).values({
       businessId: params.businessId,
@@ -141,21 +132,12 @@ export class StockReservationService {
       quantity,
     });
 
-    await tx
-      .update(inventoryStock)
-      .set({
-        quantityReserved: new Decimal(stock.quantityReserved).plus(quantity),
-      })
-      .where(eq(inventoryStock.id, stock.id));
-
-    await tx
-      .update(inventoryWarehouseStock)
-      .set({
-        quantityReserved: new Decimal(warehouseStock.quantityReserved).plus(
-          quantity,
-        ),
-      })
-      .where(eq(inventoryWarehouseStock.id, warehouseStock.id));
+    await this.reserveAvailableQuantity(
+      tx,
+      stock.id,
+      warehouseStock.id,
+      quantity,
+    );
 
     await tx.insert(inventoryStockMovement).values({
       businessId: params.businessId,
@@ -253,24 +235,12 @@ export class StockReservationService {
       throw new BadRequestException("Reserved stock is insufficient");
     }
 
-    const [updatedStock] = await tx
-      .update(inventoryStock)
-      .set({
-        totalQuantity: new Decimal(stock.totalQuantity).minus(quantity),
-        quantityReserved: new Decimal(stock.quantityReserved).minus(quantity),
-      })
-      .where(eq(inventoryStock.id, stock.id))
-      .returning();
-
-    await tx
-      .update(inventoryWarehouseStock)
-      .set({
-        totalQuantity: new Decimal(warehouseStock.totalQuantity).minus(quantity),
-        quantityReserved: new Decimal(warehouseStock.quantityReserved).minus(
-          quantity,
-        ),
-      })
-      .where(eq(inventoryWarehouseStock.id, warehouseStock.id));
+    const updatedStock = await this.deductReservedQuantity(
+      tx,
+      stock.id,
+      warehouseStock.id,
+      quantity,
+    );
 
     await tx.insert(inventoryStockMovement).values({
       businessId: params.businessId,
@@ -353,29 +323,12 @@ export class StockReservationService {
       stockItemKey: allocation.stockItemKey,
     });
 
-    await tx
-      .update(inventoryStock)
-      .set({
-        totalQuantity: new Decimal(stock.totalQuantity).minus(
-          allocation.quantity,
-        ),
-        quantityReserved: new Decimal(stock.quantityReserved).minus(
-          allocation.quantity,
-        ),
-      })
-      .where(eq(inventoryStock.id, allocation.stockId));
-
-    await tx
-      .update(inventoryWarehouseStock)
-      .set({
-        totalQuantity: new Decimal(warehouseStock.totalQuantity).minus(
-          allocation.quantity,
-        ),
-        quantityReserved: new Decimal(warehouseStock.quantityReserved).minus(
-          allocation.quantity,
-        ),
-      })
-      .where(eq(inventoryWarehouseStock.id, warehouseStock.id));
+    await this.deductReservedQuantity(
+      tx,
+      allocation.stockId,
+      warehouseStock.id,
+      allocation.quantity,
+    );
 
     await tx.insert(inventoryStockMovement).values({
       businessId: allocation.businessId,
@@ -502,7 +455,10 @@ export class StockReservationService {
         warehouseCreatedAt: warehouse.createdAt,
       })
       .from(inventoryWarehouseStock)
-      .innerJoin(warehouse, eq(warehouse.id, inventoryWarehouseStock.warehouseId))
+      .innerJoin(
+        warehouse,
+        eq(warehouse.id, inventoryWarehouseStock.warehouseId),
+      )
       .where(
         and(
           eq(inventoryWarehouseStock.businessId, params.businessId),
@@ -534,8 +490,7 @@ export class StockReservationService {
         }
 
         return (
-          left.warehouseCreatedAt.getTime() -
-          right.warehouseCreatedAt.getTime()
+          left.warehouseCreatedAt.getTime() - right.warehouseCreatedAt.getTime()
         );
       })[0];
 
@@ -585,7 +540,10 @@ export class StockReservationService {
         stock: inventoryStock,
       })
       .from(inventoryOrderAllocation)
-      .innerJoin(inventoryStock, eq(inventoryStock.id, inventoryOrderAllocation.stockId))
+      .innerJoin(
+        inventoryStock,
+        eq(inventoryStock.id, inventoryOrderAllocation.stockId),
+      )
       .where(
         and(
           eq(inventoryOrderAllocation.id, params.allocationId),
@@ -610,20 +568,129 @@ export class StockReservationService {
     warehouseStock: InventoryWarehouseStock,
     quantity: Decimal.Value,
   ) {
-    await tx
+    const [updatedStock] = await tx
       .update(inventoryStock)
       .set({
-        quantityReserved: new Decimal(stock.quantityReserved).minus(quantity),
+        quantityReserved: sql`${inventoryStock.quantityReserved} - ${new Decimal(quantity).toString()}`,
       })
-      .where(eq(inventoryStock.id, stock.id));
+      .where(
+        and(
+          eq(inventoryStock.id, stock.id),
+          sql`${inventoryStock.quantityReserved} >= ${new Decimal(quantity).toString()}`,
+        ),
+      )
+      .returning({ id: inventoryStock.id });
 
-    await tx
+    if (!updatedStock) {
+      throw new BadRequestException("Reserved stock is insufficient");
+    }
+
+    const [updatedWarehouseStock] = await tx
       .update(inventoryWarehouseStock)
       .set({
-        quantityReserved: new Decimal(warehouseStock.quantityReserved).minus(
-          quantity,
-        ),
+        quantityReserved: sql`${inventoryWarehouseStock.quantityReserved} - ${new Decimal(quantity).toString()}`,
       })
-      .where(eq(inventoryWarehouseStock.id, warehouseStock.id));
+      .where(
+        and(
+          eq(inventoryWarehouseStock.id, warehouseStock.id),
+          sql`${inventoryWarehouseStock.quantityReserved} >= ${new Decimal(quantity).toString()}`,
+        ),
+      )
+      .returning({ id: inventoryWarehouseStock.id });
+
+    if (!updatedWarehouseStock) {
+      throw new BadRequestException("Reserved warehouse stock is insufficient");
+    }
+  }
+
+  private async reserveAvailableQuantity(
+    tx: DatabaseTransaction,
+    stockId: string,
+    warehouseStockId: string,
+    quantity: Decimal,
+  ) {
+    const [updatedWarehouseStock] = await tx
+      .update(inventoryWarehouseStock)
+      .set({
+        quantityReserved: sql`${inventoryWarehouseStock.quantityReserved} + ${quantity.toString()}`,
+      })
+      .where(
+        and(
+          eq(inventoryWarehouseStock.id, warehouseStockId),
+          sql`${inventoryWarehouseStock.totalQuantity} - ${inventoryWarehouseStock.quantityReserved} >= ${quantity.toString()}`,
+        ),
+      )
+      .returning({ id: inventoryWarehouseStock.id });
+
+    if (!updatedWarehouseStock) {
+      throw new BadRequestException(
+        "Selected warehouse has insufficient available stock",
+      );
+    }
+
+    const [updatedStock] = await tx
+      .update(inventoryStock)
+      .set({
+        quantityReserved: sql`${inventoryStock.quantityReserved} + ${quantity.toString()}`,
+      })
+      .where(
+        and(
+          eq(inventoryStock.id, stockId),
+          sql`${inventoryStock.totalQuantity} - ${inventoryStock.quantityReserved} >= ${quantity.toString()}`,
+        ),
+      )
+      .returning({ id: inventoryStock.id });
+
+    if (!updatedStock) {
+      throw new BadRequestException("Available stock is insufficient");
+    }
+  }
+
+  private async deductReservedQuantity(
+    tx: DatabaseTransaction,
+    stockId: string,
+    warehouseStockId: string,
+    quantity: Decimal.Value,
+  ) {
+    const amount = new Decimal(quantity).toString();
+    const [updatedWarehouseStock] = await tx
+      .update(inventoryWarehouseStock)
+      .set({
+        totalQuantity: sql`${inventoryWarehouseStock.totalQuantity} - ${amount}`,
+        quantityReserved: sql`${inventoryWarehouseStock.quantityReserved} - ${amount}`,
+      })
+      .where(
+        and(
+          eq(inventoryWarehouseStock.id, warehouseStockId),
+          sql`${inventoryWarehouseStock.totalQuantity} >= ${amount}`,
+          sql`${inventoryWarehouseStock.quantityReserved} >= ${amount}`,
+        ),
+      )
+      .returning({ id: inventoryWarehouseStock.id });
+
+    if (!updatedWarehouseStock) {
+      throw new BadRequestException("Reserved warehouse stock is insufficient");
+    }
+
+    const [updatedStock] = await tx
+      .update(inventoryStock)
+      .set({
+        totalQuantity: sql`${inventoryStock.totalQuantity} - ${amount}`,
+        quantityReserved: sql`${inventoryStock.quantityReserved} - ${amount}`,
+      })
+      .where(
+        and(
+          eq(inventoryStock.id, stockId),
+          sql`${inventoryStock.totalQuantity} >= ${amount}`,
+          sql`${inventoryStock.quantityReserved} >= ${amount}`,
+        ),
+      )
+      .returning();
+
+    if (!updatedStock) {
+      throw new BadRequestException("Reserved stock is insufficient");
+    }
+
+    return updatedStock;
   }
 }
