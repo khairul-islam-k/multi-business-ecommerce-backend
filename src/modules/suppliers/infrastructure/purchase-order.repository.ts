@@ -43,32 +43,37 @@ export class PurchaseOrderRepository {
   }
 
   async hydrate(purchaseOrder: SupplierPurchaseOrder) {
-    const [supplierRow, tax, items, invoices] = await Promise.all([
-      this.db
-        .select()
-        .from(supplier)
-        .where(eq(supplier.id, purchaseOrder.supplierId))
-        .then(([row]) => row ?? null),
-      this.db
-        .select()
-        .from(financeTax)
-        .where(eq(financeTax.id, purchaseOrder.taxId))
-        .then(([row]) => row ?? null),
-      this.db
-        .select()
-        .from(supplierPurchaseOrderItem)
-        .where(eq(supplierPurchaseOrderItem.purchaseOrderId, purchaseOrder.id))
-        .orderBy(asc(supplierPurchaseOrderItem.createdAt)),
-      this.db
-        .select()
-        .from(supplierInvoice)
-        .where(eq(supplierInvoice.purchaseOrderId, purchaseOrder.id))
-        .orderBy(desc(supplierInvoice.createdAt)),
-      this.db
-        .select()
-        .from(warehouse)
-        .where(eq(warehouse.id, purchaseOrder.warehouseId)),
-    ]);
+    const [supplierRow, tax, items, invoices, warehouseRow] = await Promise.all(
+      [
+        this.db
+          .select()
+          .from(supplier)
+          .where(eq(supplier.id, purchaseOrder.supplierId))
+          .then(([row]) => row ?? null),
+        this.db
+          .select()
+          .from(financeTax)
+          .where(eq(financeTax.id, purchaseOrder.taxId))
+          .then(([row]) => row ?? null),
+        this.db
+          .select()
+          .from(supplierPurchaseOrderItem)
+          .where(
+            eq(supplierPurchaseOrderItem.purchaseOrderId, purchaseOrder.id),
+          )
+          .orderBy(asc(supplierPurchaseOrderItem.createdAt)),
+        this.db
+          .select()
+          .from(supplierInvoice)
+          .where(eq(supplierInvoice.purchaseOrderId, purchaseOrder.id))
+          .orderBy(desc(supplierInvoice.createdAt)),
+        this.db
+          .select()
+          .from(warehouse)
+          .where(eq(warehouse.id, purchaseOrder.warehouseId))
+          .then(([row]) => row ?? null),
+      ],
+    );
 
     const hydratedItems = await Promise.all(
       items.map(async (item) => {
@@ -111,6 +116,7 @@ export class PurchaseOrderRepository {
       ...purchaseOrder,
       supplier: supplierRow,
       tax,
+      warehouse: warehouseRow,
       items: hydratedItems,
       invoices,
     };
