@@ -23,7 +23,7 @@ import {
   inventoryWarehouseStock,
   invoiceItem,
   orderCartItem,
-  orderOrderItem,
+  orderItem,
   orderReturnItem,
   product,
   productAttribute,
@@ -57,6 +57,7 @@ import {
 } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import { CatalogSortOrder } from "../common/dto/query-catalog.dto";
 import { ProductImageInputDto } from "../common/dto/product-media.dto";
 import {
   CreateProductDto,
@@ -241,7 +242,7 @@ export class ProductService {
         .from(product)
         .where(where)
         .orderBy(
-          query.sortOrder === "asc"
+          query.sortOrder === CatalogSortOrder.ASC
             ? asc(product.createdAt)
             : desc(product.createdAt),
         )
@@ -459,7 +460,7 @@ export class ProductService {
       this.countByProduct(inventoryStockAdjustmentItem, productId),
       this.countByProduct(inventoryStockTransferItem, productId),
       this.countByProduct(orderCartItem, productId),
-      this.countByProduct(orderOrderItem, productId),
+      this.countByProduct(orderItem, productId),
       this.countByProduct(orderReturnItem, productId),
       this.countByProduct(invoiceItem, productId),
       this.countByBusinessProduct(supplierProductMap, businessId, productId),
@@ -524,7 +525,7 @@ export class ProductService {
       | typeof inventoryStockAdjustmentItem
       | typeof inventoryStockTransferItem
       | typeof orderCartItem
-      | typeof orderOrderItem
+      | typeof orderItem
       | typeof orderReturnItem
       | typeof invoiceItem
       | typeof supplierPurchaseOrderItem

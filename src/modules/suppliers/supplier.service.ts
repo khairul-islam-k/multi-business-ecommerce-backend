@@ -9,6 +9,8 @@ import {
   QueryPurchaseOrderDto,
   QuerySupplierDto,
   QuerySupplierInvoiceDto,
+  QuerySupplierProductMapDto,
+  QuerySupplierProductDto,
   QuerySupplierPurchaseReturnDto,
   ReceivePurchaseOrderDto,
   SupplierProductMapDto,
@@ -75,8 +77,16 @@ export class SupplierService {
     return this.products.addProduct(businessId, supplierId, dto);
   }
 
-  async findProducts(businessId: string, supplierId: string) {
-    return this.products.findProducts(businessId, supplierId);
+  async findProducts(
+    businessId: string,
+    supplierId: string,
+    query: QuerySupplierProductMapDto,
+  ) {
+    return this.products.findProducts(businessId, supplierId, query);
+  }
+
+  async findAllProducts(businessId: string, query: QuerySupplierProductDto) {
+    return this.products.findAllProducts(businessId, query);
   }
 
   async updateProduct(

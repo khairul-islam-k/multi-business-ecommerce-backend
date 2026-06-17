@@ -9,6 +9,7 @@ import {
   supplierInvoice,
   supplierPurchaseOrder,
   supplierPurchaseOrderItem,
+  warehouse,
 } from "@/database/schema";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 
@@ -63,6 +64,10 @@ export class PurchaseOrderRepository {
         .from(supplierInvoice)
         .where(eq(supplierInvoice.purchaseOrderId, purchaseOrder.id))
         .orderBy(desc(supplierInvoice.createdAt)),
+      this.db
+        .select()
+        .from(warehouse)
+        .where(eq(warehouse.id, purchaseOrder.warehouseId)),
     ]);
 
     const hydratedItems = await Promise.all(
@@ -96,12 +101,8 @@ export class PurchaseOrderRepository {
 
         return {
           ...item,
-          product: productRow
-            ? { ...productRow, productStocks }
-            : null,
-          variant: variantRow
-            ? { ...variantRow, variantStocks }
-            : null,
+          product: productRow ? { ...productRow, productStocks } : null,
+          variant: variantRow ? { ...variantRow, variantStocks } : null,
         };
       }),
     );

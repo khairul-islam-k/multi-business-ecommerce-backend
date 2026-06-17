@@ -9,11 +9,11 @@ import {
   OrderPaymentStatus,
   courierShipment,
   invoice,
-  orderOrder,
+  order as orderTable,
   orderPayment,
 } from "@/database/schema";
 import Decimal from "decimal.js";
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import type {
@@ -127,8 +127,10 @@ export class OrderPaymentService {
   ) {
     const [order] = await tx
       .select()
-      .from(orderOrder)
-      .where(and(eq(orderOrder.id, orderId), eq(orderOrder.businessId, businessId)));
+      .from(orderTable)
+      .where(
+        and(eq(orderTable.id, orderId), eq(orderTable.businessId, businessId)),
+      );
 
     if (!order) {
       throw new NotFoundException("Order not found");
@@ -186,12 +188,12 @@ export class OrderPaymentService {
     }
 
     const [updatedOrder] = await tx
-      .update(orderOrder)
+      .update(orderTable)
       .set({
         paidAmount,
         paymentStatus,
       })
-      .where(eq(orderOrder.id, orderId))
+      .where(eq(orderTable.id, orderId))
       .returning();
 
     return this.orders.hydrate(updatedOrder, tx);

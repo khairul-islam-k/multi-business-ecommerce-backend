@@ -331,7 +331,7 @@ export const orderCartItem = pgTable(
 export type OrderCartItem = typeof orderCartItem.$inferSelect;
 export type NewOrderCartItem = typeof orderCartItem.$inferInsert;
 
-export const orderOrder = pgTable(
+export const order = pgTable(
   "orders",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
@@ -378,29 +378,29 @@ export const orderOrder = pgTable(
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
-    uniqueIndex("order_orders_business_id_order_no_unique").on(
+    uniqueIndex("orders_business_id_order_no_unique").on(
       table.businessId,
       table.orderNo,
     ),
-    index("order_orders_business_id_idx").on(table.businessId),
-    index("order_orders_customer_id_idx").on(table.customerId),
-    index("order_orders_warehouse_id_idx").on(table.warehouseId),
-    index("order_orders_tax_id_idx").on(table.taxId),
-    index("order_orders_status_idx").on(table.status),
-    index("order_orders_payment_status_idx").on(table.paymentStatus),
-    index("order_orders_created_at_idx").on(table.createdAt),
+    index("orders_business_id_idx").on(table.businessId),
+    index("orders_customer_id_idx").on(table.customerId),
+    index("orders_warehouse_id_idx").on(table.warehouseId),
+    index("orders_tax_id_idx").on(table.taxId),
+    index("orders_status_idx").on(table.status),
+    index("orders_payment_status_idx").on(table.paymentStatus),
+    index("orders_created_at_idx").on(table.createdAt),
   ],
 );
-export type OrderOrder = typeof orderOrder.$inferSelect;
-export type NewOrderOrder = typeof orderOrder.$inferInsert;
+export type Order = typeof order.$inferSelect;
+export type NewOrder = typeof order.$inferInsert;
 
-export const orderOrderItem = pgTable(
-  "order_order_items",
+export const orderItem = pgTable(
+  "order_items",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
     orderId: uuid("order_id")
       .notNull()
-      .references((): AnyPgColumn => orderOrder.id, { onDelete: "cascade" }),
+      .references((): AnyPgColumn => order.id, { onDelete: "cascade" }),
     productId: uuid("product_id").notNull(),
     variantId: uuid("variant_id"),
     quantity: decimal({ precision: 14, scale: 3 }).notNull(),
@@ -418,13 +418,13 @@ export const orderOrderItem = pgTable(
       .notNull(),
   },
   (table) => [
-    index("order_order_items_order_id_idx").on(table.orderId),
-    index("order_order_items_product_id_idx").on(table.productId),
-    index("order_order_items_variant_id_idx").on(table.variantId),
+    index("order_items_order_id_idx").on(table.orderId),
+    index("order_items_product_id_idx").on(table.productId),
+    index("order_items_variant_id_idx").on(table.variantId),
   ],
 );
-export type OrderOrderItem = typeof orderOrderItem.$inferSelect;
-export type NewOrderOrderItem = typeof orderOrderItem.$inferInsert;
+export type OrderItem = typeof orderItem.$inferSelect;
+export type NewOrderItem = typeof orderItem.$inferInsert;
 
 export const orderStatusLog = pgTable(
   "order_status_logs",
@@ -432,7 +432,7 @@ export const orderStatusLog = pgTable(
     id: uuid().primaryKey().defaultRandom().notNull(),
     orderId: uuid("order_id")
       .notNull()
-      .references((): AnyPgColumn => orderOrder.id, { onDelete: "cascade" }),
+      .references((): AnyPgColumn => order.id, { onDelete: "cascade" }),
     fromStatus: orderStatusEnum("from_status"),
     toStatus: orderStatusEnum("to_status").notNull(),
     note: text(),
@@ -454,7 +454,7 @@ export const orderDiscount = pgTable(
     id: uuid().primaryKey().defaultRandom().notNull(),
     orderId: uuid("order_id")
       .notNull()
-      .references((): AnyPgColumn => orderOrder.id, { onDelete: "cascade" }),
+      .references((): AnyPgColumn => order.id, { onDelete: "cascade" }),
     discountType: orderDiscountTypeEnum("discount_type").notNull(),
     discountSource: orderDiscountSourceEnum("discount_source").notNull(),
     code: varchar({ length: 100 }),
@@ -477,7 +477,7 @@ export const orderPayment = pgTable(
     businessId: uuid("business_id").notNull(),
     orderId: uuid("order_id")
       .notNull()
-      .references((): AnyPgColumn => orderOrder.id, { onDelete: "cascade" }),
+      .references((): AnyPgColumn => order.id, { onDelete: "cascade" }),
     financeAccountId: uuid("finance_account_id").references(
       (): AnyPgColumn => financeAccount.id,
       { onDelete: "restrict" },
@@ -520,7 +520,7 @@ export const orderReturn = pgTable(
     businessId: uuid("business_id").notNull(),
     orderId: uuid("order_id")
       .notNull()
-      .references((): AnyPgColumn => orderOrder.id, { onDelete: "cascade" }),
+      .references((): AnyPgColumn => order.id, { onDelete: "cascade" }),
     returnNo: varchar("return_no", { length: 100 }).notNull(),
     status: orderReturnStatusEnum().default("REQUESTED").notNull(),
     reason: text(),
@@ -559,7 +559,7 @@ export const orderReturnItem = pgTable(
       .references((): AnyPgColumn => orderReturn.id, { onDelete: "cascade" }),
     orderItemId: uuid("order_item_id")
       .notNull()
-      .references((): AnyPgColumn => orderOrderItem.id, {
+      .references((): AnyPgColumn => orderItem.id, {
         onDelete: "restrict",
       }),
     productId: uuid("product_id").notNull(),
@@ -591,7 +591,7 @@ export const orderRefund = pgTable(
     businessId: uuid("business_id").notNull(),
     orderId: uuid("order_id")
       .notNull()
-      .references((): AnyPgColumn => orderOrder.id, { onDelete: "cascade" }),
+      .references((): AnyPgColumn => order.id, { onDelete: "cascade" }),
     returnId: uuid("return_id").references((): AnyPgColumn => orderReturn.id, {
       onDelete: "set null",
     }),

@@ -5,8 +5,8 @@ import {
 } from "@nestjs/common";
 import {
   type JsonValue,
-  type OrderOrder,
-  type OrderOrderItem,
+  type Order,
+  type OrderItem,
   CatalogProductStatus,
   InvoiceStatus,
   OrderPaymentMethod,
@@ -20,8 +20,8 @@ import {
   invoice,
   invoiceItem,
   orderCustomer,
-  orderOrder,
-  orderOrderItem,
+  order,
+  orderItem,
   orderStatusLog,
   product,
   productVariant,
@@ -87,6 +87,7 @@ export class CreateOrderService {
       customerPhone: dto.customerPhone,
       warehouseId: dto.warehouseId,
       taxId: dto.taxId,
+      customerId: dto.customerId,
       items: dto.items,
       payment: dto.payment,
       orderType: OrderType.POS,
@@ -123,9 +124,9 @@ export class CreateOrderService {
     const items = await this.buildItems(businessId, params.items, tax.rate);
     const totals = calculateOrderTotals(items, params.shippingCharge ?? 0);
 
-    const order = await this.db.transaction(async (tx) => {
+    const createdOrder = await this.db.transaction(async (tx) => {
       const [createdOrder] = await tx
-        .insert(orderOrder)
+        .insert(order)
         .values({
           businessId,
           customerId: params.customerId,
@@ -164,11 +165,11 @@ export class CreateOrderService {
         changedBy: currentUser.id,
       });
 
-      const createdItems: OrderOrderItem[] = [];
+      const createdItems: OrderItem[] = [];
 
       for (const item of items) {
         const [createdItem] = await tx
-          .insert(orderOrderItem)
+          .insert(orderItem)
           .values({
             orderId: createdOrder.id,
             productId: item.productId,
@@ -241,15 +242,15 @@ export class CreateOrderService {
       );
     });
 
-    return apiResponse(order, "Order created successfully");
+    return apiResponse(createdOrder, "Order created successfully");
   }
 
   private async createInvoice(
     tx: DatabaseTransaction,
     params: {
       businessId: string;
-      order: OrderOrder;
-      items: OrderOrderItem[];
+      order: Order;
+      items: OrderItem[];
       invoiceNo: string;
       taxId: string;
       taxRate: Decimal.Value;
@@ -302,8 +303,8 @@ export class CreateOrderService {
     tx: DatabaseTransaction,
     params: {
       businessId: string;
-      order: OrderOrder;
-      items: OrderOrderItem[];
+      order: Order;
+      items: OrderItem[];
       courier: NonNullable<CreateOrderDto["courier"]>;
       isCod: boolean;
       currentUserId: string;

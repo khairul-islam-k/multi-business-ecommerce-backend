@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from "@nestjs/common";
 import {
   courierShipment,
   invoice,
-  orderOrder,
+  order,
   orderPayment,
 } from "@/database/schema";
 import { and, eq } from "drizzle-orm";
@@ -23,9 +23,9 @@ export class OrderCodeRepository {
   generateUniqueOrderNo(businessId: string) {
     return this.generateUniqueCode(businessId, "ORD", async (code) => {
       const [row] = await this.db
-        .select({ id: orderOrder.id })
-        .from(orderOrder)
-        .where(and(eq(orderOrder.businessId, businessId), eq(orderOrder.orderNo, code)));
+        .select({ id: order.id })
+        .from(order)
+        .where(and(eq(order.businessId, businessId), eq(order.orderNo, code)));
 
       return row ?? null;
     });
@@ -37,7 +37,10 @@ export class OrderCodeRepository {
         .select({ id: orderPayment.id })
         .from(orderPayment)
         .where(
-          and(eq(orderPayment.businessId, businessId), eq(orderPayment.paymentNo, code)),
+          and(
+            eq(orderPayment.businessId, businessId),
+            eq(orderPayment.paymentNo, code),
+          ),
         );
 
       return row ?? null;
@@ -49,7 +52,9 @@ export class OrderCodeRepository {
       const [row] = await this.db
         .select({ id: invoice.id })
         .from(invoice)
-        .where(and(eq(invoice.businessId, businessId), eq(invoice.invoiceNo, code)));
+        .where(
+          and(eq(invoice.businessId, businessId), eq(invoice.invoiceNo, code)),
+        );
 
       return row ?? null;
     });
