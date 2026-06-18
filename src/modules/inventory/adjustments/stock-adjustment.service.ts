@@ -1,32 +1,38 @@
+import Decimal from "decimal.js";
+import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+
+import {
+  InventoryAdjustmentStatus,
+  InventoryAdjustmentType,
+  InventoryMovementType,
+  InventoryReferenceType,
+  InventoryStockAdjustment,
+  inventoryStockAdjustment,
+  inventoryStockAdjustmentItem,
+  warehouse,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  type InventoryStockAdjustment,
-  InventoryAdjustmentStatus,
-  InventoryAdjustmentType,
-  InventoryMovementType,
-  InventoryReferenceType,
-  inventoryStockAdjustment,
-  inventoryStockAdjustmentItem,
-  warehouse,
-} from "@/database/schema";
-import Decimal from "decimal.js";
-import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import {
-  CreateStockAdjustmentDto,
-  QueryStockAdjustmentDto,
-} from "./dto/stock-adjustment.dto";
-import { DatabaseService } from "../../../database/database.service";
-import { InventoryLookupService } from "../common/inventory-lookup.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import { InventoryLookupService } from "../common/inventory-lookup.service";
+import {
+  CreateStockAdjustmentDto,
+  QueryStockAdjustmentDto,
+} from "./dto/stock-adjustment.dto";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import type {
+  Database,
+  DatabaseTransaction,
+} from "../../../database/database.service";
 
 @Injectable()
 export class StockAdjustmentService {
@@ -96,7 +102,12 @@ export class StockAdjustmentService {
           })),
         );
 
-        return this.findAdjustmentWithRelations(createdAdjustment.id);
+        return this.findAdjustmentWithRelations(
+          createdAdjustment.id,
+          undefined,
+          undefined,
+          tx,
+        );
       });
 
       return apiResponse(adjustment, "Stock adjustment created successfully");
@@ -141,9 +152,7 @@ export class StockAdjustmentService {
         .then(([row]) => row?.value ?? 0),
     ]);
     const items = await Promise.all(
-      rows.map((adjustment) =>
-        this.withAdjustmentRelations(adjustment),
-      ),
+      rows.map((adjustment) => this.withAdjustmentRelations(adjustment)),
     );
 
     return paginatedResponse(items, {
@@ -260,8 +269,9 @@ export class StockAdjustmentService {
     adjustmentId: string,
     businessId?: string,
     status?: InventoryAdjustmentStatus,
+    client: Database | DatabaseTransaction = this.db,
   ) {
-    const [adjustment] = await this.db
+    const [adjustment] = await client
       .select()
       .from(inventoryStockAdjustment)
       .where(
@@ -275,17 +285,20 @@ export class StockAdjustmentService {
         ),
       );
 
-    return adjustment ? this.withAdjustmentRelations(adjustment) : null;
+    return adjustment ? this.withAdjustmentRelations(adjustment, client) : null;
   }
 
-  private async withAdjustmentRelations(adjustment: InventoryStockAdjustment) {
+  private async withAdjustmentRelations(
+    adjustment: InventoryStockAdjustment,
+    client: Database | DatabaseTransaction = this.db,
+  ) {
     const [warehouseRow, items] = await Promise.all([
-      this.db
+      client
         .select()
         .from(warehouse)
         .where(eq(warehouse.id, adjustment.warehouseId))
         .then(([row]) => row ?? null),
-      this.db
+      client
         .select()
         .from(inventoryStockAdjustmentItem)
         .where(eq(inventoryStockAdjustmentItem.adjustmentId, adjustment.id))

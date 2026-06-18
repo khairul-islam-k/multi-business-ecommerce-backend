@@ -1,6 +1,6 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
+  ArrayMinSize,
   IsArray,
   IsNumber,
   IsOptional,
@@ -10,6 +10,8 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
+
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class StockTransferItemDto {
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
@@ -44,6 +46,7 @@ export class CreateStockTransferDto {
 
   @ApiProperty({ type: [StockTransferItemDto] })
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => StockTransferItemDto)
   items!: StockTransferItemDto[];

@@ -28,6 +28,10 @@ import {
 } from "./dto/stock-transfer.dto";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import type {
+  Database,
+  DatabaseTransaction,
+} from "../../../database/database.service";
 
 @Injectable()
 export class StockTransferService {
@@ -100,7 +104,12 @@ export class StockTransferService {
           })),
         );
 
-        return this.findTransferWithRelations(createdTransfer.id);
+        return this.findTransferWithRelations(
+          createdTransfer.id,
+          undefined,
+          undefined,
+          tx,
+        );
       });
 
       return apiResponse(transfer, "Stock transfer created successfully");
@@ -309,8 +318,9 @@ export class StockTransferService {
     transferId: string,
     businessId?: string,
     status?: InventoryTransferStatus,
+    client: Database | DatabaseTransaction = this.db,
   ) {
-    const [transfer] = await this.db
+    const [transfer] = await client
       .select()
       .from(inventoryStockTransfer)
       .where(
@@ -324,22 +334,25 @@ export class StockTransferService {
         ),
       );
 
-    return transfer ? this.withTransferRelations(transfer) : null;
+    return transfer ? this.withTransferRelations(transfer, client) : null;
   }
 
-  private async withTransferRelations(transfer: InventoryStockTransfer) {
+  private async withTransferRelations(
+    transfer: InventoryStockTransfer,
+    client: Database | DatabaseTransaction = this.db,
+  ) {
     const [fromWarehouse, toWarehouse, items] = await Promise.all([
-      this.db
+      client
         .select()
         .from(warehouse)
         .where(eq(warehouse.id, transfer.fromWarehouseId))
         .then(([row]) => row ?? null),
-      this.db
+      client
         .select()
         .from(warehouse)
         .where(eq(warehouse.id, transfer.toWarehouseId))
         .then(([row]) => row ?? null),
-      this.db
+      client
         .select()
         .from(inventoryStockTransferItem)
         .where(eq(inventoryStockTransferItem.transferId, transfer.id))
