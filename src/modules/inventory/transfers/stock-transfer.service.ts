@@ -1,37 +1,39 @@
+import Decimal from "decimal.js";
+import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+
+import {
+  InventoryMovementType,
+  InventoryReferenceType,
+  InventoryStockTransfer,
+  inventoryStockTransfer,
+  inventoryStockTransferItem,
+  InventoryTransferStatus,
+  warehouse,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  type InventoryStockTransfer,
-  InventoryMovementType,
-  InventoryReferenceType,
-  InventoryTransferStatus,
-  inventoryStockTransfer,
-  inventoryStockTransferItem,
-  warehouse,
-} from "@/database/schema";
-import Decimal from "decimal.js";
-import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import {
-  CreateStockTransferDto,
-  QueryStockTransferDto,
-} from "./dto/stock-transfer.dto";
-import { DatabaseService } from "../../../database/database.service";
-import { InventoryLookupService } from "../common/inventory-lookup.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import { InventoryLookupService } from "../common/inventory-lookup.service";
+import {
+  CreateStockTransferDto,
+  QueryStockTransferDto,
+} from "./dto/stock-transfer.dto";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class StockTransferService {
   constructor(
     private readonly database: DatabaseService,
-    private readonly lookup: InventoryLookupService,
+    private readonly inventoryLookupService: InventoryLookupService,
   ) {}
 
   private get db() {
@@ -52,10 +54,16 @@ export class StockTransferService {
     }
 
     await Promise.all([
-      this.lookup.assertWarehouseExists(businessId, dto.fromWarehouseId),
-      this.lookup.assertWarehouseExists(businessId, dto.toWarehouseId),
+      this.inventoryLookupService.assertWarehouseExists(
+        businessId,
+        dto.fromWarehouseId,
+      ),
+      this.inventoryLookupService.assertWarehouseExists(
+        businessId,
+        dto.toWarehouseId,
+      ),
       ...dto.items.map((item) =>
-        this.lookup.assertStockItem(
+        this.inventoryLookupService.assertStockItem(
           businessId,
           item.productId,
           item.variantId ?? null,
@@ -63,7 +71,8 @@ export class StockTransferService {
       ),
     ]);
 
-    const transferNo = await this.lookup.generateUniqueTransferNo(businessId);
+    const transferNo =
+      await this.inventoryLookupService.generateUniqueTransferNo(businessId);
 
     try {
       const transfer = await this.db.transaction(async (tx) => {
@@ -75,7 +84,7 @@ export class StockTransferService {
             fromWarehouseId: dto.fromWarehouseId,
             toWarehouseId: dto.toWarehouseId,
             status: InventoryTransferStatus.DRAFT,
-            note: this.lookup.normalizeNullableText(dto.note),
+            note: this.inventoryLookupService.normalizeNullableText(dto.note),
             createdBy: currentUser.id,
           })
           .returning();
@@ -96,7 +105,7 @@ export class StockTransferService {
 
       return apiResponse(transfer, "Stock transfer created successfully");
     } catch (error) {
-      this.lookup.handleUniqueError(
+      this.inventoryLookupService.handleUniqueError(
         error,
         "Stock transfer number already exists",
       );
@@ -173,7 +182,7 @@ export class StockTransferService {
 
     const shippedTransfer = await this.db.transaction(async (tx) => {
       for (const item of transfer.items) {
-        await this.lookup.applyStockDelta(tx, {
+        await this.inventoryLookupService.applyStockDelta(tx, {
           businessId,
           warehouseId: transfer.fromWarehouseId,
           productId: item.productId,
@@ -221,7 +230,7 @@ export class StockTransferService {
 
     const receivedTransfer = await this.db.transaction(async (tx) => {
       for (const item of transfer.items) {
-        await this.lookup.applyStockDelta(tx, {
+        await this.inventoryLookupService.applyStockDelta(tx, {
           businessId,
           warehouseId: transfer.toWarehouseId,
           productId: item.productId,
@@ -356,7 +365,10 @@ export class StockTransferService {
 
     const itemKeys = new Set(
       items.map((item) =>
-        this.lookup.buildStockItemKey(item.productId, item.variantId),
+        this.inventoryLookupService.buildStockItemKey(
+          item.productId,
+          item.variantId,
+        ),
       ),
     );
 

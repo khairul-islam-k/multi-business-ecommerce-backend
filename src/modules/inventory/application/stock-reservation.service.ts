@@ -1,28 +1,30 @@
+import Decimal from "decimal.js";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
+
+import {
+  InventoryMovementType,
+  inventoryOrderAllocation,
+  InventoryOrderAllocationStatus,
+  InventoryReferenceType,
+  InventoryStock,
+  inventoryStock,
+  inventoryStockMovement,
+  InventoryWarehouseStock,
+  inventoryWarehouseStock,
+  warehouse,
+  WarehouseStatus,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  type InventoryStock,
-  type InventoryWarehouseStock,
-  InventoryMovementType,
-  InventoryOrderAllocationStatus,
-  InventoryReferenceType,
-  WarehouseStatus,
-  inventoryOrderAllocation,
-  inventoryStock,
-  inventoryStockMovement,
-  inventoryWarehouseStock,
-  warehouse,
-} from "@/database/schema";
-import Decimal from "decimal.js";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
 
-import type { DatabaseTransaction } from "../../../database/database.service";
-import { buildStockItemKey } from "../domain/stock-item-key";
 import { normalizeOptionalText } from "../../../common/text/normalizers";
 import { StockItemRef } from "../common/inventory.types";
+import { buildStockItemKey } from "../domain/stock-item-key";
+
+import type { DatabaseTransaction } from "../../../database/database.service";
 
 @Injectable()
 export class StockReservationService {

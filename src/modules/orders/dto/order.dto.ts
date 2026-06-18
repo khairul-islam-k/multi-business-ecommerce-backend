@@ -1,11 +1,3 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import {
-  OrderPaymentMethod,
-  OrderPaymentStatus,
-  OrderSource,
-  OrderStatus,
-  OrderType,
-} from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsArray,
@@ -20,6 +12,15 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
+
+import {
+  OrderPaymentMethod,
+  OrderPaymentStatus,
+  OrderSource,
+  OrderStatus,
+  OrderType,
+} from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class OrderItemInputDto {
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
@@ -60,35 +61,35 @@ export class OrderCourierInputDto {
   @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsOptional()
   @IsUUID()
-  courierId?: string;
+  courierId!: string;
 
   @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsOptional()
   @IsUUID()
-  deliveryZoneId?: string;
+  deliveryZoneId!: string;
 
   @ApiPropertyOptional({ example: 80 })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
-  courierFee?: number;
+  courierFee!: number;
 
   @ApiPropertyOptional({ example: "Customer Name" })
   @IsOptional()
   @IsString()
   @MaxLength(150)
-  recipientName?: string;
+  recipientName!: string;
 
   @ApiPropertyOptional({ example: "+8801700000000" })
   @IsOptional()
   @IsString()
   @MaxLength(30)
-  recipientPhone?: string;
+  recipientPhone!: string;
 
-  @ApiPropertyOptional({ example: { address: "Dhaka" } })
+  @ApiPropertyOptional({ example: { address: "House 42, Street 69, Area Z" } })
   @IsOptional()
-  deliveryAddressSnapshot?: unknown;
+  deliveryAddressSnapshot!: unknown;
 }
 
 export class CreateOrderDto {

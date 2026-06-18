@@ -1,10 +1,10 @@
-import { describe, expect, it } from "@jest/globals";
-import { BadRequestException } from "@nestjs/common";
 import {
   OrderPaymentMethod,
   OrderPaymentStatus,
   OrderStatus,
 } from "@/database/schema";
+import { describe, expect, it } from "@jest/globals";
+import { BadRequestException } from "@nestjs/common";
 
 import {
   assertOrderCanAcceptPayment,
@@ -36,4 +36,3 @@ describe("order payment policy", () => {
     expect(getOrderPaymentStatus(100, 100)).toBe(OrderPaymentStatus.PAID);
   });
 });
-

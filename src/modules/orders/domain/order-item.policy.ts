@@ -8,7 +8,7 @@ export function assertOrderItems(items: OrderItemInputDto[]) {
   }
 
   const itemKeys = new Set(
-    items.map((item) => `${item.productId}:${item.variantId ?? "product"}`),
+    items.map((item) => `${item.productId}:${item.variantId ?? ""}`),
   );
 
   if (itemKeys.size !== items.length) {

@@ -1,15 +1,16 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { and, eq } from "drizzle-orm";
+
 import {
   courierShipment,
   invoice,
   order,
   orderPayment,
 } from "@/database/schema";
-import { and, eq } from "drizzle-orm";
+import { BadRequestException, Injectable } from "@nestjs/common";
 
-import { DatabaseService } from "../../../database/database.service";
-import { generateRandomCode } from "../../../common/utils/code-generator.util";
 import { BusinessCodePrefixService } from "../../../common/code/business-code-prefix.service";
+import { generateRandomCode } from "../../../common/utils/code-generator.util";
+import { DatabaseService } from "../../../database/database.service";
 
 const CODE_RETRY_LIMIT = 5;
 
@@ -17,7 +18,7 @@ const CODE_RETRY_LIMIT = 5;
 export class OrderCodeRepository {
   constructor(
     private readonly database: DatabaseService,
-    private readonly prefixes: BusinessCodePrefixService,
+    private readonly businessCodePrefixService: BusinessCodePrefixService,
   ) {}
 
   private get db() {
@@ -25,7 +26,7 @@ export class OrderCodeRepository {
   }
 
   async generateUniqueOrderNo(businessId: string) {
-    const prefix = await this.prefixes.resolve(
+    const prefix = await this.businessCodePrefixService.resolve(
       businessId,
       "orderPrefix",
       "ORD",
@@ -42,7 +43,7 @@ export class OrderCodeRepository {
   }
 
   async generateUniquePaymentNo(businessId: string) {
-    const prefix = await this.prefixes.resolve(
+    const prefix = await this.businessCodePrefixService.resolve(
       businessId,
       "paymentPrefix",
       "PAY",
@@ -64,7 +65,7 @@ export class OrderCodeRepository {
   }
 
   async generateUniqueInvoiceNo(businessId: string) {
-    const prefix = await this.prefixes.resolve(
+    const prefix = await this.businessCodePrefixService.resolve(
       businessId,
       "invoicePrefix",
       "INV",
@@ -83,7 +84,7 @@ export class OrderCodeRepository {
   }
 
   async generateUniqueShipmentNo(businessId: string) {
-    const prefix = await this.prefixes.resolve(
+    const prefix = await this.businessCodePrefixService.resolve(
       businessId,
       "shipmentPrefix",
       "SHP",

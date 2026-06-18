@@ -1,10 +1,11 @@
-import { BadRequestException } from "@nestjs/common";
 import Decimal from "decimal.js";
+
 import {
   OrderPaymentMethod,
   OrderPaymentStatus,
   OrderStatus,
 } from "@/database/schema";
+import { BadRequestException } from "@nestjs/common";
 
 import type { OrderPaymentInputDto } from "../dto/order.dto";
 
@@ -28,7 +29,9 @@ export function assertOrderCanAcceptPayment(status: OrderStatus) {
   ];
 
   if (paymentBlockedStatuses.includes(status)) {
-    throw new BadRequestException("Payment cannot be added to this order");
+    throw new BadRequestException(
+      `Payment cannot be added to this order as it's been ${status}`,
+    );
   }
 }
 
@@ -65,4 +68,3 @@ export function getOrderPaymentStatus(
       ? OrderPaymentStatus.PARTIALLY_PAID
       : OrderPaymentStatus.PAID;
 }
-

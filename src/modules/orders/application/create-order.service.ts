@@ -1,59 +1,61 @@
+import Decimal from "decimal.js";
+import { and, count, eq, isNull } from "drizzle-orm";
+
+import {
+  CatalogProductStatus,
+  courierShipment,
+  courierShipmentItem,
+  invoice,
+  invoiceItem,
+  InvoiceStatus,
+  JsonValue,
+  Order,
+  order,
+  orderCustomer,
+  OrderItem,
+  orderItem,
+  OrderPaymentMethod,
+  OrderPaymentStatus,
+  OrderSource,
+  OrderStatus,
+  orderStatusLog,
+  OrderType,
+  product,
+  productVariant,
+  ProductVariantStatus,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  type JsonValue,
-  type Order,
-  type OrderItem,
-  CatalogProductStatus,
-  InvoiceStatus,
-  OrderPaymentMethod,
-  OrderPaymentStatus,
-  OrderSource,
-  OrderStatus,
-  OrderType,
-  ProductVariantStatus,
-  courierShipment,
-  courierShipmentItem,
-  invoice,
-  invoiceItem,
-  orderCustomer,
-  order,
-  orderItem,
-  orderStatusLog,
-  product,
-  productVariant,
-} from "@/database/schema";
-import Decimal from "decimal.js";
-import { and, count, eq, isNull } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { CreatePosSaleDto } from "../../pos/dto/pos-sale.dto";
-import { CreateOrderDto, OrderItemInputDto } from "../dto/order.dto";
-import { assertOrderItems } from "../domain/order-item.policy";
-import { assertOrderPaymentInput } from "../domain/order-payment.policy";
-import { calculateOrderTotals } from "../domain/order-totals.calculator";
-import type { OrderItemWithPrice } from "../domain/order.types";
-import { OrderCodeRepository } from "../infrastructure/order-code.repository";
+import { apiResponse } from "../../../common/utils/api-response.util";
 import {
   DatabaseService,
-  type DatabaseTransaction,
+  DatabaseTransaction,
 } from "../../../database/database.service";
 import { FinanceLedgerService } from "../../finance/common/finance-ledger.service";
 import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
+import { CreatePosSaleDto } from "../../pos/dto/pos-sale.dto";
+import { assertOrderItems } from "../domain/order-item.policy";
+import { assertOrderPaymentInput } from "../domain/order-payment.policy";
+import { calculateOrderTotals } from "../domain/order-totals.calculator";
+import { CreateOrderDto, OrderItemInputDto } from "../dto/order.dto";
+import { OrderCodeRepository } from "../infrastructure/order-code.repository";
 import { OrderPaymentService } from "./order-payment.service";
-import { apiResponse } from "../../../common/utils/api-response.util";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import type { OrderItemWithPrice } from "../domain/order.types";
 
 @Injectable()
 export class CreateOrderService {
   constructor(
     private readonly database: DatabaseService,
-    private readonly inventory: InventoryLookupService,
-    private readonly finance: FinanceLedgerService,
-    private readonly codes: OrderCodeRepository,
-    private readonly payments: OrderPaymentService,
+    private readonly inventoryLookupService: InventoryLookupService,
+    private readonly financeLedgerService: FinanceLedgerService,
+    private readonly orderCodeRepository: OrderCodeRepository,
+    private readonly orderPaymentService: OrderPaymentService,
   ) {}
 
   private get db() {
@@ -117,9 +119,13 @@ export class CreateOrderService {
     }
 
     const [orderNo, invoiceNo, tax] = await Promise.all([
-      this.codes.generateUniqueOrderNo(businessId),
-      this.codes.generateUniqueInvoiceNo(businessId),
-      this.finance.assertActiveTax(this.db, businessId, params.taxId),
+      this.orderCodeRepository.generateUniqueOrderNo(businessId),
+      this.orderCodeRepository.generateUniqueInvoiceNo(businessId),
+      this.financeLedgerService.assertActiveTax(
+        this.db,
+        businessId,
+        params.taxId,
+      ),
     ]);
     const items = await this.buildItems(businessId, params.items, tax.rate);
     const totals = calculateOrderTotals(items, params.shippingCharge ?? 0);
@@ -184,19 +190,22 @@ export class CreateOrderService {
 
         createdItems.push(createdItem);
 
-        const allocation = await this.inventory.reserveForOrder(tx, {
-          businessId,
-          orderId: createdOrder.id,
-          orderItemId: createdItem.id,
-          productId: item.productId,
-          variantId: item.variantId ?? null,
-          quantity: item.quantity,
-          warehouseId: params.warehouseId,
-          createdBy: currentUser.id,
-        });
+        const allocation = await this.inventoryLookupService.reserveForOrder(
+          tx,
+          {
+            businessId,
+            orderId: createdOrder.id,
+            orderItemId: createdItem.id,
+            productId: item.productId,
+            variantId: item.variantId ?? null,
+            quantity: item.quantity,
+            warehouseId: params.warehouseId,
+            createdBy: currentUser.id,
+          },
+        );
 
         if (params.fulfillImmediately) {
-          await this.inventory.fulfillOrderAllocation(
+          await this.inventoryLookupService.fulfillOrderAllocation(
             tx,
             { businessId, allocationId: allocation.id },
             currentUser.id,
@@ -215,7 +224,7 @@ export class CreateOrderService {
       });
 
       if (params.payment) {
-        await this.payments.createPayment(tx, {
+        await this.orderPaymentService.createPayment(tx, {
           businessId,
           orderId: createdOrder.id,
           payment: params.payment,
@@ -235,7 +244,7 @@ export class CreateOrderService {
         });
       }
 
-      return this.payments.refreshOrderPaymentState(
+      return this.orderPaymentService.refreshOrderPaymentState(
         tx,
         businessId,
         createdOrder.id,
@@ -310,7 +319,7 @@ export class CreateOrderService {
       currentUserId: string;
     },
   ) {
-    const shipmentNo = await this.codes.generateUniqueShipmentNo(
+    const shipmentNo = await this.orderCodeRepository.generateUniqueShipmentNo(
       params.businessId,
     );
     const codAmount = params.isCod
