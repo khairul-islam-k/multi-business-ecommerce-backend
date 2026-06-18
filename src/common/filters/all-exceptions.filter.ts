@@ -1,3 +1,5 @@
+import { Request, Response } from "express";
+
 import {
   ArgumentsHost,
   Catch,
@@ -6,7 +8,6 @@ import {
   HttpStatus,
   Logger,
 } from "@nestjs/common";
-import { Request, Response } from "express";
 
 import { AppConfigService } from "../config/app-config.service";
 

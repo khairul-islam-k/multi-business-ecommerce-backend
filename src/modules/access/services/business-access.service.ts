@@ -1,20 +1,22 @@
-import { ForbiddenException, Injectable } from "@nestjs/common";
-import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
+
 import {
-  BusinessMemberStatus,
-  BusinessStatus,
   business,
   businessMember,
+  BusinessMemberStatus,
+  BusinessStatus,
   SystemUserType,
 } from "@/database/schema";
+import { ForbiddenException, Injectable } from "@nestjs/common";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { RequestContextService } from "../../../common/request-context/request-context.service";
-import { DatabaseService } from "../../../database/database.service";
 import {
   BusinessAccessContext,
   getBusinessAccessCacheKey,
 } from "../../../common/request-context/request-context.types";
+import { DatabaseService } from "../../../database/database.service";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class BusinessAccessService {

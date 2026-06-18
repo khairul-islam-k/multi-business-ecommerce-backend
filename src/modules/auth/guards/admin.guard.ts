@@ -1,3 +1,4 @@
+import { SystemUserType } from "@/database/schema";
 import {
   CanActivate,
   ExecutionContext,
@@ -5,7 +6,6 @@ import {
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
-import { SystemUserType } from "@/database/schema";
 
 import { AuthenticatedRequest } from "../strategies/jwt.strategy";
 
@@ -16,11 +16,15 @@ export class AdminGuard implements CanActivate {
     const user = request.user;
 
     if (!user) {
-      throw new UnauthorizedException("Unauthorized");
+      throw new UnauthorizedException(
+        "Authentication required. Please login continue.",
+      );
     }
 
     if (user.type !== SystemUserType.ADMIN) {
-      throw new ForbiddenException("Only admin can access this resource");
+      throw new ForbiddenException(
+        "Unauthorized access. Only admin can access this resource.",
+      );
     }
 
     return true;

@@ -1,5 +1,5 @@
-import { createParamDecorator, ExecutionContext } from "@nestjs/common";
 import { SystemUserStatus, SystemUserType } from "@/database/schema";
+import { createParamDecorator, ExecutionContext } from "@nestjs/common";
 
 export type CurrentUserPayload = {
   id: string;

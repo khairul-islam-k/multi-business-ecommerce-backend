@@ -1,5 +1,5 @@
-import { SetMetadata } from "@nestjs/common";
 import { PackageLimitKey } from "@/database/schema";
+import { SetMetadata } from "@nestjs/common";
 
 export const PACKAGE_LIMIT_METADATA_KEY = "package_limit";
 

@@ -1,5 +1,6 @@
+import { IsEmail, IsStrongPassword, IsUUID, MaxLength } from "class-validator";
+
 import { ApiProperty } from "@nestjs/swagger";
-import { IsEmail, IsUUID, MaxLength, IsStrongPassword } from "class-validator";
 
 export class ResetForgotPasswordDto {
   @ApiProperty({ example: "john@example.com" })

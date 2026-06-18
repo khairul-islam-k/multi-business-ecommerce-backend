@@ -1,17 +1,16 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { randomInt } from "node:crypto";
+
+import { AppConfigService } from "@/common/config/app-config.service";
+import { BadRequestException, Injectable } from "@nestjs/common";
 
 @Injectable()
 export class OtpPolicy {
   private readonly maxAttempts: number;
   private readonly expiresInMinutes: number;
 
-  constructor(configService: ConfigService) {
-    this.maxAttempts = configService.getOrThrow<number>("OTP_MAX_ATTEMPT");
-    this.expiresInMinutes = configService.getOrThrow<number>(
-      "OTP_EXPIRES_IN_MINS",
-    );
+  constructor(configs: AppConfigService) {
+    this.maxAttempts = configs.otp.maxAttempts;
+    this.expiresInMinutes = configs.otp.expiresInMinutes;
   }
 
   generateOtp() {

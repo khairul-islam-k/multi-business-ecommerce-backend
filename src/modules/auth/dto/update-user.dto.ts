@@ -1,5 +1,3 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
-import { Gender } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsDateString,
@@ -10,6 +8,9 @@ import {
   MaxLength,
   ValidateNested,
 } from "class-validator";
+
+import { Gender } from "@/database/schema";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 
 export class UpdateUserProfileDto {
   @ApiPropertyOptional({ example: "John" })

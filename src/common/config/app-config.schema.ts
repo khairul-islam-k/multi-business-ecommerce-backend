@@ -1,4 +1,6 @@
-import { Type, plainToInstance } from "class-transformer";
+import "reflect-metadata";
+
+import { plainToInstance, Type } from "class-transformer";
 import {
   IsEmail,
   IsIn,
@@ -11,7 +13,6 @@ import {
   Min,
   validateSync,
 } from "class-validator";
-import "reflect-metadata";
 
 type RawConfig = Record<string, unknown>;
 

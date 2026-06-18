@@ -1,32 +1,33 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { and, eq, gt, isNull } from "drizzle-orm";
+
 import { systemSession, systemUser } from "@/database/schema";
+import { Injectable, UnauthorizedException } from "@nestjs/common";
 
 import { DatabaseService } from "../../../database/database.service";
-import { TokenService } from "./token.service";
 import { JwtPayload } from "../strategies/jwt.strategy";
+import { TokenService } from "./token.service";
 
 @Injectable()
 export class SessionService {
   constructor(
     private readonly database: DatabaseService,
-    private readonly tokens: TokenService,
+    private readonly tokenService: TokenService,
   ) {}
 
   async issueTokenPair(payload: JwtPayload) {
-    const tokens = await this.tokens.createTokenPair(payload);
+    const tokens = await this.tokenService.createTokenPair(payload);
 
     await this.database.db.insert(systemSession).values({
-        userId: payload.sub,
-        businessId: payload.businessId ?? null,
-        refreshTokenHash: this.tokens.hashRefreshToken(tokens.refreshToken),
-        expiresAt: this.tokens.getRefreshTokenExpiresAt(),
+      userId: payload.sub,
+      businessId: payload.businessId ?? null,
+      refreshTokenHash: this.tokenService.hashRefreshToken(tokens.refreshToken),
+      expiresAt: this.tokenService.getRefreshTokenExpiresAt(),
     });
 
     return tokens;
   }
 
-  findByRefreshToken(refreshToken: string) {
+  async findByRefreshToken(refreshToken: string) {
     return this.database.db
       .select({
         session: systemSession,
@@ -34,7 +35,12 @@ export class SessionService {
       })
       .from(systemSession)
       .innerJoin(systemUser, eq(systemUser.id, systemSession.userId))
-      .where(eq(systemSession.refreshTokenHash, this.tokens.hashRefreshToken(refreshToken)))
+      .where(
+        eq(
+          systemSession.refreshTokenHash,
+          this.tokenService.hashRefreshToken(refreshToken),
+        ),
+      )
       .limit(1)
       .then((items) => {
         const item = items[0];
@@ -56,7 +62,9 @@ export class SessionService {
       .set({
         revokedAt,
       })
-      .where(and(eq(systemSession.id, sessionId), isNull(systemSession.revokedAt)));
+      .where(
+        and(eq(systemSession.id, sessionId), isNull(systemSession.revokedAt)),
+      );
   }
 
   async rotateRefreshSession(command: {
@@ -65,7 +73,7 @@ export class SessionService {
     businessId: string | null;
     revokedAt: Date;
   }) {
-    const refreshToken = this.tokens.generateRefreshToken();
+    const refreshToken = this.tokenService.generateRefreshToken();
 
     await this.database.db.transaction(async (tx) => {
       const revokedSession = await tx
@@ -83,15 +91,15 @@ export class SessionService {
 
       if (revokedSession.length !== 1) {
         throw new UnauthorizedException(
-          "This session token has already been used. Please sign in again to continue safely.",
+          "This session token has already been used. Please login again to continue safely.",
         );
       }
 
       await tx.insert(systemSession).values({
-          userId: command.userId,
-          businessId: command.businessId,
-          refreshTokenHash: this.tokens.hashRefreshToken(refreshToken),
-          expiresAt: this.tokens.getRefreshTokenExpiresAt(),
+        userId: command.userId,
+        businessId: command.businessId,
+        refreshTokenHash: this.tokenService.hashRefreshToken(refreshToken),
+        expiresAt: this.tokenService.getRefreshTokenExpiresAt(),
       });
     });
 
@@ -111,7 +119,10 @@ export class SessionService {
       .where(
         and(
           eq(systemSession.userId, userId),
-          eq(systemSession.refreshTokenHash, this.tokens.hashRefreshToken(refreshToken)),
+          eq(
+            systemSession.refreshTokenHash,
+            this.tokenService.hashRefreshToken(refreshToken),
+          ),
           isNull(systemSession.revokedAt),
           gt(systemSession.expiresAt, new Date()),
         ),
@@ -120,7 +131,7 @@ export class SessionService {
 
     if (result.length !== 1) {
       throw new UnauthorizedException(
-        "This session could not be matched to an active sign-in. Please sign in again before switching businesses.",
+        "This session could not be matched to an active login-session. Please login before switching businesses.",
       );
     }
   }
@@ -133,7 +144,10 @@ export class SessionService {
       })
       .where(
         and(
-          eq(systemSession.refreshTokenHash, this.tokens.hashRefreshToken(refreshToken)),
+          eq(
+            systemSession.refreshTokenHash,
+            this.tokenService.hashRefreshToken(refreshToken),
+          ),
           isNull(systemSession.revokedAt),
           userId !== undefined ? eq(systemSession.userId, userId) : undefined,
         ),
@@ -146,6 +160,8 @@ export class SessionService {
       .set({
         revokedAt: new Date(),
       })
-      .where(and(eq(systemSession.userId, userId), isNull(systemSession.revokedAt)));
+      .where(
+        and(eq(systemSession.userId, userId), isNull(systemSession.revokedAt)),
+      );
   }
 }
