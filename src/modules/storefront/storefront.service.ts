@@ -37,6 +37,13 @@ import {
   StorefrontProductQueryDto,
 } from "./dto/storefront.dto";
 
+type CategoryRow = typeof productCategory.$inferInsert;
+
+type CategoryTreeNode = {
+  category: CategoryRow;
+  children: CategoryTreeNode[];
+};
+
 @Injectable()
 export class StorefrontService {
   constructor(
@@ -67,7 +74,7 @@ export class StorefrontService {
 
   async findCategories(websiteId: string) {
     const website = await this.getPublishedWebsite(websiteId);
-    const categories = await this.db
+    const rows = await this.db
       .select()
       .from(productCategory)
       .where(
@@ -78,6 +85,34 @@ export class StorefrontService {
         ),
       )
       .orderBy(asc(productCategory.sortOrder), asc(productCategory.name));
+
+    const categoryMap = new Map<string, CategoryTreeNode>();
+
+    for (const row of rows) {
+      categoryMap.set(row.id, {
+        category: row,
+        children: [],
+      });
+    }
+
+    const categories: CategoryTreeNode[] = [];
+
+    for (const row of rows) {
+      const node = categoryMap.get(row.id)!;
+
+      if (row.parentId) {
+        const parentNode = categoryMap.get(row.parentId);
+
+        if (parentNode) {
+          parentNode.children.push(node);
+        } else {
+          // Optional: if parent is missing/deleted/inactive, treat as root
+          categories.push(node);
+        }
+      } else {
+        categories.push(node);
+      }
+    }
 
     return apiResponse(categories);
   }
