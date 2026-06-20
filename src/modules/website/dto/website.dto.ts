@@ -127,17 +127,6 @@ export class WebsiteSeoDto {
 }
 
 export class CreateWebsiteDto {
-  @ApiProperty({ example: "Acme Online Store" })
-  @IsString()
-  @MaxLength(150)
-  name!: string;
-
-  @ApiPropertyOptional({ example: "acme-store" })
-  @IsOptional()
-  @IsString()
-  @MaxLength(180)
-  slug?: string;
-
   @ApiPropertyOptional({
     enum: WebsiteTemplate,
     example: WebsiteTemplate.ELECTRONIC,

@@ -48,7 +48,7 @@ export const business = pgTable(
     ownerUserId: uuid("owner_user_id")
       .notNull()
       .references((): AnyPgColumn => systemUser.id, { onDelete: "restrict" }),
-    name: varchar({ length: 150 }).notNull().unique(),
+    name: varchar({ length: 150 }).notNull(),
     slug: varchar({ length: 180 }).notNull(),
     email: varchar({ length: 255 }),
     phone: varchar({ length: 30 }),
@@ -86,6 +86,9 @@ export const business = pgTable(
     }),
   },
   (table) => [
+    uniqueIndex("businesses_name_deleted_at_unique")
+      .on(table.name)
+      .where(sql`${table.deletedAt} IS NULL`),
     uniqueIndex("businesses_slug_owner_user_id_unique")
       .on(table.slug, table.ownerUserId)
       .where(sql`${table.deletedAt} IS NULL`),

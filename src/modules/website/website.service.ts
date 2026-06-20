@@ -1,38 +1,38 @@
+import { and, count, desc, eq, ilike, isNull, max, or } from "drizzle-orm";
+
+import {
+  business,
+  JsonValue,
+  PackageLimitKey,
+  website,
+  websiteConfig,
+  websiteDomain,
+  WebsiteDomainSslStatus,
+  WebsiteDomainType,
+  WebsiteDomainVerificationStatus,
+  websitePublishVersion,
+  websiteSeoSetting,
+  WebsiteStatus,
+  WebsiteTemplate,
+  websiteThemeSetting,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  PackageLimitKey,
-  WebsiteDomainSslStatus,
-  WebsiteDomainType,
-  WebsiteDomainVerificationStatus,
-  WebsiteStatus,
-  WebsiteTemplate,
-  business,
-  website,
-  websiteConfig,
-  websiteDomain,
-  websitePublishVersion,
-  websiteSeoSetting,
-  websiteThemeSetting,
-  type JsonValue,
-} from "@/database/schema";
-import { and, count, desc, eq, ilike, isNull, max, or } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
-import { PackageLimitService } from "../packages/package-limit.service";
-import { DatabaseService } from "../../database/database.service";
-import {
-  generateRandomSlug,
-  slugify,
-} from "../../common/utils/slug-generator.util";
 import { isUniqueConstraintError } from "../../common/database/db-error.util";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
+import {
+  generateRandomSlug,
+  slugify,
+} from "../../common/utils/slug-generator.util";
+import { DatabaseService } from "../../database/database.service";
+import { PackageLimitService } from "../packages/package-limit.service";
 import {
   CreateWebsiteDomainDto,
   CreateWebsiteDto,
@@ -40,6 +40,8 @@ import {
   UpdateWebsiteConfigDto,
   UpdateWebsiteDto,
 } from "./dto/website.dto";
+
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 const WEBSITE_SLUG_MAX_LENGTH = 180;
 const WEBSITE_SLUG_RETRY_LIMIT = 5;
@@ -69,14 +71,15 @@ export class WebsiteService {
     businessId: string,
     dto: CreateWebsiteDto,
   ) {
+    const businessRow = await this.getBusinessOrThrow(businessId);
+    await this.assertBusinessHasNoWebsite(businessId);
+
     await this.packageLimits.assertWithinLimit(
       currentUser,
       PackageLimitKey.MAX_WEBSITES,
     );
 
-    const slug = dto.slug
-      ? this.normalizeSlug(dto.slug)
-      : await this.generateUniqueSlug(businessId, dto.name);
+    const slug = await this.generateUniqueSlug(businessRow.name);
 
     try {
       const created = await this.db.transaction(async (tx) => {
@@ -84,7 +87,7 @@ export class WebsiteService {
           .insert(website)
           .values({
             businessId,
-            name: dto.name.trim(),
+            name: businessRow.name,
             slug,
             status: WebsiteStatus.DRAFT,
             template: dto.template ?? WebsiteTemplate.ELECTRONIC,
@@ -120,7 +123,10 @@ export class WebsiteService {
         "Website created successfully",
       );
     } catch (error) {
-      this.handleUniqueError(error, "Website slug or domain already exists");
+      this.handleUniqueError(
+        error,
+        "Website already exists for this business or slug already exists",
+      );
     }
   }
 
@@ -183,8 +189,6 @@ export class WebsiteService {
       const [updated] = await this.db
         .update(website)
         .set({
-          ...(dto.name !== undefined && { name: dto.name.trim() }),
-          ...(dto.slug !== undefined && { slug: this.normalizeSlug(dto.slug) }),
           ...(dto.template !== undefined && { template: dto.template }),
           ...(dto.status !== undefined && { status: dto.status }),
           updatedBy: currentUser.id,
@@ -532,7 +536,33 @@ export class WebsiteService {
     return item;
   }
 
-  private async generateUniqueSlug(businessId: string, name: string) {
+  private async getBusinessOrThrow(businessId: string) {
+    const [businessRow] = await this.db
+      .select()
+      .from(business)
+      .where(and(eq(business.id, businessId), isNull(business.deletedAt)))
+      .limit(1);
+
+    if (!businessRow) {
+      throw new NotFoundException("Business not found");
+    }
+
+    return businessRow;
+  }
+
+  private async assertBusinessHasNoWebsite(businessId: string) {
+    const [existing] = await this.db
+      .select({ id: website.id })
+      .from(website)
+      .where(and(eq(website.businessId, businessId), isNull(website.deletedAt)))
+      .limit(1);
+
+    if (existing) {
+      throw new BadRequestException("Website already exists for this business");
+    }
+  }
+
+  private async generateUniqueSlug(name: string) {
     for (let attempt = 0; attempt < WEBSITE_SLUG_RETRY_LIMIT; attempt++) {
       const slug = generateRandomSlug(name, {
         fallback: "website",
@@ -541,7 +571,7 @@ export class WebsiteService {
       const [existing] = await this.db
         .select({ id: website.id })
         .from(website)
-        .where(and(eq(website.businessId, businessId), eq(website.slug, slug)))
+        .where(and(eq(website.slug, slug), isNull(website.deletedAt)))
         .limit(1);
 
       if (!existing) {

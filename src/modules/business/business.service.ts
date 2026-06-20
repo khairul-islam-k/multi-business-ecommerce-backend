@@ -26,6 +26,7 @@ import {
   BusinessStatus,
   systemUser,
   SystemUserType,
+  website,
 } from "@/database/schema";
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
@@ -251,6 +252,21 @@ export class BusinessService {
               updatedById: currentUser.id,
             })
             .where(eq(business.id, businessId));
+
+          if (dto.name !== undefined) {
+            await transaction
+              .update(website)
+              .set({
+                name: dto.name.trim(),
+                updatedBy: currentUser.id,
+              })
+              .where(
+                and(
+                  eq(website.businessId, businessId),
+                  isNull(website.deletedAt),
+                ),
+              );
+          }
 
           if (settingData && this.hasKeys(settingData)) {
             await this.upsertBusinessSettings(
@@ -621,6 +637,6 @@ export class BusinessService {
   }
 
   private handleDatabaseError(error: unknown): never {
-    throwConflictOnUnique(error, "Business slug already exists");
+    throwConflictOnUnique(error, "Business name or slug already exists");
   }
 }

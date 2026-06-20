@@ -100,10 +100,12 @@ export const website = pgTable(
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
-    uniqueIndex("website_websites_business_id_slug_unique").on(
-      table.businessId,
-      table.slug,
-    ),
+    uniqueIndex("website_websites_business_id_unique")
+      .on(table.businessId)
+      .where(sql`${table.deletedAt} IS NULL`),
+    uniqueIndex("website_websites_slug_unique")
+      .on(table.slug)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("website_websites_business_id_idx").on(table.businessId),
     index("website_websites_status_idx").on(table.status),
   ],
