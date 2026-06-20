@@ -29,7 +29,7 @@ export class AppConfigService {
 
   get corsOrigins() {
     return parseCorsOrigins(
-      this.configService.getOrThrow<string>("APP_CORS_ORIGINS"),
+      `http://${this.appIp}:${this.appPort},${this.configService.getOrThrow<string>("APP_CORS_ORIGINS")}`,
     );
   }
 

@@ -28,12 +28,13 @@ import {
   QuerySupplierPurchaseReturnDto,
   QuerySupplierInvoiceDto,
   QuerySupplierDto,
+  QuerySupplierProductDto,
+  QuerySupplierProductMapDto,
   ReceivePurchaseOrderDto,
   SupplierProductMapDto,
   UpdatePurchaseOrderDto,
   UpdateSupplierDto,
   UpdateSupplierProductMapDto,
-  PurchaseOrderItemDto,
   CancelPurchaseOrderDto,
 } from "./dto/supplier.dto";
 import { SupplierService } from "./supplier.service";
@@ -72,6 +73,20 @@ export class SupplierController {
     @Query() query: QuerySupplierDto,
   ) {
     return this.suppliers.findAll(businessId, query);
+  }
+
+  @RequirePermission(RbacFeature.SUPPLIER_MANAGEMENT, PermissionAction.READ)
+  @Get("products")
+  @ApiOperation({
+    summary: "Get all supplier products",
+    description:
+      "Shows supplier product mappings across all suppliers for the current business.",
+  })
+  findAllProducts(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Query() query: QuerySupplierProductDto,
+  ) {
+    return this.suppliers.findAllProducts(businessId, query);
   }
 
   @RequirePermission(RbacFeature.SUPPLIER_MANAGEMENT, PermissionAction.READ)
@@ -365,6 +380,21 @@ export class SupplierController {
   }
 
   @RequirePermission(RbacFeature.SUPPLIER_MANAGEMENT, PermissionAction.READ)
+  @Get(":supplierId/products/:productMapId")
+  @ApiOperation({
+    summary: "Get supplier product",
+    description:
+      "Shows a single supplier product that the current user is allowed to view. Use this to review information before making a decision or change.",
+  })
+  findProduct(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("supplierId", ParseUUIDPipe) supplierId: string,
+    @Param("productMapId", ParseUUIDPipe) productMapId: string,
+  ) {
+    return this.suppliers.findProduct(businessId, supplierId, productMapId);
+  }
+
+  @RequirePermission(RbacFeature.SUPPLIER_MANAGEMENT, PermissionAction.READ)
   @Get(":supplierId/products")
   @ApiOperation({
     summary: "Get supplier products",
@@ -374,8 +404,9 @@ export class SupplierController {
   findProducts(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("supplierId", ParseUUIDPipe) supplierId: string,
+    @Query() query: QuerySupplierProductMapDto,
   ) {
-    return this.suppliers.findProducts(businessId, supplierId);
+    return this.suppliers.findProducts(businessId, supplierId, query);
   }
 
   @RequirePermission(RbacFeature.SUPPLIER_MANAGEMENT, PermissionAction.UPDATE)

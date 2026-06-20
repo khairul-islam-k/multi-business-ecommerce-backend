@@ -9,9 +9,8 @@ import {
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 
+import { AuthService } from "./auth.service";
 import { CurrentUser } from "./decorators/current-user.decorator";
-import type { CurrentUserPayload } from "./decorators/current-user.decorator";
-import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { LoginDto } from "./dto/login.dto";
 import { LogoutDto } from "./dto/logout.dto";
@@ -25,7 +24,9 @@ import { UpdateUserDto } from "./dto/update-user.dto";
 import { VerifyChangeEmailDto } from "./dto/verify-email-change.dto";
 import { VerifyEmailDto } from "./dto/verify-email.dto";
 import { VerifyResetOtpDto } from "./dto/verify-reset-email.dto";
-import { AuthService } from "./auth.service";
+import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+
+import type { CurrentUserPayload } from "./decorators/current-user.decorator";
 
 @ApiTags("Auth")
 @Controller("auth")
@@ -34,7 +35,7 @@ export class AuthController {
 
   @Post("register")
   @ApiOperation({
-    summary: "Create a new business owner account",
+    summary: "Create a new tenant (business owner) account",
     description:
       "Creates a new tenant user account, creates the first business for that user, starts the default trial subscription, and sends an email verification OTP. The account must verify the email address before normal sign-in is allowed.",
   })
@@ -54,9 +55,9 @@ export class AuthController {
 
   @Post("verify-email")
   @ApiOperation({
-    summary: "Email verification",
+    summary: "Email verification with OTP",
     description:
-      "Checks the email verification OTP submitted by the user. When the code is valid, the account email is marked as verified and the user account becomes active.",
+      "Checks the email verification one-time password submitted by the user. When the code is valid, the account email is marked as verified and the user account becomes active.",
   })
   verifyEmail(@Body() dto: VerifyEmailDto) {
     return this.authService.verifyEmail(dto);
@@ -74,9 +75,9 @@ export class AuthController {
 
   @Post("login")
   @ApiOperation({
-    summary: "Sign in with email and password",
+    summary: "Login with email and password",
     description:
-      "Signs in a verified and active user with their email and password. A successful response includes access tokens, the user's profile, subscription details when applicable, and the business selected for the session.",
+      "Logs in a verified and active user with their email and password. A successful response includes access tokens, the user's profile, subscription details when applicable, and the business selected for the session.",
   })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
@@ -88,7 +89,7 @@ export class AuthController {
   @ApiOperation({
     summary: "Send OTP for email change",
     description:
-      "Sends a one-time password to the new email address for the signed-in user. The email address is not changed until the user submits this code for verification.",
+      "Sends a one-time password to the new email address for the logged in user. The email address is not changed until the user submits this code for verification.",
   })
   requestEmailChange(
     @CurrentUser() user: CurrentUserPayload,
@@ -101,7 +102,7 @@ export class AuthController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
-    summary: "Verify email change",
+    summary: "Verify email change with OTP",
     description:
       "Confirms the one-time password sent to the user's new email address. When the code is valid, the account email is updated and marked as verified.",
   })
@@ -114,9 +115,9 @@ export class AuthController {
 
   @Post("forgot-password")
   @ApiOperation({
-    summary: "Send a password reset code",
+    summary: "Send a password reset OTP",
     description:
-      "Sends a password reset code to the user's registered email address. Use this when a user forgot their password and needs to prove they control the account email.",
+      "Sends a one-time password for password reset to the user's registered email address. Use this when a user forgot their password and needs to prove they control the account email.",
   })
   requestForgotPasswordOtp(@Body() dto: ForgotPasswordDto) {
     return this.authService.requestForgotPasswordOtp(dto);
@@ -124,9 +125,9 @@ export class AuthController {
 
   @Post("reset-password/verify-otp")
   @ApiOperation({
-    summary: "Verify reset password OTP",
+    summary: "Verify reset password with OTP",
     description:
-      "Checks the password reset OTP before allowing a new password to be saved. A successful response returns a verification id that must be used in the final password reset step.",
+      "Checks the password reset OTP before allowing a new password to be saved. A successful response returns a reset request id that must be used in the final password reset step.",
   })
   verifyResetPassword(@Body() dto: VerifyResetOtpDto) {
     return this.authService.verifyResetPassword(dto);
@@ -142,13 +143,13 @@ export class AuthController {
     return this.authService.resetForgotPassword(dto);
   }
 
-  @Post("reset")
+  @Post("reset-password")
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: "Reset password",
     description:
-      "Changes the password for the currently signed-in user after confirming their old password. Use this from account settings when the user knows the current password.",
+      "Changes the password for the currently logged-in user after confirming their old password. Use this from account settings when the user knows the current password.",
   })
   resetPassword(
     @CurrentUser() user: CurrentUserPayload,
@@ -161,7 +162,7 @@ export class AuthController {
   @ApiOperation({
     summary: "Refresh the current access token",
     description:
-      "Uses a valid refresh token to issue a new access token and a rotated refresh token. This keeps a signed-in session alive without asking the user to enter their password again.",
+      "Uses a valid refresh token to issue a new access token and a rotated refresh token. This keeps a logged-in session alive without asking the user to enter their password again.",
   })
   refresh(@Body() dto: RefreshTokenDto) {
     return this.authService.refresh(dto);
@@ -186,9 +187,9 @@ export class AuthController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
-    summary: "Get the signed-in user's profile",
+    summary: "Get the logged-in user's profile",
     description:
-      "Shows the signed-in user's profile, accessible businesses, active subscription information, and currently selected business. Use this to restore the user's session context after opening the app.",
+      "Shows the logged-in user's profile, accessible businesses, active subscription information, and currently selected business. Use this to restore the user's session context after opening the app.",
   })
   getUser(@CurrentUser() user: CurrentUserPayload) {
     return this.authService.getUser(user);
@@ -198,9 +199,9 @@ export class AuthController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
-    summary: "Update the signed-in user's profile",
+    summary: "Update the logged-in user's profile",
     description:
-      "Updates the signed-in user's personal profile details. Only the fields sent in the request are changed, so unchanged profile information stays as it was.",
+      "Updates the logged-in user's personal profile details. Only the fields sent in the request are changed, so unchanged profile information stays as it was.",
   })
   updateUser(
     @CurrentUser() user: CurrentUserPayload,
@@ -213,7 +214,7 @@ export class AuthController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
-    summary: "Logout current session",
+    summary: "Logout from current session",
     description:
       "Ends the current session by revoking the refresh token provided in the request. Use this when the user signs out from the current browser or device.",
   })
@@ -227,7 +228,7 @@ export class AuthController {
   @ApiOperation({
     summary: "Logout from all sessions",
     description:
-      "Signs the user out everywhere by revoking all active sessions for the account. Use this after a password change, account security concern, or a manual sign-out from every device.",
+      "Logs the user out everywhere by revoking all active sessions for the account. Use this after a password change, account security concern, or a manual sign-out from every device.",
   })
   logoutAll(@CurrentUser() user: CurrentUserPayload) {
     return this.authService.logoutAll(user.id);

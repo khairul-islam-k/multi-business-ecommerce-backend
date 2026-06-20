@@ -1,3 +1,33 @@
+import * as argon2 from "argon2";
+import {
+  and,
+  desc,
+  eq,
+  exists,
+  gt,
+  isNotNull,
+  isNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
+
+import {
+  business,
+  businessMember,
+  BusinessMemberStatus,
+  BusinessStatus,
+  OtpPurpose,
+  systemEmailVerification,
+  systemPasswordReset,
+  systemSession,
+  SystemUser,
+  systemUser,
+  SystemUserProfile,
+  systemUserProfile,
+  SystemUserStatus,
+  SystemUserType,
+} from "@/database/schema";
 import {
   BadRequestException,
   ConflictException,
@@ -7,38 +37,16 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-import {
-  BusinessMemberStatus,
-  BusinessStatus,
-  OtpPurpose,
-  type SystemUser,
-  type SystemUserProfile,
-  SystemUserStatus,
-  SystemUserType,
-  business,
-  businessMember,
-  systemEmailVerification,
-  systemPasswordReset,
-  systemSession,
-  systemUser,
-  systemUserProfile,
-} from "@/database/schema";
-import * as argon2 from "argon2";
-import {
-  and,
-  desc,
-  eq,
-  exists,
-  gt,
-  inArray,
-  isNotNull,
-  isNull,
-  ne,
-  or,
-  sql,
-} from "drizzle-orm";
 
-import type { CurrentUserPayload } from "./decorators/current-user.decorator";
+import { normalizeEmail } from "../../common/text/normalizers";
+import { apiResponse } from "../../common/utils/api-response.util";
+import { DatabaseService } from "../../database/database.service";
+import { BusinessService } from "../business/business.service";
+import { MailService } from "../mail/mail.service";
+import { PackageSubscriptionService } from "../packages/package-subscription.service";
+import { SessionService } from "./application/session.service";
+import { TokenService } from "./application/token.service";
+import { OtpPolicy } from "./domain/otp.policy";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { LoginDto } from "./dto/login.dto";
 import { LogoutDto } from "./dto/logout.dto";
@@ -52,15 +60,8 @@ import { UpdateUserDto } from "./dto/update-user.dto";
 import { VerifyChangeEmailDto } from "./dto/verify-email-change.dto";
 import { VerifyEmailDto } from "./dto/verify-email.dto";
 import { VerifyResetOtpDto } from "./dto/verify-reset-email.dto";
-import { OtpPolicy } from "./domain/otp.policy";
-import { SessionService } from "./application/session.service";
-import { TokenService } from "./application/token.service";
-import { BusinessService } from "../business/business.service";
-import { MailService } from "../mail/mail.service";
-import { PackageSubscriptionService } from "../packages/package-subscription.service";
-import { DatabaseService } from "../../database/database.service";
-import { normalizeEmail } from "../../common/text/normalizers";
-import { apiResponse } from "../../common/utils/api-response.util";
+
+import type { CurrentUserPayload } from "./decorators/current-user.decorator";
 
 type AuthBusiness = {
   id: string;
@@ -83,11 +84,11 @@ export class AuthService {
   constructor(
     private readonly database: DatabaseService,
     private readonly businessService: BusinessService,
-    private readonly packageSubscriptions: PackageSubscriptionService,
-    private readonly tokens: TokenService,
+    private readonly packageSubscriptionService: PackageSubscriptionService,
+    private readonly tokenService: TokenService,
     private readonly otpPolicy: OtpPolicy,
     private readonly mailService: MailService,
-    private readonly sessions: SessionService,
+    private readonly sessionService: SessionService,
   ) {}
 
   private get db() {
@@ -101,7 +102,7 @@ export class AuthService {
 
     if (existingUser) {
       throw new ConflictException(
-        "This email address is already linked to an account. Please sign in or use another email address.",
+        "This email address is already linked to an account. Please login or use another email address.",
       );
     }
 
@@ -133,7 +134,7 @@ export class AuthService {
         attemptCount: 0,
       });
 
-      await this.packageSubscriptions.assignDefaultTrial(user.id, tx);
+      await this.packageSubscriptionService.assignDefaultTrial(user.id, tx);
 
       const selectedBusiness = await this.businessService
         .create(
@@ -297,7 +298,7 @@ export class AuthService {
         available: !user,
       },
       user
-        ? "This email address is already linked to an account. Please sign in or use another email address."
+        ? "This email address is already linked to an account. Please login or use another email address."
         : "This email address is available and can be used for a new account.",
     );
   }
@@ -323,7 +324,7 @@ export class AuthService {
 
     if (!user.emailVerifiedAt) {
       throw new UnauthorizedException(
-        "This account has not verified its email address yet. Please verify the email before signing in.",
+        "This account has not verified its email address yet. Please verify the email before logging in.",
       );
     }
 
@@ -332,7 +333,7 @@ export class AuthService {
     const { passwordHash: _, ...safeUser } = user;
 
     if (user.type === SystemUserType.ADMIN) {
-      const tokens = await this.sessions.issueTokenPair({
+      const tokens = await this.sessionService.issueTokenPair({
         sub: user.id,
         type: user.type,
         businessId: null,
@@ -345,12 +346,12 @@ export class AuthService {
           activeSubscription: null,
           user: safeUser,
         },
-        "You have signed in successfully. Your administrator session is ready to use.",
+        "You have logged in successfully. Your administrator session is ready to use.",
       );
     }
 
     const activeSubscription =
-      await this.packageSubscriptions.findCurrentSubscription(
+      await this.packageSubscriptionService.findCurrentSubscription(
         user.tenantId ?? user.id,
       );
 
@@ -361,7 +362,7 @@ export class AuthService {
     }
 
     const selectedBusiness = businesses[0];
-    const tokens = await this.sessions.issueTokenPair({
+    const tokens = await this.sessionService.issueTokenPair({
       sub: user.id,
       type: user.type,
       businessId: selectedBusiness.id,
@@ -375,7 +376,7 @@ export class AuthService {
         activeSubscription,
         user: safeUser,
       },
-      "You have signed in successfully. Your workspace is ready with the selected business and subscription details.",
+      "You have logged in successfully. Your workspace is ready with the selected business and subscription details.",
     );
   }
 
@@ -568,34 +569,15 @@ export class AuthService {
 
     this.assertActiveUser(user);
 
-    const [verification] = await this.db
-      .select()
-      .from(systemEmailVerification)
-      .where(
-        and(
-          eq(systemEmailVerification.id, dto.verificationId),
-          eq(systemEmailVerification.userId, user.id),
-          eq(systemEmailVerification.purpose, OtpPurpose.PASSWORD_RESET),
-          isNotNull(systemEmailVerification.verifiedAt),
-          gt(systemEmailVerification.expiresAt, new Date()),
-        ),
-      )
-      .limit(1);
-
-    if (!verification) {
-      throw new BadRequestException(
-        "The one-time password is invalid or has expired. Please request a new code and try again.",
-      );
-    }
-
     const [resetRecord] = await this.db
       .select()
       .from(systemPasswordReset)
       .where(
         and(
+          eq(systemPasswordReset.id, dto.resetRequestId),
           eq(systemPasswordReset.userId, user.id),
-          eq(systemPasswordReset.otpHash, verification.otpHash),
           isNull(systemPasswordReset.usedAt),
+          isNotNull(systemPasswordReset.verifiedAt),
           gt(systemPasswordReset.expiresAt, new Date()),
         ),
       )
@@ -604,7 +586,7 @@ export class AuthService {
 
     if (!resetRecord) {
       throw new BadRequestException(
-        "Reset request is invalid or has been expired.",
+        "Password reset request is invalid or has been expired.",
       );
     }
 
@@ -704,21 +686,15 @@ export class AuthService {
       );
     }
 
-    const [verification] = await this.db
-      .insert(systemEmailVerification)
-      .values({
-        userId: user.id,
-        otpHash: resetRecord.otpHash,
-        purpose: OtpPurpose.PASSWORD_RESET,
-        expiresAt: resetRecord.expiresAt,
-        attemptCount: 0,
-        verifiedAt: new Date(),
-      })
-      .returning({ id: systemEmailVerification.id });
+    const [verifiedReset] = await this.db
+      .update(systemPasswordReset)
+      .set({ verifiedAt: new Date() })
+      .where(eq(systemPasswordReset.id, resetRecord.id))
+      .returning({ id: systemPasswordReset.id });
 
     return apiResponse(
       {
-        verificationId: verification.id,
+        resetRequestId: verifiedReset.id,
       },
       "OTP has been verified successfully.",
     );
@@ -762,40 +738,42 @@ export class AuthService {
 
     return apiResponse(
       safeUser,
-      "Your password has been changed successfully. Please use the new password the next time you sign in.",
+      "Your password has been changed successfully. Please use the new password the next time you login.",
     );
   }
 
   async refresh(dto: RefreshTokenDto) {
     const now = new Date();
-    const session = await this.sessions.findByRefreshToken(dto.refreshToken);
+    const session = await this.sessionService.findByRefreshToken(
+      dto.refreshToken,
+    );
 
     if (!session) {
       throw new UnauthorizedException(
-        "This session could not be refreshed. Please sign in again.",
+        "This session could not be refreshed. Please login again.",
       );
     }
 
     if (session.revokedAt) {
-      await this.sessions.revokeAllUserSessions(session.userId);
+      await this.sessionService.revokeAllUserSessions(session.userId);
 
       throw new UnauthorizedException(
-        "This session token was already used. For your safety, all sessions have been signed out. Please sign in again.",
+        "This session token was already used. For your safety, all sessions have been logged out. Please  login again.",
       );
     }
 
     if (session.expiresAt <= now) {
-      await this.sessions.revokeSession(session.id, now);
+      await this.sessionService.revokeSession(session.id, now);
 
       throw new UnauthorizedException(
-        "This session has expired. Please sign in again to continue.",
+        "This session has expired. Please login again to continue.",
       );
     }
 
     const user = session.user;
 
     this.assertActiveUser(user);
-    await this.packageSubscriptions.assertTenantSubscriptionActive(user);
+    await this.packageSubscriptionService.assertTenantSubscriptionActive(user);
 
     const requestedBusinessId = dto.businessId ?? session.businessId;
     const selectedBusiness = await this.resolveSelectedBusiness(
@@ -804,12 +782,12 @@ export class AuthService {
       requestedBusinessId,
     );
     const tokenBusinessId = selectedBusiness?.id ?? null;
-    const accessToken = await this.tokens.generateAccessToken({
+    const accessToken = await this.tokenService.generateAccessToken({
       sub: user.id,
       type: user.type,
       businessId: tokenBusinessId,
     });
-    const newRefreshToken = await this.sessions.rotateRefreshSession({
+    const newRefreshToken = await this.sessionService.rotateRefreshSession({
       sessionId: session.id,
       userId: user.id,
       businessId: tokenBusinessId,
@@ -824,7 +802,7 @@ export class AuthService {
         selectedBusiness,
         user: safeUser,
       },
-      "Your session has been refreshed successfully. You can continue using the app without signing in again.",
+      "Your session has been refreshed successfully. You can continue using the app without logging in again.",
     );
   }
 
@@ -836,7 +814,7 @@ export class AuthService {
     }
 
     this.assertActiveUser(user);
-    await this.packageSubscriptions.assertTenantSubscriptionActive(user);
+    await this.packageSubscriptionService.assertTenantSubscriptionActive(user);
 
     const business = await this.findAccessibleBusiness(userId, dto.businessId);
 
@@ -844,13 +822,13 @@ export class AuthService {
       throw new ForbiddenException("You do not have access to this business");
     }
 
-    const accessToken = await this.tokens.generateAccessToken({
+    const accessToken = await this.tokenService.generateAccessToken({
       sub: user.id,
       type: user.type,
       businessId: business.id,
     });
 
-    await this.sessions.bindRefreshSessionToBusiness(
+    await this.sessionService.bindRefreshSessionToBusiness(
       user.id,
       dto.refreshToken,
       business.id,
@@ -891,7 +869,7 @@ export class AuthService {
 
     const businesses = await this.findAccessibleBusinesses(user.id);
     const activeSubscription =
-      await this.packageSubscriptions.findCurrentSubscription(
+      await this.packageSubscriptionService.findCurrentSubscription(
         user.tenantId ?? user.id,
       );
 
@@ -988,20 +966,20 @@ export class AuthService {
   }
 
   async logout(dto: LogoutDto, userId?: string) {
-    await this.sessions.revokeByRefreshToken(dto.refreshToken, userId);
+    await this.sessionService.revokeByRefreshToken(dto.refreshToken, userId);
 
     return apiResponse(
       null,
-      "You have been signed out from this session successfully.",
+      "You have been logged out from this session successfully.",
     );
   }
 
   async logoutAll(userId: string) {
-    await this.sessions.revokeAllUserSessions(userId);
+    await this.sessionService.revokeAllUserSessions(userId);
 
     return apiResponse(
       null,
-      "You have been signed out from all devices successfully. Any device will need to sign in again before using the account.",
+      "You have been logged out from all devices successfully. Any device will need to login again before using the account.",
     );
   }
 
@@ -1258,7 +1236,7 @@ export class AuthService {
 
     if (user.status === SystemUserStatus.INACTIVE) {
       throw new ForbiddenException(
-        "Your account is inactive. Please complete the required activation steps before signing in.",
+        "Your account is inactive. Please complete the required activation steps before logging in.",
       );
     }
 

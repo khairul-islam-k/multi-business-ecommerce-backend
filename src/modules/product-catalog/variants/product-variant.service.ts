@@ -18,7 +18,7 @@ import {
   inventoryWarehouseStock,
   invoiceItem,
   orderCartItem,
-  orderOrderItem,
+  orderItem,
   orderReturnItem,
   product,
   productAttribute,
@@ -336,6 +336,8 @@ export class ProductVariantService {
       search
         ? or(
             ilike(productVariant.title, `%${search}%`),
+            ilike(productVariant.sku, `%${search}%`),
+            ilike(productVariant.barcode, `%${search}%`),
             exists(
               this.db
                 .select({ id: productVariantAttribute.id })
@@ -971,7 +973,7 @@ export class ProductVariantService {
       this.countByVariant(inventoryStockAdjustmentItem, variantId),
       this.countByVariant(inventoryStockTransferItem, variantId),
       this.countByVariant(orderCartItem, variantId),
-      this.countByVariant(orderOrderItem, variantId),
+      this.countByVariant(orderItem, variantId),
       this.countByVariant(orderReturnItem, variantId),
       this.countByVariant(invoiceItem, variantId),
       this.countByBusinessVariant(supplierProductMap, businessId, variantId),
@@ -1033,7 +1035,7 @@ export class ProductVariantService {
       | typeof inventoryStockAdjustmentItem
       | typeof inventoryStockTransferItem
       | typeof orderCartItem
-      | typeof orderOrderItem
+      | typeof orderItem
       | typeof orderReturnItem
       | typeof invoiceItem
       | typeof supplierPurchaseOrderItem

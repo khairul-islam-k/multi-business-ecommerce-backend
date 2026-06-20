@@ -28,6 +28,7 @@ export const RbacFeature = {
   BUSINESS_MANAGEMENT: "BUSINESS_MANAGEMENT",
   EMPLOYEE_MANAGEMENT: "EMPLOYEE_MANAGEMENT",
   ROLE_PERMISSION_MANAGEMENT: "ROLE_PERMISSION_MANAGEMENT",
+  WEBSITE_MANAGEMENT: "WEBSITE_MANAGEMENT",
 } as const;
 export type RbacFeature = (typeof RbacFeature)[keyof typeof RbacFeature];
 export const rbacFeatureEnum = pgEnum("RbacFeature", [
@@ -44,6 +45,7 @@ export const rbacFeatureEnum = pgEnum("RbacFeature", [
   "BUSINESS_MANAGEMENT",
   "EMPLOYEE_MANAGEMENT",
   "ROLE_PERMISSION_MANAGEMENT",
+  "WEBSITE_MANAGEMENT",
 ]);
 
 export const PermissionAction = {

@@ -26,6 +26,7 @@ import {
   BusinessStatus,
   systemUser,
   SystemUserType,
+  website,
 } from "@/database/schema";
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
@@ -48,6 +49,26 @@ import { generateRandomSlug } from "../../common/utils/slug-generator.util";
 
 const BUSINESS_SLUG_MAX_LENGTH = 180;
 const BUSINESS_SLUG_RETRY_LIMIT = 5;
+const BUSINESS_SETTING_PREFIX_FIELDS = [
+  "orderPrefix",
+  "invoicePrefix",
+  "paymentPrefix",
+  "shipmentPrefix",
+  "purchaseOrderPrefix",
+  "purchaseReturnPrefix",
+  "stockAdjustmentPrefix",
+  "stockTransferPrefix",
+  "expensePrefix",
+  "supplierInvoicePrefix",
+  "supplierPaymentPrefix",
+  "receivablePrefix",
+  "payablePrefix",
+  "transactionPrefix",
+  "productSkuPrefix",
+  "productBarcodePrefix",
+  "variantSkuPrefix",
+  "variantBarcodePrefix",
+] as const;
 
 type BusinessClient = Database | DatabaseTransaction;
 
@@ -231,6 +252,21 @@ export class BusinessService {
               updatedById: currentUser.id,
             })
             .where(eq(business.id, businessId));
+
+          if (dto.name !== undefined) {
+            await transaction
+              .update(website)
+              .set({
+                name: dto.name.trim(),
+                updatedBy: currentUser.id,
+              })
+              .where(
+                and(
+                  eq(website.businessId, businessId),
+                  isNull(website.deletedAt),
+                ),
+              );
+          }
 
           if (settingData && this.hasKeys(settingData)) {
             await this.upsertBusinessSettings(
@@ -429,25 +465,7 @@ export class BusinessService {
   }
 
   private getBusinessAccessCondition(currentUser: CurrentUserPayload) {
-    if (currentUser.type === SystemUserType.ADMIN) {
-      return undefined;
-    }
-
-    return and(
-      eq(business.status, BusinessStatus.ACTIVE),
-      isNull(business.deletedAt),
-      or(
-        eq(business.ownerUserId, currentUser.id),
-        sql`exists (
-          select 1
-          from ${businessMember}
-          where ${businessMember.businessId} = ${business.id}
-            and ${businessMember.userId} = ${currentUser.id}
-            and ${businessMember.status} = ${BusinessMemberStatus.ACTIVE}
-            and ${businessMember.deletedAt} is null
-        )`,
-      ),
-    );
+    return this.businessAccess.getBusinessAccessCondition(currentUser);
   }
 
   private getStatusCondition(
@@ -519,13 +537,7 @@ export class BusinessService {
   private buildBusinessSettingData(
     dto: NonNullable<CreateBusinessDto["settings"]>,
   ) {
-    return {
-      ...(dto.orderPrefix !== undefined && {
-        orderPrefix: dto.orderPrefix.trim().toUpperCase(),
-      }),
-      ...(dto.invoicePrefix !== undefined && {
-        invoicePrefix: dto.invoicePrefix.trim().toUpperCase(),
-      }),
+    const data: Record<string, unknown> = {
       ...(dto.lowStockThreshold !== undefined && {
         lowStockThreshold: dto.lowStockThreshold,
       }),
@@ -542,6 +554,14 @@ export class BusinessService {
         onlinePaymentEnabled: dto.onlinePaymentEnabled,
       }),
     };
+
+    for (const field of BUSINESS_SETTING_PREFIX_FIELDS) {
+      if (dto[field] !== undefined) {
+        data[field] = this.normalizeNullablePrefix(dto[field]);
+      }
+    }
+
+    return data;
   }
 
   private buildBusinessBrandingData(
@@ -606,11 +626,17 @@ export class BusinessService {
     return email.trim().toLowerCase();
   }
 
+  private normalizeNullablePrefix(value?: string | null) {
+    const normalized = value?.trim().toUpperCase();
+
+    return normalized || null;
+  }
+
   private hasKeys(value: object) {
     return Object.keys(value).length > 0;
   }
 
   private handleDatabaseError(error: unknown): never {
-    throwConflictOnUnique(error, "Business slug already exists");
+    throwConflictOnUnique(error, "Business name or slug already exists");
   }
 }

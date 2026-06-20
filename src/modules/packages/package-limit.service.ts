@@ -13,6 +13,7 @@ import {
   packageUsageCounter,
   product,
   systemUser,
+  website,
 } from "@/database/schema";
 import {
   and,
@@ -24,6 +25,7 @@ import {
   inArray,
   isNull,
   lte,
+  sql,
 } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
@@ -222,7 +224,9 @@ export class PackageLimitService {
 
     if (limitKey === PackageLimitKey.MAX_MEDIAS) {
       return this.db
-        .select({ value: count() })
+        .select({
+          value: sql<string>`coalesce(ceil(sum(coalesce(${mediaAsset.fileSize}, 0)) / 1048576.0), 0)`,
+        })
         .from(mediaAsset)
         .where(
           and(
@@ -244,7 +248,7 @@ export class PackageLimitService {
             ),
           ),
         )
-        .then(([row]) => row?.value ?? 0);
+        .then(([row]) => Number(row?.value ?? 0));
     }
 
     if (limitKey === PackageLimitKey.MAX_PRODUCTS) {
@@ -261,6 +265,31 @@ export class PackageLimitService {
                 .where(
                   and(
                     eq(business.id, product.businessId),
+                    eq(business.ownerUserId, tenantId),
+                    isNull(business.deletedAt),
+                    eq(business.status, BusinessStatus.ACTIVE),
+                  ),
+                ),
+            ),
+          ),
+        )
+        .then(([row]) => row?.value ?? 0);
+    }
+
+    if (limitKey === PackageLimitKey.MAX_WEBSITES) {
+      return this.db
+        .select({ value: count() })
+        .from(website)
+        .where(
+          and(
+            isNull(website.deletedAt),
+            exists(
+              this.db
+                .select({ id: business.id })
+                .from(business)
+                .where(
+                  and(
+                    eq(business.id, website.businessId),
                     eq(business.ownerUserId, tenantId),
                     isNull(business.deletedAt),
                     eq(business.status, BusinessStatus.ACTIVE),

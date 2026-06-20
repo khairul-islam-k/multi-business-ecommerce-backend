@@ -14,6 +14,7 @@ import {
   type ProductVariant,
   type ProductVariantAttribute,
   CatalogProductStatus,
+  ProductReviewStatus,
   courierShipmentItem,
   inventoryOrderAllocation,
   inventoryStock,
@@ -23,7 +24,7 @@ import {
   inventoryWarehouseStock,
   invoiceItem,
   orderCartItem,
-  orderOrderItem,
+  orderItem,
   orderReturnItem,
   product,
   productAttribute,
@@ -31,6 +32,7 @@ import {
   productBrand,
   productCategory,
   productImage,
+  productReview,
   productTag,
   productTagMap,
   productUnit,
@@ -45,6 +47,7 @@ import Decimal from "decimal.js";
 import {
   and,
   asc,
+  avg,
   count,
   desc,
   eq,
@@ -57,6 +60,7 @@ import {
 } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import { CatalogSortOrder } from "../common/dto/query-catalog.dto";
 import { ProductImageInputDto } from "../common/dto/product-media.dto";
 import {
   CreateProductDto,
@@ -85,6 +89,11 @@ type ProductVariantWithDetails = ProductVariant & {
   images: ProductImage[];
 };
 
+type ProductReviewSummary = {
+  reviewCount: number;
+  averageRating: number;
+};
+
 type ProductWithDetails = Product & {
   category: ProductCategory | null;
   brand: ProductBrand | null;
@@ -92,6 +101,7 @@ type ProductWithDetails = Product & {
   tags: ProductTagWithTag[];
   images: ProductImage[];
   variants: ProductVariantWithDetails[];
+  reviewSummary: ProductReviewSummary;
 };
 
 type ProductWithStock = ProductWithDetails & {
@@ -171,11 +181,11 @@ export class ProductService {
       });
 
       return apiResponse(
-        await this.enrichProductStock(created),
+        await this.enrichProductStock(await this.enrichProductRating(created)),
         "Product created successfully",
       );
     } catch (error) {
-      this.lookup.handleUniqueError(error, "Product slug already exists");
+      this.lookup.handleUniqueError(error, "Product name already exists");
     }
   }
 
@@ -199,6 +209,20 @@ export class ProductService {
                 and(
                   eq(productTagMap.productId, product.id),
                   eq(productTagMap.tagId, query.tagId),
+                ),
+              ),
+          )
+        : undefined,
+      query.warehouseId
+        ? exists(
+            this.db
+              .select({ id: inventoryWarehouseStock.id })
+              .from(inventoryWarehouseStock)
+              .where(
+                and(
+                  eq(inventoryWarehouseStock.businessId, businessId),
+                  eq(inventoryWarehouseStock.productId, product.id),
+                  eq(inventoryWarehouseStock.warehouseId, query.warehouseId),
                 ),
               ),
           )
@@ -233,13 +257,14 @@ export class ProductService {
         .from(product)
         .where(where)
         .orderBy(
-          query.sortOrder === "asc"
+          query.sortOrder === CatalogSortOrder.ASC
             ? asc(product.createdAt)
             : desc(product.createdAt),
         )
         .limit(limit)
         .offset(skip)
         .then((rows) => this.getProductsDetails(rows))
+        .then((rows) => this.enrichProductsRating(rows))
         .then((rows) => this.enrichProductsStock(rows)),
       this.db
         .select({ value: count() })
@@ -264,7 +289,9 @@ export class ProductService {
     }
 
     return apiResponse(
-      await this.enrichProductStock(await this.getProductDetails(row)),
+      await this.enrichProductStock(
+        await this.enrichProductRating(await this.getProductDetails(row)),
+      ),
     );
   }
 
@@ -339,7 +366,7 @@ export class ProductService {
       });
 
       return apiResponse(
-        await this.enrichProductStock(updated),
+        await this.enrichProductStock(await this.enrichProductRating(updated)),
         "Product updated successfully",
       );
     } catch (error) {
@@ -451,7 +478,7 @@ export class ProductService {
       this.countByProduct(inventoryStockAdjustmentItem, productId),
       this.countByProduct(inventoryStockTransferItem, productId),
       this.countByProduct(orderCartItem, productId),
-      this.countByProduct(orderOrderItem, productId),
+      this.countByProduct(orderItem, productId),
       this.countByProduct(orderReturnItem, productId),
       this.countByProduct(invoiceItem, productId),
       this.countByBusinessProduct(supplierProductMap, businessId, productId),
@@ -473,7 +500,10 @@ export class ProductService {
     }
   }
 
-  private countInventoryStockReferences(businessId: string, productId: string) {
+  private async countInventoryStockReferences(
+    businessId: string,
+    productId: string,
+  ) {
     return this.db
       .select({ value: count() })
       .from(inventoryStock)
@@ -513,7 +543,7 @@ export class ProductService {
       | typeof inventoryStockAdjustmentItem
       | typeof inventoryStockTransferItem
       | typeof orderCartItem
-      | typeof orderOrderItem
+      | typeof orderItem
       | typeof orderReturnItem
       | typeof invoiceItem
       | typeof supplierPurchaseOrderItem
@@ -527,6 +557,56 @@ export class ProductService {
       .from(table)
       .where(eq(table.productId, productId))
       .then(([row]) => row?.value ?? 0);
+  }
+
+  private async enrichProductRating(product: ProductWithDetails) {
+    const [rated] = await this.enrichProductsRating([product]);
+
+    return rated;
+  }
+
+  private async enrichProductsRating(
+    products: ProductWithDetails[],
+  ): Promise<ProductWithDetails[]> {
+    if (products.length === 0) {
+      return [];
+    }
+
+    const productIds = products.map((item) => item.id);
+    const summaries = await this.db
+      .select({
+        productId: productReview.productId,
+        reviewCount: count(),
+        averageRating: avg(productReview.rating),
+      })
+      .from(productReview)
+      .where(
+        and(
+          eq(productReview.businessId, products[0].businessId),
+          inArray(productReview.productId, productIds),
+          eq(productReview.status, ProductReviewStatus.APPROVED),
+          isNull(productReview.deletedAt),
+        ),
+      )
+      .groupBy(productReview.productId);
+
+    const summaryByProductId = new Map(
+      summaries.map((summary) => [
+        summary.productId,
+        {
+          reviewCount: summary.reviewCount,
+          averageRating: summary.averageRating
+            ? Number(Number(summary.averageRating).toFixed(2))
+            : 0,
+        },
+      ]),
+    );
+
+    return products.map((item) => ({
+      ...item,
+      reviewSummary:
+        summaryByProductId.get(item.id) ?? this.getEmptyReviewSummary(),
+    }));
   }
 
   private async enrichProductStock(product: ProductWithDetails) {
@@ -551,7 +631,12 @@ export class ProductService {
         quantityReserved: inventoryStock.quantityReserved,
       })
       .from(inventoryStock)
-      .where(inArray(inventoryStock.productId, productIds));
+      .where(
+        and(
+          eq(inventoryStock.businessId, products[0].businessId),
+          inArray(inventoryStock.productId, productIds),
+        ),
+      );
 
     return products.map((item) => {
       const productStocks = stocks.filter(
@@ -603,10 +688,18 @@ export class ProductService {
       tags,
       images,
       variants,
+      reviewSummary: this.getEmptyReviewSummary(),
     };
   }
 
-  private findProductRow(businessId: string, productId: string) {
+  private getEmptyReviewSummary(): ProductReviewSummary {
+    return {
+      reviewCount: 0,
+      averageRating: 0,
+    };
+  }
+
+  private async findProductRow(businessId: string, productId: string) {
     return this.db
       .select()
       .from(product)

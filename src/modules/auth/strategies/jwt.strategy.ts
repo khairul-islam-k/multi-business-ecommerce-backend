@@ -1,15 +1,20 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { PassportStrategy } from "@nestjs/passport";
 import { eq } from "drizzle-orm";
-import { systemUser, SystemUserStatus, SystemUserType } from "@/database/schema";
 import { Request } from "express";
 import { ExtractJwt, Strategy } from "passport-jwt";
 
-import type { CurrentUserPayload } from "../decorators/current-user.decorator";
-import { DatabaseService } from "../../../database/database.service";
-import type { BusinessAccessContext } from "../../../common/request-context/request-context.types";
+import { AppConfigService } from "@/common/config/app-config.service";
+import {
+  systemUser,
+  SystemUserStatus,
+  SystemUserType,
+} from "@/database/schema";
+import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { PassportStrategy } from "@nestjs/passport";
 
+import { DatabaseService } from "../../../database/database.service";
+
+import type { CurrentUserPayload } from "../decorators/current-user.decorator";
+import type { BusinessAccessContext } from "../../../common/request-context/request-context.types";
 export type JwtPayload = {
   sub: string;
   businessId: string | null;
@@ -26,11 +31,11 @@ export type AuthenticatedRequest = Request & {
 export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
   constructor(
     private readonly database: DatabaseService,
-    configService: ConfigService,
+    configs: AppConfigService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: configService.getOrThrow<string>("JWT_ACCESS_SECRET"),
+      secretOrKey: configs.jwtAccessSecret,
       ignoreExpiration: false,
     });
   }
@@ -50,15 +55,21 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
       .limit(1);
 
     if (!user) {
-      throw new UnauthorizedException("Invalid token");
+      throw new UnauthorizedException(
+        "Invalid token. Please login to get a new valid token.",
+      );
     }
 
     if (user.status !== SystemUserStatus.ACTIVE) {
-      throw new UnauthorizedException("Account is not active");
+      throw new UnauthorizedException(
+        `Non-active account. This account was marked as ${user.status}.`,
+      );
     }
 
     if (payload.type !== user.type) {
-      throw new UnauthorizedException("Invalid token");
+      throw new UnauthorizedException(
+        "Invalid token. Please login to get a new valid token.",
+      );
     }
 
     if (user.type === SystemUserType.ADMIN) {
@@ -69,7 +80,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
     }
 
     if (!payload.businessId) {
-      throw new UnauthorizedException("No business selected");
+      throw new UnauthorizedException(
+        "No business. The user doesn't have any business selected.",
+      );
     }
 
     return {

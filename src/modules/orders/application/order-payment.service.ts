@@ -1,25 +1,27 @@
+import Decimal from "decimal.js";
+import { and, eq, gt, isNull } from "drizzle-orm";
+
+import {
+  courierShipment,
+  FinanceSourceType,
+  invoice,
+  InvoiceStatus,
+  order as orderTable,
+  orderPayment,
+  OrderPaymentStatus,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  FinanceSourceType,
-  InvoiceStatus,
-  OrderPaymentStatus,
-  courierShipment,
-  invoice,
-  orderOrder,
-  orderPayment,
-} from "@/database/schema";
-import Decimal from "decimal.js";
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import type {
-  AddOrderPaymentDto,
-  OrderPaymentInputDto,
-} from "../dto/order.dto";
+import { apiResponse } from "../../../common/utils/api-response.util";
+import {
+  DatabaseService,
+  DatabaseTransaction,
+} from "../../../database/database.service";
+import { FinanceLedgerService } from "../../finance/common/finance-ledger.service";
 import {
   assertDirectOrderPayment,
   assertOrderCanAcceptPayment,
@@ -28,12 +30,12 @@ import {
 } from "../domain/order-payment.policy";
 import { OrderCodeRepository } from "../infrastructure/order-code.repository";
 import { OrderRepository } from "../infrastructure/order.repository";
-import {
-  DatabaseService,
-  type DatabaseTransaction,
-} from "../../../database/database.service";
-import { FinanceLedgerService } from "../../finance/common/finance-ledger.service";
-import { apiResponse } from "../../../common/utils/api-response.util";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import type {
+  AddOrderPaymentDto,
+  OrderPaymentInputDto,
+} from "../dto/order.dto";
 
 @Injectable()
 export class OrderPaymentService {
@@ -127,8 +129,10 @@ export class OrderPaymentService {
   ) {
     const [order] = await tx
       .select()
-      .from(orderOrder)
-      .where(and(eq(orderOrder.id, orderId), eq(orderOrder.businessId, businessId)));
+      .from(orderTable)
+      .where(
+        and(eq(orderTable.id, orderId), eq(orderTable.businessId, businessId)),
+      );
 
     if (!order) {
       throw new NotFoundException("Order not found");
@@ -186,12 +190,12 @@ export class OrderPaymentService {
     }
 
     const [updatedOrder] = await tx
-      .update(orderOrder)
+      .update(orderTable)
       .set({
         paidAmount,
         paymentStatus,
       })
-      .where(eq(orderOrder.id, orderId))
+      .where(eq(orderTable.id, orderId))
       .returning();
 
     return this.orders.hydrate(updatedOrder, tx);

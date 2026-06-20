@@ -1,19 +1,21 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import Decimal from "decimal.js";
+import { and, eq } from "drizzle-orm";
+
 import {
-  type InventoryStock,
   InventoryMovementType,
   InventoryReferenceType,
+  InventoryStock,
   inventoryStock,
   inventoryStockMovement,
   inventoryWarehouseStock,
 } from "@/database/schema";
-import Decimal from "decimal.js";
-import { and, eq } from "drizzle-orm";
+import { BadRequestException, Injectable } from "@nestjs/common";
 
-import type { DatabaseTransaction } from "../../../database/database.service";
-import { buildStockItemKey } from "../domain/stock-item-key";
 import { normalizeOptionalText } from "../../../common/text/normalizers";
 import { StockItemRef } from "../common/inventory.types";
+import { buildStockItemKey } from "../domain/stock-item-key";
+
+import type { DatabaseTransaction } from "../../../database/database.service";
 
 @Injectable()
 export class StockMutationService {

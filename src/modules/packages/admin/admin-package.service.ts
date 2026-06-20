@@ -11,6 +11,7 @@ import {
   type PackageSubscription,
   type PackageUsageCounter,
   PackagePaymentStatus,
+  PackageResetCycle,
   PackageStatus,
   PackageSubscriptionStatus,
   packagePayment,
@@ -421,7 +422,7 @@ export class AdminPackageService {
           packageId: planId,
           limitKey: limit.limitKey,
           limitValue: limit.limitValue,
-          resetCycle: limit!.resetCycle!,
+          resetCycle: limit.resetCycle ?? PackageResetCycle.LIFETIME,
           description: limit.description?.trim() || null,
         })),
       );

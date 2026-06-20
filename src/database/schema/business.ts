@@ -86,6 +86,9 @@ export const business = pgTable(
     }),
   },
   (table) => [
+    uniqueIndex("businesses_name_deleted_at_unique")
+      .on(table.name)
+      .where(sql`${table.deletedAt} IS NULL`),
     uniqueIndex("businesses_slug_owner_user_id_unique")
       .on(table.slug, table.ownerUserId)
       .where(sql`${table.deletedAt} IS NULL`),
@@ -107,6 +110,22 @@ export const businessSetting = pgTable(
       .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     orderPrefix: varchar("order_prefix", { length: 20 }),
     invoicePrefix: varchar("invoice_prefix", { length: 20 }),
+    paymentPrefix: varchar("payment_prefix", { length: 20 }),
+    shipmentPrefix: varchar("shipment_prefix", { length: 20 }),
+    purchaseOrderPrefix: varchar("purchase_order_prefix", { length: 20 }),
+    purchaseReturnPrefix: varchar("purchase_return_prefix", { length: 20 }),
+    stockAdjustmentPrefix: varchar("stock_adjustment_prefix", { length: 20 }),
+    stockTransferPrefix: varchar("stock_transfer_prefix", { length: 20 }),
+    expensePrefix: varchar("expense_prefix", { length: 20 }),
+    supplierInvoicePrefix: varchar("supplier_invoice_prefix", { length: 20 }),
+    supplierPaymentPrefix: varchar("supplier_payment_prefix", { length: 20 }),
+    receivablePrefix: varchar("receivable_prefix", { length: 20 }),
+    payablePrefix: varchar("payable_prefix", { length: 20 }),
+    transactionPrefix: varchar("transaction_prefix", { length: 20 }),
+    productSkuPrefix: varchar("product_sku_prefix", { length: 20 }),
+    productBarcodePrefix: varchar("product_barcode_prefix", { length: 20 }),
+    variantSkuPrefix: varchar("variant_sku_prefix", { length: 20 }),
+    variantBarcodePrefix: varchar("variant_barcode_prefix", { length: 20 }),
     lowStockThreshold: integer("low_stock_threshold"),
     allowBackorder: boolean("allow_backorder"),
     autoConfirmOrder: boolean("auto_confirm_order"),

@@ -223,6 +223,11 @@ export const systemPasswordReset = pgTable(
       withTimezone: true,
       mode: "date",
     }),
+    verifiedAt: timestamp("verified_at", {
+      precision: 6,
+      withTimezone: true,
+      mode: "date",
+    }),
     createdAt: timestamp("created_at", {
       precision: 6,
       withTimezone: true,
@@ -264,14 +269,6 @@ export const systemSession = pgTable(
       mode: "date",
     })
       .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", {
-      precision: 6,
-      withTimezone: true,
-      mode: "date",
-    })
-      .defaultNow()
-      .$onUpdate(() => new Date())
       .notNull(),
   },
   (table) => [

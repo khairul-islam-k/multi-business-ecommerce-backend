@@ -1,62 +1,96 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { and, eq } from "drizzle-orm";
+
 import {
   courierShipment,
   invoice,
-  orderOrder,
+  order,
   orderPayment,
 } from "@/database/schema";
-import { and, eq } from "drizzle-orm";
+import { BadRequestException, Injectable } from "@nestjs/common";
 
-import { DatabaseService } from "../../../database/database.service";
+import { BusinessCodePrefixService } from "../../../common/code/business-code-prefix.service";
 import { generateRandomCode } from "../../../common/utils/code-generator.util";
+import { DatabaseService } from "../../../database/database.service";
 
 const CODE_RETRY_LIMIT = 5;
 
 @Injectable()
 export class OrderCodeRepository {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly businessCodePrefixService: BusinessCodePrefixService,
+  ) {}
 
   private get db() {
     return this.database.db;
   }
 
-  generateUniqueOrderNo(businessId: string) {
-    return this.generateUniqueCode(businessId, "ORD", async (code) => {
+  async generateUniqueOrderNo(businessId: string) {
+    const prefix = await this.businessCodePrefixService.resolve(
+      businessId,
+      "orderPrefix",
+      "ORD",
+    );
+
+    return this.generateUniqueCode(businessId, prefix, async (code) => {
       const [row] = await this.db
-        .select({ id: orderOrder.id })
-        .from(orderOrder)
-        .where(and(eq(orderOrder.businessId, businessId), eq(orderOrder.orderNo, code)));
+        .select({ id: order.id })
+        .from(order)
+        .where(and(eq(order.businessId, businessId), eq(order.orderNo, code)));
 
       return row ?? null;
     });
   }
 
-  generateUniquePaymentNo(businessId: string) {
-    return this.generateUniqueCode(businessId, "PAY", async (code) => {
+  async generateUniquePaymentNo(businessId: string) {
+    const prefix = await this.businessCodePrefixService.resolve(
+      businessId,
+      "paymentPrefix",
+      "PAY",
+    );
+
+    return this.generateUniqueCode(businessId, prefix, async (code) => {
       const [row] = await this.db
         .select({ id: orderPayment.id })
         .from(orderPayment)
         .where(
-          and(eq(orderPayment.businessId, businessId), eq(orderPayment.paymentNo, code)),
+          and(
+            eq(orderPayment.businessId, businessId),
+            eq(orderPayment.paymentNo, code),
+          ),
         );
 
       return row ?? null;
     });
   }
 
-  generateUniqueInvoiceNo(businessId: string) {
-    return this.generateUniqueCode(businessId, "INV", async (code) => {
+  async generateUniqueInvoiceNo(businessId: string) {
+    const prefix = await this.businessCodePrefixService.resolve(
+      businessId,
+      "invoicePrefix",
+      "INV",
+    );
+
+    return this.generateUniqueCode(businessId, prefix, async (code) => {
       const [row] = await this.db
         .select({ id: invoice.id })
         .from(invoice)
-        .where(and(eq(invoice.businessId, businessId), eq(invoice.invoiceNo, code)));
+        .where(
+          and(eq(invoice.businessId, businessId), eq(invoice.invoiceNo, code)),
+        );
 
       return row ?? null;
     });
   }
 
-  generateUniqueShipmentNo(businessId: string) {
-    return this.generateUniqueCode(businessId, "SHP", async (code) => {
+  async generateUniqueShipmentNo(businessId: string) {
+    const prefix = await this.businessCodePrefixService.resolve(
+      businessId,
+      "shipmentPrefix",
+      "SHP",
+    );
+
+    return this.generateUniqueCode(businessId, prefix, async (code) => {
       const [row] = await this.db
         .select({ id: courierShipment.id })
         .from(courierShipment)

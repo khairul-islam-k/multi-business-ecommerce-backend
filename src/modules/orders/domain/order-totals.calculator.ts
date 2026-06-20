@@ -7,8 +7,7 @@ export function calculateOrderTotals(
   shippingCharge: number,
 ) {
   const subtotal = items.reduce(
-    (total, item) =>
-      total.plus(new Decimal(item.quantity).mul(item.unitPrice)),
+    (total, item) => total.plus(new Decimal(item.quantity).mul(item.unitPrice)),
     new Decimal(0),
   );
   const discountTotal = items.reduce(
@@ -29,4 +28,3 @@ export function calculateOrderTotals(
     totalAmount: subtotal.minus(discountTotal).plus(taxTotal).plus(shipping),
   };
 }
-

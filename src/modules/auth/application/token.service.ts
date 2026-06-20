@@ -1,20 +1,21 @@
-import { Injectable } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { JwtService } from "@nestjs/jwt";
 import { createHash, randomBytes } from "node:crypto";
+
+import { AppConfigService } from "@/common/config/app-config.service";
+import { Injectable } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
 
 import { JwtPayload } from "../strategies/jwt.strategy";
 
 @Injectable()
 export class TokenService {
   constructor(
-    private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
+    private readonly jwt: JwtService,
+    private readonly configs: AppConfigService,
   ) {}
 
   async generateAccessToken(payload: JwtPayload) {
-    return this.jwtService.signAsync(payload, {
-      secret: this.configService.getOrThrow<string>("JWT_ACCESS_SECRET"),
+    return this.jwt.signAsync(payload, {
+      secret: this.configs.jwtAccessSecret,
     });
   }
 
@@ -27,9 +28,7 @@ export class TokenService {
   }
 
   getRefreshTokenExpiresAt() {
-    const rawDays = this.configService.getOrThrow<string>(
-      "JWT_REFRESH_EXPIRES_IN_DAYS",
-    );
+    const rawDays = this.configs.jwtRefreshExpiresInDays;
 
     const days = Number(rawDays);
 

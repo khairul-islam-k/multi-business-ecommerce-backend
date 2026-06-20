@@ -12,8 +12,10 @@ import {
   varchar,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 import { type JsonValue } from "./common";
+import { business } from "./business";
 
 export const WebsiteTemplate = {
   ELECTRONIC: "ELECTRONIC",
@@ -76,7 +78,9 @@ export const website = pgTable(
   "websites",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     currentVersionId: uuid("current_version_id")
       .unique()
       .references((): AnyPgColumn => websitePublishVersion.id, {
@@ -96,10 +100,12 @@ export const website = pgTable(
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
-    uniqueIndex("website_websites_business_id_slug_unique").on(
-      table.businessId,
-      table.slug,
-    ),
+    uniqueIndex("website_websites_business_id_unique")
+      .on(table.businessId)
+      .where(sql`${table.deletedAt} IS NULL`),
+    uniqueIndex("website_websites_slug_unique")
+      .on(table.slug)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("website_websites_business_id_idx").on(table.businessId),
     index("website_websites_status_idx").on(table.status),
   ],
@@ -118,6 +124,7 @@ export const websiteConfig = pgTable(
     headerConfig: jsonb("header_config").$type<JsonValue>(),
     footerConfig: jsonb("footer_config").$type<JsonValue>(),
     navigationConfig: jsonb("navigation_config").$type<JsonValue>(),
+    sectionConfig: jsonb("section_config").$type<JsonValue>(),
     generalConfig: jsonb("general_config").$type<JsonValue>(),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
@@ -125,7 +132,7 @@ export const websiteConfig = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [],
+  (table) => [index("website_configs_website_id_idx").on(table.websiteId)],
 );
 export type WebsiteConfig = typeof websiteConfig.$inferSelect;
 export type NewWebsiteConfig = typeof websiteConfig.$inferInsert;
@@ -135,6 +142,7 @@ export const websiteDomain = pgTable(
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
     websiteId: uuid("website_id")
+      .unique()
       .notNull()
       .references((): AnyPgColumn => website.id, { onDelete: "cascade" }),
     domain: varchar({ length: 255 }),
@@ -153,6 +161,15 @@ export const websiteDomain = pgTable(
       .notNull(),
   },
   (table) => [
+    uniqueIndex("website_domains_domain_unique")
+      .on(table.domain)
+      .where(sql`${table.domain} IS NOT NULL`),
+    uniqueIndex("website_domains_subdomain_unique")
+      .on(table.subdomain)
+      .where(sql`${table.subdomain} IS NOT NULL`),
+    uniqueIndex("website_domains_one_primary_per_website_unique")
+      .on(table.websiteId)
+      .where(sql`${table.isPrimary} = true`),
     index("website_domains_website_id_idx").on(table.websiteId),
     index("website_domains_domain_idx").on(table.domain),
     index("website_domains_subdomain_idx").on(table.subdomain),
@@ -187,7 +204,9 @@ export const websiteThemeSetting = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [],
+  (table) => [
+    index("website_theme_settings_website_id_idx").on(table.websiteId),
+  ],
 );
 export type WebsiteThemeSetting = typeof websiteThemeSetting.$inferSelect;
 export type NewWebsiteThemeSetting = typeof websiteThemeSetting.$inferInsert;
@@ -199,7 +218,6 @@ export const websiteSeoSetting = pgTable(
     websiteId: uuid("website_id")
       .notNull()
       .references((): AnyPgColumn => website.id, { onDelete: "cascade" }),
-    pageId: uuid("page_id").unique(),
     metaTitle: varchar("meta_title", { length: 255 }),
     metaDescription: text("meta_description"),
     metaKeywords: text("meta_keywords"),

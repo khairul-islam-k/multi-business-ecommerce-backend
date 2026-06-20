@@ -14,4 +14,4 @@ export * from "./schema/rbac";
 export * from "./schema/sms_marketing";
 export * from "./schema/supplier";
 export * from "./schema/system";
-export * from "./schema/website_generation";
+export * from "./schema/website";

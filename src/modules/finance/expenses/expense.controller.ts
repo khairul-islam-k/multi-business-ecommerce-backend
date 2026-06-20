@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -118,5 +119,18 @@ export class ExpenseController {
     @Param("expenseId", ParseUUIDPipe) expenseId: string,
   ) {
     return this.expenses.cancel(businessId, expenseId);
+  }
+
+  @RequirePermission(RbacFeature.FINANCE_MANAGEMENT, PermissionAction.DELETE)
+  @Delete(":expenseId/delete")
+  @ApiOperation({
+    summary: "Delete expense",
+    description: "Delete expense. ",
+  })
+  delete(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("expenseId", ParseUUIDPipe) expenseId: string,
+  ) {
+    return this.expenses.delete(businessId, expenseId);
   }
 }

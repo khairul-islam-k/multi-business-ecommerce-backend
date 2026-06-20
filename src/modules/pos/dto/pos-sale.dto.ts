@@ -1,5 +1,3 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { OrderPaymentMethod } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsArray,
@@ -10,6 +8,9 @@ import {
   MaxLength,
   ValidateNested,
 } from "class-validator";
+
+import { OrderPaymentMethod } from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 import { OrderItemInputDto } from "../../orders/dto/order.dto";
 
@@ -25,13 +26,17 @@ export class PosPaymentDto {
 
 export class CreatePosSaleDto {
   @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
-  @IsOptional()
   @IsUUID()
-  warehouseId?: string;
+  warehouseId!: string;
 
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsUUID()
   taxId!: string;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  customerId?: string;
 
   @ApiPropertyOptional({ example: "Walk-in Customer" })
   @IsOptional()

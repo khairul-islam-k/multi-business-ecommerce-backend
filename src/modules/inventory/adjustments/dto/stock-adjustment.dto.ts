@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { InventoryAdjustmentType } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
+  ArrayMinSize,
   IsArray,
   IsEnum,
   IsNumber,
@@ -51,6 +52,7 @@ export class CreateStockAdjustmentDto {
 
   @ApiProperty({ type: [StockAdjustmentItemDto] })
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => StockAdjustmentItemDto)
   items!: StockAdjustmentItemDto[];

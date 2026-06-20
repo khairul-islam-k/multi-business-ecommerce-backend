@@ -1,5 +1,6 @@
-import { ApiProperty } from "@nestjs/swagger";
 import { IsEmail, IsString, Length, MaxLength } from "class-validator";
+
+import { ApiProperty } from "@nestjs/swagger";
 
 export class VerifyResetOtpDto {
   @ApiProperty({ example: "john@example.com" })

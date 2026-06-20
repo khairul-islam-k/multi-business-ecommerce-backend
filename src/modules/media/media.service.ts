@@ -15,6 +15,7 @@ import {
   mediaAsset,
   mediaAssetTag,
   mediaTag,
+  productImage,
 } from "@/database/schema";
 import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm";
 
@@ -78,6 +79,7 @@ export class MediaService {
     await this.packageLimits.assertWithinLimit(
       currentUser,
       PackageLimitKey.MAX_MEDIAS,
+      this.toMegabytes(file.size),
     );
 
     const tags = this.normalizeTags(dto.tags);
@@ -115,7 +117,7 @@ export class MediaService {
     await this.packageLimits.assertWithinLimit(
       currentUser,
       PackageLimitKey.MAX_MEDIAS,
-      files.length,
+      this.toMegabytes(files.reduce((total, file) => total + file.size, 0)),
     );
 
     for (const file of files) {
@@ -207,6 +209,7 @@ export class MediaService {
       mediaAssetId,
     );
 
+    await this.assertImagesAreNotInUse(businessId, [asset.fileUrl]);
     await this.softDeleteImageAssets([asset.id]);
     await this.uploader.delete(asset.fileUrl);
 
@@ -225,6 +228,10 @@ export class MediaService {
       dto.mediaAssetIds,
     );
 
+    await this.assertImagesAreNotInUse(
+      businessId,
+      assets.map((asset) => asset.fileUrl),
+    );
     await this.softDeleteImageAssets(assets.map((asset) => asset.id));
 
     await Promise.all(
@@ -298,6 +305,28 @@ export class MediaService {
     }
 
     return assets;
+  }
+
+  private async assertImagesAreNotInUse(
+    businessId: string,
+    imageUrls: string[],
+  ) {
+    const [{ value }] = await this.db
+      .select({ value: count() })
+      .from(productImage)
+      .where(
+        and(
+          eq(productImage.businessId, businessId),
+          inArray(productImage.imageUrl, imageUrls),
+          isNull(productImage.deletedAt),
+        ),
+      );
+
+    if (value > 0) {
+      throw new BadRequestException(
+        "Image cannot be deleted while it is used by product media",
+      );
+    }
   }
 
   private getActiveImageCondition(businessId: string, mediaAssetIds: string[]) {
@@ -444,5 +473,9 @@ export class MediaService {
     const normalizedValue = value?.trim();
 
     return normalizedValue || null;
+  }
+
+  private toMegabytes(bytes: number) {
+    return Math.max(Math.ceil(bytes / 1024 / 1024), 1);
   }
 }

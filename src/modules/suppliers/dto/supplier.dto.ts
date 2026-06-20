@@ -157,6 +157,38 @@ export class UpdateSupplierProductMapDto extends PartialType(
   SupplierProductMapDto,
 ) {}
 
+export class QuerySupplierProductMapDto {
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  page?: number = 1;
+
+  @ApiPropertyOptional({ example: 10 })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  @Max(100)
+  limit?: number = 10;
+
+  @ApiPropertyOptional({ example: "" })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({ enum: SupplierProductMapStatus })
+  @IsOptional()
+  @IsEnum(SupplierProductMapStatus)
+  status?: SupplierProductMapStatus;
+}
+
+export class QuerySupplierProductDto extends QuerySupplierProductMapDto {
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  supplierId?: string;
+}
+
 export class PurchaseOrderItemDto {
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsUUID()

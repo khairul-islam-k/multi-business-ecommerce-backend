@@ -2,18 +2,17 @@ import { Injectable } from "@nestjs/common";
 import {
   type NewOrderCustomer,
   type NewOrderCustomerAddress,
-  type OrderCart,
   type OrderCustomer,
   type OrderCustomerAddress,
+  type Order,
   OrderCustomerStatus,
-  type OrderOrder,
-  type OrderOrderItem,
+  type OrderItem,
   type OrderPayment,
   orderCart,
   orderCustomer,
   orderCustomerAddress,
-  orderOrder,
-  orderOrderItem,
+  order as orderTable,
+  orderItem as orderItemTable,
   orderPayment,
 } from "@/database/schema";
 import {
@@ -35,10 +34,7 @@ import {
   type DatabaseTransaction,
   DatabaseService,
 } from "../../../database/database.service";
-import {
-  CustomerOrderSortBy,
-  CustomerSortBy,
-} from "../dto/customer.dto";
+import { CustomerOrderSortBy, CustomerSortBy } from "../dto/customer.dto";
 
 type SortDirection = "asc" | "desc";
 
@@ -56,12 +52,12 @@ type CustomerOrderBy = {
 type CustomerOrderPageWhere = {
   businessId: string;
   customerId: string;
-  status?: OrderOrder["status"];
-  paymentStatus?: OrderOrder["paymentStatus"];
+  status?: Order["status"];
+  paymentStatus?: Order["paymentStatus"];
   search?: string;
 };
 
-type CustomerOrderOrderBy = {
+type CustomerOrderListOrderBy = {
   field: CustomerOrderSortBy;
   direction: SortDirection;
 };
@@ -74,8 +70,8 @@ type CustomerWithDetails = OrderCustomer & {
   };
 };
 
-type OrderWithDetails = OrderOrder & {
-  items: OrderOrderItem[];
+type OrderWithDetails = Order & {
+  items: OrderItem[];
   payments: OrderPayment[];
 };
 
@@ -244,11 +240,12 @@ export class CustomerRepository {
       );
   }
 
-  createAddress(
-    tx: DatabaseTransaction,
-    data: NewOrderCustomerAddress,
-  ) {
-    return tx.insert(orderCustomerAddress).values(data).returning().then(([address]) => address);
+  createAddress(tx: DatabaseTransaction, data: NewOrderCustomerAddress) {
+    return tx
+      .insert(orderCustomerAddress)
+      .values(data)
+      .returning()
+      .then(([address]) => address);
   }
 
   findAddresses(customerId: string) {
@@ -261,7 +258,10 @@ export class CustomerRepository {
           isNull(orderCustomerAddress.deletedAt),
         ),
       )
-      .orderBy(desc(orderCustomerAddress.isDefault), desc(orderCustomerAddress.createdAt));
+      .orderBy(
+        desc(orderCustomerAddress.isDefault),
+        desc(orderCustomerAddress.createdAt),
+      );
   }
 
   findAddressById(customerId: string, addressId: string) {
@@ -311,22 +311,22 @@ export class CustomerRepository {
     where: CustomerOrderPageWhere;
     skip: number;
     take: number;
-    orderBy: CustomerOrderOrderBy[];
+    orderBy: CustomerOrderListOrderBy[];
   }) {
     const where = this.buildCustomerOrderWhere(args.where);
 
     return Promise.all([
       this.db
         .select()
-        .from(orderOrder)
+        .from(orderTable)
         .where(where)
-        .orderBy(...args.orderBy.map((order) => this.orderOrderBy(order)))
+        .orderBy(...args.orderBy.map((order) => this.orderListOrderBy(order)))
         .limit(args.take)
         .offset(args.skip)
         .then((orders) => this.withOrdersDetails(orders)),
       this.db
         .select({ value: count() })
-        .from(orderOrder)
+        .from(orderTable)
         .where(where)
         .then(([row]) => row?.value ?? 0),
     ]);
@@ -376,17 +376,17 @@ export class CustomerRepository {
 
   private buildCustomerOrderWhere(args: CustomerOrderPageWhere) {
     return and(
-      eq(orderOrder.businessId, args.businessId),
-      eq(orderOrder.customerId, args.customerId),
-      isNull(orderOrder.deletedAt),
-      args.status ? eq(orderOrder.status, args.status) : undefined,
+      eq(orderTable.businessId, args.businessId),
+      eq(orderTable.customerId, args.customerId),
+      isNull(orderTable.deletedAt),
+      args.status ? eq(orderTable.status, args.status) : undefined,
       args.paymentStatus
-        ? eq(orderOrder.paymentStatus, args.paymentStatus)
+        ? eq(orderTable.paymentStatus, args.paymentStatus)
         : undefined,
       args.search
         ? or(
-            ilike(orderOrder.orderNo, `%${args.search}%`),
-            ilike(orderOrder.note, `%${args.search}%`),
+            ilike(orderTable.orderNo, `%${args.search}%`),
+            ilike(orderTable.note, `%${args.search}%`),
           )
         : undefined,
     );
@@ -403,13 +403,13 @@ export class CustomerRepository {
     return order.direction === "asc" ? asc(column) : desc(column);
   }
 
-  private orderOrderBy(order: CustomerOrderOrderBy) {
+  private orderListOrderBy(order: CustomerOrderListOrderBy) {
     const column =
       order.field === CustomerOrderSortBy.ORDER_NO
-        ? orderOrder.orderNo
+        ? orderTable.orderNo
         : order.field === CustomerOrderSortBy.TOTAL_AMOUNT
-          ? orderOrder.totalAmount
-          : orderOrder.createdAt;
+          ? orderTable.totalAmount
+          : orderTable.createdAt;
 
     return order.direction === "asc" ? asc(column) : desc(column);
   }
@@ -449,10 +449,10 @@ export class CustomerRepository {
         .where(inArray(orderCart.customerId, customerIds))
         .groupBy(orderCart.customerId),
       this.db
-        .select({ customerId: orderOrder.customerId, value: count() })
-        .from(orderOrder)
-        .where(inArray(orderOrder.customerId, customerIds))
-        .groupBy(orderOrder.customerId),
+        .select({ customerId: orderTable.customerId, value: count() })
+        .from(orderTable)
+        .where(inArray(orderTable.customerId, customerIds))
+        .groupBy(orderTable.customerId),
     ]);
 
     const addressesByCustomerId = new Map<string, OrderCustomerAddress[]>();
@@ -480,7 +480,7 @@ export class CustomerRepository {
   }
 
   private async withOrdersDetails(
-    orders: OrderOrder[],
+    orders: Order[],
   ): Promise<OrderWithDetails[]> {
     const orderIds = orders.map((order) => order.id);
 
@@ -491,9 +491,9 @@ export class CustomerRepository {
     const [items, payments] = await Promise.all([
       this.db
         .select()
-        .from(orderOrderItem)
-        .where(inArray(orderOrderItem.orderId, orderIds))
-        .orderBy(asc(orderOrderItem.createdAt)),
+        .from(orderItemTable)
+        .where(inArray(orderItemTable.orderId, orderIds))
+        .orderBy(asc(orderItemTable.createdAt)),
       this.db
         .select()
         .from(orderPayment)
@@ -501,7 +501,7 @@ export class CustomerRepository {
         .orderBy(desc(orderPayment.createdAt)),
     ]);
 
-    const itemsByOrderId = new Map<string, OrderOrderItem[]>();
+    const itemsByOrderId = new Map<string, OrderItem[]>();
     const paymentsByOrderId = new Map<string, OrderPayment[]>();
 
     for (const item of items) {

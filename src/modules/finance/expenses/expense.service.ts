@@ -191,7 +191,6 @@ export class ExpenseService {
       .update(financeExpense)
       .set({
         status: FinanceExpenseStatus.CANCELLED,
-        deletedAt: new Date(),
       })
       .where(eq(financeExpense.id, expense.id));
 
@@ -204,12 +203,24 @@ export class ExpenseService {
     return apiResponse(cancelledExpense, "Expense cancelled successfully");
   }
 
+  async delete(businessId: string, expenseId: string) {
+    const expense = await this.getExpenseOrThrow(businessId, expenseId);
+
+    await this.db.update(financeExpense).set({
+      deletedAt: new Date(),
+    });
+
+    return apiResponse(null, "Expense deleted successfully");
+  }
+
   private buildExpenseWhere(businessId: string, query: QueryExpenseDto) {
     return and(
       eq(financeExpense.businessId, businessId),
       isNull(financeExpense.deletedAt),
       query.status ? eq(financeExpense.status, query.status) : undefined,
-      query.accountId ? eq(financeExpense.accountId, query.accountId) : undefined,
+      query.accountId
+        ? eq(financeExpense.accountId, query.accountId)
+        : undefined,
       query.expenseCategoryId
         ? eq(financeExpense.expenseCategoryId, query.expenseCategoryId)
         : undefined,

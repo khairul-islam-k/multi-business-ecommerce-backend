@@ -11,7 +11,7 @@ import {
   financeReceivable,
   inventoryOrderAllocation,
   invoice,
-  orderOrder,
+  order as orderTable,
   orderStatusLog,
 } from "@/database/schema";
 import Decimal from "decimal.js";
@@ -51,9 +51,9 @@ export class OrderStatusService {
 
     const updatedOrder = await this.db.transaction(async (tx) => {
       const [updated] = await tx
-        .update(orderOrder)
+        .update(orderTable)
         .set({ status: OrderStatus.SHIPPED })
-        .where(eq(orderOrder.id, orderId))
+        .where(eq(orderTable.id, orderId))
         .returning();
 
       await tx.insert(orderStatusLog).values({
@@ -117,9 +117,9 @@ export class OrderStatusService {
       }
 
       const [updated] = await tx
-        .update(orderOrder)
+        .update(orderTable)
         .set({ status: OrderStatus.DELIVERED })
-        .where(eq(orderOrder.id, orderId))
+        .where(eq(orderTable.id, orderId))
         .returning();
 
       await tx.insert(orderStatusLog).values({
@@ -210,9 +210,9 @@ export class OrderStatusService {
       }
 
       const [updated] = await tx
-        .update(orderOrder)
+        .update(orderTable)
         .set({ status: OrderStatus.CANCELLED })
-        .where(eq(orderOrder.id, orderId))
+        .where(eq(orderTable.id, orderId))
         .returning();
 
       await tx

@@ -1,24 +1,25 @@
 import { Injectable } from "@nestjs/common";
 
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { CreatePosSaleDto } from "../pos/dto/pos-sale.dto";
+import { CreateOrderService } from "./application/create-order.service";
+import { OrderPaymentService } from "./application/order-payment.service";
+import { OrderQueryService } from "./application/order-query.service";
+import { OrderStatusService } from "./application/order-status.service";
 import {
   AddOrderPaymentDto,
   CreateOrderDto,
   QueryOrderDto,
 } from "./dto/order.dto";
-import { CreateOrderService } from "./application/create-order.service";
-import { OrderPaymentService } from "./application/order-payment.service";
-import { OrderQueryService } from "./application/order-query.service";
-import { OrderStatusService } from "./application/order-status.service";
+
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class OrderService {
   constructor(
-    private readonly createOrders: CreateOrderService,
-    private readonly queries: OrderQueryService,
-    private readonly payments: OrderPaymentService,
-    private readonly statuses: OrderStatusService,
+    private readonly createOrderService: CreateOrderService,
+    private readonly orderQueryService: OrderQueryService,
+    private readonly orderPaymentService: OrderPaymentService,
+    private readonly orderStatusService: OrderStatusService,
   ) {}
 
   async create(
@@ -26,7 +27,7 @@ export class OrderService {
     businessId: string,
     dto: CreateOrderDto,
   ) {
-    return this.createOrders.create(currentUser, businessId, dto);
+    return this.createOrderService.create(currentUser, businessId, dto);
   }
 
   async createPosSale(
@@ -34,15 +35,15 @@ export class OrderService {
     businessId: string,
     dto: CreatePosSaleDto,
   ) {
-    return this.createOrders.createPosSale(currentUser, businessId, dto);
+    return this.createOrderService.createPosSale(currentUser, businessId, dto);
   }
 
   async findAll(businessId: string, query: QueryOrderDto) {
-    return this.queries.findAll(businessId, query);
+    return this.orderQueryService.findAll(businessId, query);
   }
 
   async findOne(businessId: string, orderId: string) {
-    return this.queries.findOne(businessId, orderId);
+    return this.orderQueryService.findOne(businessId, orderId);
   }
 
   async addPayment(
@@ -51,7 +52,12 @@ export class OrderService {
     orderId: string,
     dto: AddOrderPaymentDto,
   ) {
-    return this.payments.addPayment(currentUser, businessId, orderId, dto);
+    return this.orderPaymentService.addPayment(
+      currentUser,
+      businessId,
+      orderId,
+      dto,
+    );
   }
 
   async ship(
@@ -59,7 +65,7 @@ export class OrderService {
     businessId: string,
     orderId: string,
   ) {
-    return this.statuses.ship(currentUser, businessId, orderId);
+    return this.orderStatusService.ship(currentUser, businessId, orderId);
   }
 
   async deliver(
@@ -67,7 +73,7 @@ export class OrderService {
     businessId: string,
     orderId: string,
   ) {
-    return this.statuses.deliver(currentUser, businessId, orderId);
+    return this.orderStatusService.deliver(currentUser, businessId, orderId);
   }
 
   async cancel(
@@ -75,6 +81,6 @@ export class OrderService {
     businessId: string,
     orderId: string,
   ) {
-    return this.statuses.cancel(currentUser, businessId, orderId);
+    return this.orderStatusService.cancel(currentUser, businessId, orderId);
   }
 }

@@ -2,12 +2,11 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import {
   type InventoryStock,
   type InventoryStockMovement,
-  inventoryOrderAllocation,
   inventoryStock,
   inventoryStockMovement,
   inventoryWarehouseStock,
-  orderOrder,
-  orderOrderItem,
+  order as orderTable,
+  orderItem as orderItemTable,
   product,
   productVariant,
   warehouse,
@@ -204,8 +203,12 @@ export class StockService {
   private async buildStockWhere(businessId: string, query: QueryStockDto) {
     const conditions: (SQL | undefined)[] = [
       eq(inventoryStock.businessId, businessId),
-      query.productId ? eq(inventoryStock.productId, query.productId) : undefined,
-      query.variantId ? eq(inventoryStock.variantId, query.variantId) : undefined,
+      query.productId
+        ? eq(inventoryStock.productId, query.productId)
+        : undefined,
+      query.variantId
+        ? eq(inventoryStock.variantId, query.variantId)
+        : undefined,
     ];
 
     if (query.warehouseId) {
@@ -214,9 +217,7 @@ export class StockService {
         query.warehouseId,
       );
       conditions.push(
-        stockIds.length > 0
-          ? inArray(inventoryStock.id, stockIds)
-          : sql`false`,
+        stockIds.length > 0 ? inArray(inventoryStock.id, stockIds) : sql`false`,
       );
     }
 
@@ -226,9 +227,7 @@ export class StockService {
         query.search,
       );
       conditions.push(
-        stockIds.length > 0
-          ? inArray(inventoryStock.id, stockIds)
-          : sql`false`,
+        stockIds.length > 0 ? inArray(inventoryStock.id, stockIds) : sql`false`,
       );
     }
 
@@ -371,7 +370,10 @@ export class StockService {
       .select()
       .from(inventoryStock)
       .where(
-        and(eq(inventoryStock.id, stockId), eq(inventoryStock.businessId, businessId)),
+        and(
+          eq(inventoryStock.id, stockId),
+          eq(inventoryStock.businessId, businessId),
+        ),
       );
 
     return stock ?? null;
@@ -405,7 +407,10 @@ export class StockService {
           warehouse,
         })
         .from(inventoryWarehouseStock)
-        .leftJoin(warehouse, eq(warehouse.id, inventoryWarehouseStock.warehouseId))
+        .leftJoin(
+          warehouse,
+          eq(warehouse.id, inventoryWarehouseStock.warehouseId),
+        )
         .where(eq(inventoryWarehouseStock.stockId, stock.id))
         .orderBy(desc(inventoryWarehouseStock.updatedAt)),
     ]);
@@ -414,10 +419,12 @@ export class StockService {
       ...stock,
       product: productRow,
       variant: variantRow,
-      warehouseStocks: warehouseStockRows.map(({ warehouseStock, warehouse }) => ({
-        ...warehouseStock,
-        warehouse,
-      })),
+      warehouseStocks: warehouseStockRows.map(
+        ({ warehouseStock, warehouse }) => ({
+          ...warehouseStock,
+          warehouse,
+        }),
+      ),
     };
   }
 
@@ -461,19 +468,19 @@ export class StockService {
     dto: ReserveOrderStockDto,
   ) {
     const [orderItem] = await this.db
-      .select({ id: orderOrderItem.id })
-      .from(orderOrderItem)
-      .innerJoin(orderOrder, eq(orderOrder.id, orderOrderItem.orderId))
+      .select({ id: orderItemTable.id })
+      .from(orderItemTable)
+      .innerJoin(orderTable, eq(orderTable.id, orderItemTable.orderId))
       .where(
         and(
-          eq(orderOrderItem.id, dto.orderItemId),
-          eq(orderOrderItem.orderId, dto.orderId),
-          eq(orderOrderItem.productId, dto.productId),
+          eq(orderItemTable.id, dto.orderItemId),
+          eq(orderItemTable.orderId, dto.orderId),
+          eq(orderItemTable.productId, dto.productId),
           dto.variantId
-            ? eq(orderOrderItem.variantId, dto.variantId)
-            : isNull(orderOrderItem.variantId),
-          eq(orderOrder.businessId, businessId),
-          isNull(orderOrder.deletedAt),
+            ? eq(orderItemTable.variantId, dto.variantId)
+            : isNull(orderItemTable.variantId),
+          eq(orderTable.businessId, businessId),
+          isNull(orderTable.deletedAt),
         ),
       );
 

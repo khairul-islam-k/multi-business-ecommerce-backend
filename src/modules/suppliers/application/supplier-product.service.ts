@@ -1,9 +1,21 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
-import { SupplierProductMapStatus, supplierProductMap } from "@/database/schema";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import {
+  SupplierProductMapStatus,
+  product,
+  productVariant,
+  supplier,
+  supplierProductMap,
+} from "@/database/schema";
 import Decimal from "decimal.js";
-import { and, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
 import {
+  QuerySupplierProductMapDto,
+  QuerySupplierProductDto,
   SupplierProductMapDto,
   UpdateSupplierProductMapDto,
 } from "../dto/supplier.dto";
@@ -13,7 +25,10 @@ import { SupplierRepository } from "../infrastructure/supplier.repository";
 import { DatabaseService } from "../../../database/database.service";
 import { isUniqueConstraintError } from "../../../common/database/db-error.util";
 import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
-import { apiResponse } from "../../../common/utils/api-response.util";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
 
 @Injectable()
 export class SupplierProductService {
@@ -73,21 +88,134 @@ export class SupplierProductService {
     }
   }
 
-  async findProducts(businessId: string, supplierId: string) {
+  async findProduct(
+    businessId: string,
+    supplierId: string,
+    productMapId: string,
+  ) {
+    const where = and(
+      eq(supplierProductMap.id, productMapId),
+      eq(supplierProductMap.businessId, businessId),
+      eq(supplier.businessId, businessId),
+      isNull(supplier.deletedAt),
+      eq(product.businessId, businessId),
+      isNull(product.deletedAt),
+      eq(supplier.id, supplierId),
+    );
+
+    const [item] = await this.db
+      .select({
+        supplierProduct: supplierProductMap,
+        supplier,
+        product,
+        variant: productVariant,
+      })
+      .from(supplierProductMap)
+      .innerJoin(supplier, eq(supplierProductMap.supplierId, supplier.id))
+      .innerJoin(product, eq(supplierProductMap.productId, product.id))
+      .leftJoin(
+        productVariant,
+        eq(supplierProductMap.variantId, productVariant.id),
+      )
+      .where(where)
+      .limit(1);
+
+    if (!item) {
+      throw new NotFoundException("Supplier product not found");
+    }
+
+    return apiResponse(item);
+  }
+
+  async findProducts(
+    businessId: string,
+    supplierId: string,
+    query: QuerySupplierProductMapDto = {},
+  ) {
     await this.suppliers.assertSupplierExists(businessId, supplierId);
 
-    const products = await this.db
-      .select()
-      .from(supplierProductMap)
-      .where(
-        and(
-          eq(supplierProductMap.businessId, businessId),
-          eq(supplierProductMap.supplierId, supplierId),
-        ),
-      )
-      .orderBy(desc(supplierProductMap.createdAt));
+    return this.findProductMaps(businessId, query, supplierId);
+  }
 
-    return apiResponse(products);
+  async findAllProducts(
+    businessId: string,
+    query: QuerySupplierProductDto = {},
+  ) {
+    return this.findProductMaps(businessId, query, query.supplierId);
+  }
+
+  private async findProductMaps(
+    businessId: string,
+    query: QuerySupplierProductMapDto,
+    supplierId?: string,
+  ) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const skip = (page - 1) * limit;
+    const search = query.search?.trim();
+    const where = and(
+      eq(supplierProductMap.businessId, businessId),
+      eq(supplier.businessId, businessId),
+      isNull(supplier.deletedAt),
+      eq(product.businessId, businessId),
+      isNull(product.deletedAt),
+      supplierId ? eq(supplierProductMap.supplierId, supplierId) : undefined,
+      query.status ? eq(supplierProductMap.status, query.status) : undefined,
+      search
+        ? or(
+            ilike(supplier.name, `%${search}%`),
+            ilike(supplier.companyName, `%${search}%`),
+            ilike(supplier.email, `%${search}%`),
+            ilike(supplier.phone, `%${search}%`),
+            ilike(supplierProductMap.supplierSku, `%${search}%`),
+            ilike(product.name, `%${search}%`),
+            ilike(product.sku, `%${search}%`),
+            ilike(product.barcode, `%${search}%`),
+            ilike(productVariant.title, `%${search}%`),
+            ilike(productVariant.sku, `%${search}%`),
+            ilike(productVariant.barcode, `%${search}%`),
+          )
+        : undefined,
+    );
+
+    const [items, total] = await Promise.all([
+      this.db
+        .select({
+          supplierProduct: supplierProductMap,
+          supplier,
+          product,
+          variant: productVariant,
+        })
+        .from(supplierProductMap)
+        .innerJoin(supplier, eq(supplierProductMap.supplierId, supplier.id))
+        .innerJoin(product, eq(supplierProductMap.productId, product.id))
+        .leftJoin(
+          productVariant,
+          eq(supplierProductMap.variantId, productVariant.id),
+        )
+        .where(where)
+        .orderBy(desc(supplierProductMap.createdAt))
+        .limit(limit)
+        .offset(skip),
+      this.db
+        .select({ value: count() })
+        .from(supplierProductMap)
+        .innerJoin(supplier, eq(supplierProductMap.supplierId, supplier.id))
+        .innerJoin(product, eq(supplierProductMap.productId, product.id))
+        .leftJoin(
+          productVariant,
+          eq(supplierProductMap.variantId, productVariant.id),
+        )
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
+    ]);
+
+    return paginatedResponse(items, {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    });
   }
 
   async updateProduct(

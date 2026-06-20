@@ -113,6 +113,11 @@ export class ProductVariantOptionsDto {
 }
 
 export class QueryProductVariantDto {
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  warehouseId?: string;
+
   @ApiPropertyOptional({ example: "red" })
   @IsOptional()
   @IsString()

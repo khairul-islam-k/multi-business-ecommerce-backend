@@ -15,19 +15,13 @@ import {
   productUnit,
   productVariant,
 } from "@/database/schema";
-import {
-  and,
-  count,
-  eq,
-  inArray,
-  isNull,
-  ne,
-} from "drizzle-orm";
+import { and, count, eq, inArray, isNull, ne } from "drizzle-orm";
 
 import { isUniqueConstraintError } from "../../../common/database/db-error.util";
 import { generateRandomCode } from "../../../common/utils/code-generator.util";
 import { generateRandomSlug } from "../../../common/utils/slug-generator.util";
 import { DatabaseService } from "../../../database/database.service";
+import { BusinessCodePrefixService } from "../../../common/code/business-code-prefix.service";
 
 const PRODUCT_SLUG_MAX_LENGTH = 220;
 const PRODUCT_SLUG_RETRY_LIMIT = 5;
@@ -35,7 +29,10 @@ const PRODUCT_CODE_RETRY_LIMIT = 5;
 
 @Injectable()
 export class ProductCatalogLookupService {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly prefixes: BusinessCodePrefixService,
+  ) {}
 
   private get db() {
     return this.database.db;
@@ -58,7 +55,9 @@ export class ProductCatalogLookupService {
             ? isNull(productCategory.parentId)
             : eq(productCategory.parentId, parentId),
           isNull(productCategory.deletedAt),
-          excludeCategoryId ? ne(productCategory.id, excludeCategoryId) : undefined,
+          excludeCategoryId
+            ? ne(productCategory.id, excludeCategoryId)
+            : undefined,
         ),
       )
       .limit(1);
@@ -393,19 +392,43 @@ export class ProductCatalogLookupService {
   }
 
   async generateUniqueProductSku(businessId: string) {
-    return this.generateUniqueProductCode(businessId, "SKU", "sku");
+    const prefix = await this.prefixes.resolve(
+      businessId,
+      "productSkuPrefix",
+      "SKU",
+    );
+
+    return this.generateUniqueProductCode(businessId, prefix, "sku");
   }
 
   async generateUniqueProductBarcode(businessId: string) {
-    return this.generateUniqueProductCode(businessId, "BAR", "barcode");
+    const prefix = await this.prefixes.resolve(
+      businessId,
+      "productBarcodePrefix",
+      "BAR",
+    );
+
+    return this.generateUniqueProductCode(businessId, prefix, "barcode");
   }
 
   async generateUniqueVariantSku(businessId: string) {
-    return this.generateUniqueVariantCode(businessId, "SKU", "sku");
+    const prefix = await this.prefixes.resolve(
+      businessId,
+      "variantSkuPrefix",
+      "SKU",
+    );
+
+    return this.generateUniqueVariantCode(businessId, prefix, "sku");
   }
 
   async generateUniqueVariantBarcode(businessId: string) {
-    return this.generateUniqueVariantCode(businessId, "BAR", "barcode");
+    const prefix = await this.prefixes.resolve(
+      businessId,
+      "variantBarcodePrefix",
+      "BAR",
+    );
+
+    return this.generateUniqueVariantCode(businessId, prefix, "barcode");
   }
 
   normalizeName(value: string) {
@@ -509,7 +532,9 @@ export class ProductCatalogLookupService {
           .where(
             and(
               eq(product.businessId, businessId),
-              field === "sku" ? eq(product.sku, code) : eq(product.barcode, code),
+              field === "sku"
+                ? eq(product.sku, code)
+                : eq(product.barcode, code),
               isNull(product.deletedAt),
             ),
           )

@@ -2,5 +2,5 @@ export function buildStockItemKey(
   productId: string,
   variantId?: string | null,
 ) {
-  return variantId ?? `product:${productId}`;
+  return variantId ? `variant:${variantId}` : `product:${productId}`;
 }
