@@ -34,6 +34,12 @@ export class StorefrontController {
     return this.storefront.findCategories(websiteId);
   }
 
+  @Get(":websiteId/brands")
+  @ApiOperation({ summary: "Get storefront brands" })
+  findBrands(@Param("websiteId", ParseUUIDPipe) websiteId: string) {
+    return this.storefront.findBrands(websiteId);
+  }
+
   @Get(":websiteId/products")
   @ApiOperation({ summary: "Get storefront products" })
   findProducts(

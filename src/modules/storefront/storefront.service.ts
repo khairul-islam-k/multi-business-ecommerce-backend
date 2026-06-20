@@ -2,14 +2,12 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import {
   CatalogProductStatus,
   ProductSimpleStatus,
-  ProductReviewStatus,
   ProductVariantStatus,
   inventoryStock,
   product,
   productBrand,
   productCategory,
   productImage,
-  productReview,
   productVariant,
 } from "@/database/schema";
 import Decimal from "decimal.js";
@@ -39,7 +37,7 @@ import {
 
 type CategoryRow = typeof productCategory.$inferInsert;
 
-type CategoryTreeNode = {
+export type CategoryTreeNode = {
   category: CategoryRow;
   children: CategoryTreeNode[];
 };
@@ -106,7 +104,7 @@ export class StorefrontService {
         if (parentNode) {
           parentNode.children.push(node);
         } else {
-          // Optional: if parent is missing/deleted/inactive, treat as root
+          // TODO: if parent is missing/deleted/inactive, treat as root
           categories.push(node);
         }
       } else {
@@ -115,6 +113,22 @@ export class StorefrontService {
     }
 
     return apiResponse(categories);
+  }
+
+  async findBrands(websiteId: string) {
+    const website = await this.getPublishedWebsite(websiteId);
+    const brands = await this.db
+      .select()
+      .from(productBrand)
+      .where(
+        and(
+          eq(productBrand.businessId, (await website).businessId),
+          eq(productBrand.status, ProductSimpleStatus.ACTIVE),
+          isNull(productBrand.deletedAt),
+        ),
+      );
+
+    return apiResponse(brands);
   }
 
   async findProducts(websiteId: string, query: StorefrontProductQueryDto) {
@@ -184,7 +198,7 @@ export class StorefrontService {
       throw new NotFoundException("Product not found");
     }
 
-    return apiResponse(await this.hydrateProduct(item, true));
+    return apiResponse(await this.hydrateProduct(item));
   }
 
   async findProductReviews(websiteId: string, productId: string) {
@@ -207,10 +221,7 @@ export class StorefrontService {
     return website;
   }
 
-  private async hydrateProduct(
-    item: typeof product.$inferSelect,
-    includeReviews = false,
-  ) {
+  private async hydrateProduct(item: typeof product.$inferSelect) {
     const [category, brand, images, variants, stocks, reviewSummary, reviews] =
       await Promise.all([
         item.categoryId
@@ -259,20 +270,7 @@ export class StorefrontService {
             ),
           ),
         this.reviews.getSummary(item.businessId, item.id),
-        includeReviews
-          ? this.db
-              .select()
-              .from(productReview)
-              .where(
-                and(
-                  eq(productReview.businessId, item.businessId),
-                  eq(productReview.productId, item.id),
-                  eq(productReview.status, ProductReviewStatus.APPROVED),
-                  isNull(productReview.deletedAt),
-                ),
-              )
-              .orderBy(desc(productReview.createdAt))
-          : Promise.resolve([]),
+        this.reviews.findApprovedForProduct(item.businessId, item.id),
       ]);
     const variantIds = variants.map((variant) => variant.id);
     const variantImages =
