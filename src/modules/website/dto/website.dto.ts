@@ -1,11 +1,3 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import {
-  WebsiteDomainSslStatus,
-  WebsiteDomainType,
-  WebsiteDomainVerificationStatus,
-  WebsiteStatus,
-  WebsiteTemplate,
-} from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsBoolean,
@@ -17,6 +9,15 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
+
+import {
+  WebsiteDomainSslStatus,
+  WebsiteDomainType,
+  WebsiteDomainVerificationStatus,
+  WebsiteStatus,
+  WebsiteTemplate,
+} from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 
 export class WebsiteConfigDto {
   @ApiPropertyOptional({ type: Object })

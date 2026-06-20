@@ -48,7 +48,7 @@ export const business = pgTable(
     ownerUserId: uuid("owner_user_id")
       .notNull()
       .references((): AnyPgColumn => systemUser.id, { onDelete: "restrict" }),
-    name: varchar({ length: 150 }).notNull(),
+    name: varchar({ length: 150 }).notNull().unique(),
     slug: varchar({ length: 180 }).notNull(),
     email: varchar({ length: 255 }),
     phone: varchar({ length: 30 }),

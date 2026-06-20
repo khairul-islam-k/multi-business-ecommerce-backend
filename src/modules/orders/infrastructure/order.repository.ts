@@ -45,12 +45,15 @@ export class OrderRepository {
         : undefined,
     );
 
+    const orderBy =
+      query.sortOrder === "asc" ? asc(order.createdAt) : desc(order.createdAt);
+
     const [rows, total] = await Promise.all([
       this.db
         .select()
         .from(order)
         .where(where)
-        .orderBy(desc(order.createdAt))
+        .orderBy(orderBy)
         .limit(limit)
         .offset(skip),
       this.db

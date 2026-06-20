@@ -3,6 +3,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -208,6 +209,14 @@ export class QueryOrderDto {
   @IsOptional()
   @IsEnum(OrderType)
   orderType?: OrderType;
+
+  @ApiPropertyOptional({
+    example: "desc",
+    enum: ["asc", "desc"],
+  })
+  @IsOptional()
+  @IsIn(["asc", "desc"])
+  sortOrder?: "asc" | "desc" = "desc";
 }
 
 export class AddOrderPaymentDto extends OrderPaymentInputDto {}
