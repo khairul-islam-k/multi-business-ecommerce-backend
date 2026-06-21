@@ -176,7 +176,8 @@ export const productTag = pgTable(
       .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     name: varchar({ length: 100 }).notNull(),
     status: productSimpleStatusEnum().notNull(),
-    isFeatured: boolean("is_featured").notNull(),
+    // TODO: make it notNull
+    isFeatured: boolean("is_featured"),
     createdBy: uuid("created_by"),
     updatedBy: uuid("updated_by"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),

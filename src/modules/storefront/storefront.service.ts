@@ -1,15 +1,3 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import {
-  CatalogProductStatus,
-  ProductSimpleStatus,
-  ProductVariantStatus,
-  inventoryStock,
-  product,
-  productBrand,
-  productCategory,
-  productImage,
-  productVariant,
-} from "@/database/schema";
 import Decimal from "decimal.js";
 import {
   and,
@@ -17,19 +5,35 @@ import {
   count,
   desc,
   eq,
+  getTableColumns,
   ilike,
   inArray,
   isNull,
   or,
 } from "drizzle-orm";
 
-import { WebsiteService } from "../website/website.service";
-import { ProductReviewService } from "../product-catalog/reviews/product-review.service";
-import { DatabaseService } from "../../database/database.service";
+import {
+  CatalogProductStatus,
+  inventoryStock,
+  product,
+  productBrand,
+  productCategory,
+  productImage,
+  ProductSimpleStatus,
+  productTag,
+  productTagMap,
+  productVariant,
+  ProductVariantStatus,
+} from "@/database/schema";
+import { Injectable, NotFoundException } from "@nestjs/common";
+
 import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
+import { DatabaseService } from "../../database/database.service";
+import { ProductReviewService } from "../product-catalog/reviews/product-review.service";
+import { WebsiteService } from "../website/website.service";
 import {
   ResolveStorefrontDto,
   StorefrontProductQueryDto,
@@ -122,13 +126,30 @@ export class StorefrontService {
       .from(productBrand)
       .where(
         and(
-          eq(productBrand.businessId, (await website).businessId),
+          eq(productBrand.businessId, website.businessId),
           eq(productBrand.status, ProductSimpleStatus.ACTIVE),
           isNull(productBrand.deletedAt),
         ),
       );
 
     return apiResponse(brands);
+  }
+
+  async findTags(websiteId: string) {
+    const website = await this.getPublishedWebsite(websiteId);
+    const tags = await this.db
+      .select()
+      .from(productTag)
+      .where(
+        and(
+          eq(productTag.businessId, website.businessId),
+          eq(productTag.status, ProductSimpleStatus.ACTIVE),
+          eq(productTag.isFeatured, true),
+          isNull(productTag.deletedAt),
+        ),
+      );
+
+    return apiResponse(tags);
   }
 
   async findProducts(websiteId: string, query: StorefrontProductQueryDto) {
@@ -143,6 +164,17 @@ export class StorefrontService {
       isNull(product.deletedAt),
       query.categoryId ? eq(product.categoryId, query.categoryId) : undefined,
       query.brandId ? eq(product.brandId, query.brandId) : undefined,
+      query.tagId
+        ? inArray(
+            product.id,
+            this.db
+              .select({
+                productId: productTagMap.productId,
+              })
+              .from(productTagMap)
+              .where(eq(productTagMap.tagId, query.tagId)),
+          )
+        : undefined,
       search
         ? or(
             ilike(product.name, `%${search}%`),
@@ -222,56 +254,79 @@ export class StorefrontService {
   }
 
   private async hydrateProduct(item: typeof product.$inferSelect) {
-    const [category, brand, images, variants, stocks, reviewSummary, reviews] =
-      await Promise.all([
-        item.categoryId
-          ? this.db
-              .select()
-              .from(productCategory)
-              .where(eq(productCategory.id, item.categoryId))
-              .then(([row]) => row ?? null)
-          : Promise.resolve(null),
-        item.brandId
-          ? this.db
-              .select()
-              .from(productBrand)
-              .where(eq(productBrand.id, item.brandId))
-              .then(([row]) => row ?? null)
-          : Promise.resolve(null),
-        this.db
-          .select()
-          .from(productImage)
-          .where(
-            and(
-              eq(productImage.productId, item.id),
-              isNull(productImage.variantId),
-              isNull(productImage.deletedAt),
-            ),
-          )
-          .orderBy(asc(productImage.sortOrder)),
-        this.db
-          .select()
-          .from(productVariant)
-          .where(
-            and(
-              eq(productVariant.businessId, item.businessId),
-              eq(productVariant.productId, item.id),
-              eq(productVariant.status, ProductVariantStatus.ACTIVE),
-              isNull(productVariant.deletedAt),
-            ),
+    const [
+      category,
+      brand,
+      tags,
+      images,
+      variants,
+      stocks,
+      reviewSummary,
+      reviews,
+    ] = await Promise.all([
+      item.categoryId
+        ? this.db
+            .select()
+            .from(productCategory)
+            .where(eq(productCategory.id, item.categoryId))
+            .then(([row]) => row ?? null)
+        : Promise.resolve(null),
+      item.brandId
+        ? this.db
+            .select()
+            .from(productBrand)
+            .where(eq(productBrand.id, item.brandId))
+            .then(([row]) => row ?? null)
+        : Promise.resolve(null),
+      this.db
+        .select({
+          ...getTableColumns(productTag),
+        })
+        .from(productTagMap)
+        .innerJoin(productTag, eq(productTag.id, productTagMap.tagId))
+        .where(
+          and(
+            eq(productTagMap.productId, item.id),
+            eq(productTag.businessId, item.businessId),
+            eq(productTag.status, ProductSimpleStatus.ACTIVE),
+            isNull(productTag.deletedAt),
           ),
-        this.db
-          .select()
-          .from(inventoryStock)
-          .where(
-            and(
-              eq(inventoryStock.businessId, item.businessId),
-              eq(inventoryStock.productId, item.id),
-            ),
+        )
+        .then((row) => row ?? null),
+      this.db
+        .select()
+        .from(productImage)
+        .where(
+          and(
+            eq(productImage.productId, item.id),
+            isNull(productImage.variantId),
+            isNull(productImage.deletedAt),
           ),
-        this.reviews.getSummary(item.businessId, item.id),
-        this.reviews.findApprovedForProduct(item.businessId, item.id),
-      ]);
+        )
+        .orderBy(asc(productImage.sortOrder)),
+      this.db
+        .select()
+        .from(productVariant)
+        .where(
+          and(
+            eq(productVariant.businessId, item.businessId),
+            eq(productVariant.productId, item.id),
+            eq(productVariant.status, ProductVariantStatus.ACTIVE),
+            isNull(productVariant.deletedAt),
+          ),
+        ),
+      this.db
+        .select()
+        .from(inventoryStock)
+        .where(
+          and(
+            eq(inventoryStock.businessId, item.businessId),
+            eq(inventoryStock.productId, item.id),
+          ),
+        ),
+      this.reviews.getSummary(item.businessId, item.id),
+      this.reviews.findApprovedForProduct(item.businessId, item.id),
+    ]);
     const variantIds = variants.map((variant) => variant.id);
     const variantImages =
       variantIds.length === 0
@@ -292,6 +347,7 @@ export class StorefrontService {
       ...item,
       category,
       brand,
+      tags,
       images,
       variants: variants.map((variant) => ({
         ...variant,

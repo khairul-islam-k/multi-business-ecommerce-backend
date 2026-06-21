@@ -40,6 +40,12 @@ export class StorefrontController {
     return this.storefront.findBrands(websiteId);
   }
 
+  @Get(":websiteId/tags")
+  @ApiOperation({ summary: "Get storefront featured tags" })
+  findTags(@Param("websiteId", ParseUUIDPipe) websiteId: string) {
+    return this.storefront.findTags(websiteId);
+  }
+
   @Get(":websiteId/products")
   @ApiOperation({ summary: "Get storefront products" })
   findProducts(
