@@ -8,6 +8,7 @@ import { CommonModule } from "./common/common.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { BusinessModule } from "./modules/business/business.module";
 import { CustomerModule } from "./modules/customers/customer.module";
+import { CustomerAuthModule } from "./modules/customer-auth/customer-auth.module";
 import { EmployeeModule } from "./modules/employees/employee.module";
 import { FinanceModule } from "./modules/finance/finance.module";
 import { InventoryModule } from "./modules/inventory/inventory.module";
@@ -51,6 +52,7 @@ import { RequestContextMiddleware } from "./common/request-context/request-conte
     FinanceModule,
     SupplierModule,
     CustomerModule,
+    CustomerAuthModule,
     OrderModule,
     PosModule,
     WebsiteModule,
