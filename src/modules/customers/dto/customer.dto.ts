@@ -1,14 +1,7 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import {
-  OrderAddressType,
-  OrderCustomerStatus,
-  OrderPaymentStatus,
-  OrderStatus,
-} from "@/database/schema";
 import { Type } from "class-transformer";
 import {
-  IsEmail,
   IsBoolean,
+  IsEmail,
   IsEnum,
   IsInt,
   IsOptional,
@@ -17,6 +10,14 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
+
+import {
+  CustomerAddressType,
+  CustomerStatus,
+  OrderPaymentStatus,
+  OrderStatus,
+} from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 
 export enum CustomerSortBy {
   NAME = "name",
@@ -53,10 +54,10 @@ export class CreateCustomerDto {
   @MaxLength(30)
   phone?: string;
 
-  @ApiPropertyOptional({ enum: OrderCustomerStatus })
+  @ApiPropertyOptional({ enum: CustomerStatus })
   @IsOptional()
-  @IsEnum(OrderCustomerStatus)
-  status?: OrderCustomerStatus;
+  @IsEnum(CustomerStatus)
+  status?: CustomerStatus;
 
   @ApiPropertyOptional({ example: "Frequent buyer" })
   @IsOptional()
@@ -87,10 +88,10 @@ export class QueryCustomerDto {
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ enum: OrderCustomerStatus })
+  @ApiPropertyOptional({ enum: CustomerStatus })
   @IsOptional()
-  @IsEnum(OrderCustomerStatus)
-  status?: OrderCustomerStatus;
+  @IsEnum(CustomerStatus)
+  status?: CustomerStatus;
 
   @ApiPropertyOptional({
     enum: CustomerSortBy,
@@ -110,10 +111,10 @@ export class QueryCustomerDto {
 }
 
 export class CustomerAddressDto {
-  @ApiPropertyOptional({ enum: OrderAddressType })
+  @ApiPropertyOptional({ enum: CustomerAddressType })
   @IsOptional()
-  @IsEnum(OrderAddressType)
-  addressType?: OrderAddressType;
+  @IsEnum(CustomerAddressType)
+  addressType?: CustomerAddressType;
 
   @ApiPropertyOptional({ example: "Home" })
   @IsOptional()

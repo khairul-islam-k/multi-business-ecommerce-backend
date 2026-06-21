@@ -15,36 +15,7 @@ import Decimal from "decimal.js";
 
 import { decimal, type JsonValue } from "./common";
 import { financeAccount, financeTax } from "./finance";
-
-export const OrderCustomerStatus = {
-  ACTIVE: "ACTIVE",
-  INACTIVE: "INACTIVE",
-  BLOCKED: "BLOCKED",
-} as const;
-export type OrderCustomerStatus =
-  (typeof OrderCustomerStatus)[keyof typeof OrderCustomerStatus];
-export const orderCustomerStatusEnum = pgEnum("OrderCustomerStatus", [
-  "ACTIVE",
-  "INACTIVE",
-  "BLOCKED",
-]);
-
-export const OrderAddressType = {
-  HOME: "HOME",
-  OFFICE: "OFFICE",
-  SHIPPING: "SHIPPING",
-  BILLING: "BILLING",
-  OTHER: "OTHER",
-} as const;
-export type OrderAddressType =
-  (typeof OrderAddressType)[keyof typeof OrderAddressType];
-export const orderAddressTypeEnum = pgEnum("OrderAddressType", [
-  "HOME",
-  "OFFICE",
-  "SHIPPING",
-  "BILLING",
-  "OTHER",
-]);
+import { customer } from "./customer";
 
 export const OrderCartStatus = {
   ACTIVE: "ACTIVE",
@@ -220,73 +191,14 @@ export const orderRefundStatusEnum = pgEnum("OrderRefundStatus", [
   "CANCELLED",
 ]);
 
-export const orderCustomer = pgTable(
-  "order_customers",
-  {
-    id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
-    name: varchar({ length: 150 }).notNull(),
-    email: varchar({ length: 150 }),
-    phone: varchar({ length: 30 }),
-    status: orderCustomerStatusEnum().notNull(),
-    note: text(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
-    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-    updatedAt: timestamp("updated_at", { mode: "date" })
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-    deletedAt: timestamp("deleted_at", { mode: "date" }),
-  },
-  (table) => [
-    index("order_customers_business_id_idx").on(table.businessId),
-    index("order_customers_phone_idx").on(table.phone),
-    index("order_customers_email_idx").on(table.email),
-    index("order_customers_status_idx").on(table.status),
-  ],
-);
-export type OrderCustomer = typeof orderCustomer.$inferSelect;
-export type NewOrderCustomer = typeof orderCustomer.$inferInsert;
-
-export const orderCustomerAddress = pgTable(
-  "order_customer_addresses",
-  {
-    id: uuid().primaryKey().defaultRandom().notNull(),
-    customerId: uuid("customer_id")
-      .notNull()
-      .references((): AnyPgColumn => orderCustomer.id, { onDelete: "cascade" }),
-    addressType: orderAddressTypeEnum("address_type").notNull(),
-    name: varchar({ length: 150 }),
-    address: text().notNull(),
-    city: varchar({ length: 100 }),
-    country: varchar({ length: 100 }),
-    isDefault: boolean("is_default").notNull(),
-    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-    updatedAt: timestamp("updated_at", { mode: "date" })
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-    deletedAt: timestamp("deleted_at", { mode: "date" }),
-  },
-  (table) => [
-    index("order_customer_addresses_customer_id_idx").on(table.customerId),
-    index("order_customer_addresses_address_type_idx").on(table.addressType),
-    index("order_customer_addresses_is_default_idx").on(table.isDefault),
-  ],
-);
-export type OrderCustomerAddress = typeof orderCustomerAddress.$inferSelect;
-export type NewOrderCustomerAddress = typeof orderCustomerAddress.$inferInsert;
-
 export const orderCart = pgTable(
   "order_carts",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
     businessId: uuid("business_id").notNull(),
-    customerId: uuid("customer_id").references(
-      (): AnyPgColumn => orderCustomer.id,
-      { onDelete: "set null" },
-    ),
+    customerId: uuid("customer_id").references((): AnyPgColumn => customer.id, {
+      onDelete: "set null",
+    }),
     sessionId: varchar("session_id", { length: 150 }),
     status: orderCartStatusEnum().notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
@@ -336,10 +248,9 @@ export const order = pgTable(
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
     businessId: uuid("business_id").notNull(),
-    customerId: uuid("customer_id").references(
-      (): AnyPgColumn => orderCustomer.id,
-      { onDelete: "set null" },
-    ),
+    customerId: uuid("customer_id").references((): AnyPgColumn => customer.id, {
+      onDelete: "set null",
+    }),
     warehouseId: uuid("warehouse_id"),
     taxId: uuid("tax_id")
       .notNull()

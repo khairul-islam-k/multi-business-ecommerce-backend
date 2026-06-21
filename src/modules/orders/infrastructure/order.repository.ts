@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import {
   type Order,
-  orderCustomer,
+  customer,
   order,
   orderItem,
   orderPayment,
@@ -113,12 +113,12 @@ export class OrderRepository {
     order: Order,
     client: Database | DatabaseTransaction = this.db,
   ) {
-    const [customer, items, payments, statusLogs] = await Promise.all([
+    const [existingCustomer, items, payments, statusLogs] = await Promise.all([
       order.customerId
         ? client
             .select()
-            .from(orderCustomer)
-            .where(eq(orderCustomer.id, order.customerId))
+            .from(customer)
+            .where(eq(customer.id, order.customerId))
             .then(([row]) => row ?? null)
         : Promise.resolve(null),
       client.select().from(orderItem).where(eq(orderItem.orderId, order.id)),
@@ -135,7 +135,7 @@ export class OrderRepository {
 
     return {
       ...order,
-      customer,
+      existingCustomer,
       items,
       payments,
       statusLogs,

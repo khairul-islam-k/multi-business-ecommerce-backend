@@ -5,13 +5,13 @@ import {
   CatalogProductStatus,
   courierShipment,
   courierShipmentItem,
+  customer,
   invoice,
   invoiceItem,
   InvoiceStatus,
   JsonValue,
   Order,
   order,
-  orderCustomer,
   OrderItem,
   orderItem,
   OrderPaymentMethod,
@@ -457,18 +457,18 @@ export class CreateOrderService {
   }
 
   private async assertCustomerExists(businessId: string, customerId: string) {
-    const [customer] = await this.db
-      .select({ id: orderCustomer.id })
-      .from(orderCustomer)
+    const [existingCustomer] = await this.db
+      .select({ id: customer.id })
+      .from(customer)
       .where(
         and(
-          eq(orderCustomer.id, customerId),
-          eq(orderCustomer.businessId, businessId),
-          isNull(orderCustomer.deletedAt),
+          eq(customer.id, customerId),
+          eq(customer.businessId, businessId),
+          isNull(customer.deletedAt),
         ),
       );
 
-    if (!customer) {
+    if (!existingCustomer) {
       throw new NotFoundException("Customer not found");
     }
   }

@@ -1,25 +1,6 @@
+import { CustomerStatus } from "@/database/schema";
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { OrderCustomerStatus } from "@/database/schema";
 
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
-import {
-  CreateCustomerDto,
-  CustomerAddressDto,
-  CustomerSortBy,
-  CustomerSortOrder,
-  QueryCustomerDto,
-  QueryCustomerOrderDto,
-  UpdateCustomerAddressDto,
-  UpdateCustomerDto,
-} from "./dto/customer.dto";
-import {
-  assertCustomerContactAvailable,
-  normalizeCustomerContact,
-  normalizeCustomerContactUpdate,
-} from "./domain/customer-contact.policy";
-import { CustomerAddressService } from "./application/customer-address.service";
-import { CustomerOrderQueryService } from "./application/customer-order-query.service";
-import { CustomerRepository } from "./infrastructure/customer.repository";
 import { getPagination } from "../../common/http/pagination.util";
 import { resolveSort, resolveSortDirection } from "../../common/http/sort.util";
 import {
@@ -30,6 +11,26 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
+import { CustomerAddressService } from "./application/customer-address.service";
+import { CustomerOrderQueryService } from "./application/customer-order-query.service";
+import {
+  assertCustomerContactAvailable,
+  normalizeCustomerContact,
+  normalizeCustomerContactUpdate,
+} from "./domain/customer-contact.policy";
+import {
+  CreateCustomerDto,
+  CustomerAddressDto,
+  CustomerSortBy,
+  CustomerSortOrder,
+  QueryCustomerDto,
+  QueryCustomerOrderDto,
+  UpdateCustomerAddressDto,
+  UpdateCustomerDto,
+} from "./dto/customer.dto";
+import { CustomerRepository } from "./infrastructure/customer.repository";
+
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 const CUSTOMER_SORTS = Object.values(CustomerSortBy);
 
@@ -57,7 +58,7 @@ export class CustomerService {
       name: normalizeRequiredText(dto.name),
       email: contact.email,
       phone: contact.phone,
-      status: dto.status ?? OrderCustomerStatus.ACTIVE,
+      status: dto.status ?? CustomerStatus.ACTIVE,
       note: normalizeOptionalText(dto.note),
       createdBy: currentUser.id,
       updatedBy: currentUser.id,

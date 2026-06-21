@@ -1,17 +1,17 @@
+import { CustomerAddressType } from "@/database/schema";
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { OrderAddressType } from "@/database/schema";
 
-import {
-  CustomerAddressDto,
-  UpdateCustomerAddressDto,
-} from "../dto/customer.dto";
-import { shouldUseDefaultAddress } from "../domain/customer-address.policy";
-import { CustomerRepository } from "../infrastructure/customer.repository";
 import {
   normalizeOptionalText,
   normalizeRequiredText,
 } from "../../../common/text/normalizers";
 import { apiResponse } from "../../../common/utils/api-response.util";
+import { shouldUseDefaultAddress } from "../domain/customer-address.policy";
+import {
+  CustomerAddressDto,
+  UpdateCustomerAddressDto,
+} from "../dto/customer.dto";
+import { CustomerRepository } from "../infrastructure/customer.repository";
 
 @Injectable()
 export class CustomerAddressService {
@@ -38,7 +38,7 @@ export class CustomerAddressService {
 
       return this.customers.createAddress(tx, {
         customerId,
-        addressType: dto.addressType ?? OrderAddressType.HOME,
+        addressType: dto.addressType ?? CustomerAddressType.HOME,
         name: normalizeOptionalText(dto.name),
         address: normalizeRequiredText(dto.address),
         city: normalizeOptionalText(dto.city),
