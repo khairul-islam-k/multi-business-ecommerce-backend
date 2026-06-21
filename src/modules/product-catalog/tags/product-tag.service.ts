@@ -1,38 +1,31 @@
+import { and, asc, count, desc, eq, exists, ilike, isNull } from "drizzle-orm";
+
+import {
+  product,
+  ProductSimpleStatus,
+  ProductTag,
+  productTag,
+  productTagMap,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  type ProductTag,
-  ProductSimpleStatus,
-  product,
-  productTag,
-  productTagMap,
-} from "@/database/schema";
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  exists,
-  ilike,
-  isNull,
-} from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { QueryCatalogDto } from "../common/dto/query-catalog.dto";
-import {
-  CreateProductTagDto,
-  UpdateProductTagDto,
-} from "./dto/product-tag.dto";
-import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
-import { DatabaseService } from "../../../database/database.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import { QueryCatalogDto } from "../common/dto/query-catalog.dto";
+import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import {
+  CreateProductTagDto,
+  UpdateProductTagDto,
+} from "./dto/product-tag.dto";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 type TagWithCount = ProductTag & {
   _count: { products: number };
@@ -60,13 +53,17 @@ export class ProductTagService {
         .values({
           businessId,
           name: this.lookup.normalizeName(dto.name),
+          isFeatured: dto.isFeatured,
           status: dto.status ?? ProductSimpleStatus.ACTIVE,
           createdBy: currentUser.id,
           updatedBy: currentUser.id,
         })
         .returning();
 
-      return apiResponse(await this.withTagCount(tag), "Tag created successfully");
+      return apiResponse(
+        await this.withTagCount(tag),
+        "Tag created successfully",
+      );
     } catch (error) {
       this.lookup.handleUniqueError(error, "Tag name already exists");
     }
@@ -142,7 +139,10 @@ export class ProductTagService {
         .where(eq(productTag.id, tagId))
         .returning();
 
-      return apiResponse(await this.withTagCount(tag), "Tag updated successfully");
+      return apiResponse(
+        await this.withTagCount(tag),
+        "Tag updated successfully",
+      );
     } catch (error) {
       this.lookup.handleUniqueError(error, "Tag name already exists");
     }
