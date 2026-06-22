@@ -14,7 +14,6 @@ import {
   ProductVariantStatus,
 } from "@/database/schema";
 import {
-  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -215,7 +214,7 @@ export class StorefrontCustomerService {
         reviewerName: normalizeRequiredText(customerRow.name),
         reviewerEmail: normalizeOptionalText(currentCustomer.email),
         reviewerPhone: normalizeOptionalText(customerRow.phone),
-        status: ProductReviewStatus.PENDING,
+        status: ProductReviewStatus.APPROVED,
       })
       .returning();
 

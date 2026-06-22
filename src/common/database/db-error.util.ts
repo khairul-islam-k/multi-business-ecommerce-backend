@@ -10,7 +10,7 @@ export function isUniqueConstraintError(error: unknown) {
   return (
     typeof error === "object" &&
     error !== null &&
-    (error as PostgresError).cause.code === "23505"
+    (error as PostgresError)?.cause?.code === "23505"
   );
 }
 

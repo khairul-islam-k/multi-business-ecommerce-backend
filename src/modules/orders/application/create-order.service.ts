@@ -87,6 +87,7 @@ export class CreateOrderService {
     return this.createOrderFlow(currentUser, businessId, {
       customerName: dto.customerName,
       customerPhone: dto.customerPhone,
+      customerEmail: dto.customerEmail,
       warehouseId: dto.warehouseId,
       taxId: dto.taxId,
       customerId: dto.customerId,

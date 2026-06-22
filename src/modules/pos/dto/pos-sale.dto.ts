@@ -50,6 +50,12 @@ export class CreatePosSaleDto {
   @MaxLength(30)
   customerPhone?: string;
 
+  @ApiPropertyOptional({ example: "jane@example.com" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  customerEmail?: string;
+
   @ApiProperty({ type: [OrderItemInputDto] })
   @IsArray()
   @ValidateNested({ each: true })

@@ -117,7 +117,7 @@ export class EmployeeService {
     });
 
     try {
-      return await this.db.transaction(async (tx) => {
+      const employee = await this.db.transaction(async (tx) => {
         const [employee] = await tx
           .insert(systemUser)
           .values({
@@ -161,14 +161,17 @@ export class EmployeeService {
             .onConflictDoNothing();
         }
 
-        const createdEmployee = await this.getEmployeeByIdOrThrow(
-          businessId,
-          employee.id,
-        );
-
-        return apiResponse(createdEmployee, "Employee created successfully");
+        return employee;
       });
+
+      const createdEmployee = await this.getEmployeeByIdOrThrow(
+        businessId,
+        employee.id,
+      );
+
+      return apiResponse(createdEmployee, "Employee created successfully");
     } catch (error) {
+      console.log(error);
       this.handleDatabaseError(error);
     }
   }
