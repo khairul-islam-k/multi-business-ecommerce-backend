@@ -56,7 +56,10 @@ export class ProductUnitService {
         })
         .returning();
 
-      return apiResponse(await this.withUnitCount(unit), "Unit created successfully");
+      return apiResponse(
+        await this.withUnitCount(unit),
+        "Unit created successfully",
+      );
     } catch (error) {
       this.lookup.handleUniqueError(error, "Unit name already exists");
     }
@@ -132,7 +135,10 @@ export class ProductUnitService {
         .where(eq(productUnit.id, unitId))
         .returning();
 
-      return apiResponse(await this.withUnitCount(unit), "Unit updated successfully");
+      return apiResponse(
+        await this.withUnitCount(unit),
+        "Unit updated successfully",
+      );
     } catch (error) {
       this.lookup.handleUniqueError(error, "Unit name already exists");
     }
@@ -151,6 +157,7 @@ export class ProductUnitService {
       .set({
         status: ProductSimpleStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
         updatedBy: currentUser.id,
       })
       .where(eq(productUnit.id, unitId));

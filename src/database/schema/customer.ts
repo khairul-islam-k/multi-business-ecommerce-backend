@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  AnyPgColumn,
   boolean,
   index,
   integer,
@@ -10,10 +11,10 @@ import {
   uniqueIndex,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 import { business } from "./business";
+import { systemUser } from "./system";
 import { website } from "./website";
 
 export const CustomerStatus = {
@@ -71,8 +72,15 @@ export const customer = pgTable(
     phone: varchar({ length: 30 }),
     status: customerStatusEnum().notNull(),
     note: text(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -119,6 +127,9 @@ export const customerAddress = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
@@ -168,6 +179,9 @@ export const customerAccount = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     deletedAt: timestamp("deleted_at", {
       precision: 6,
       withTimezone: true,

@@ -12,6 +12,7 @@ import {
   UpdateCustomerAddressDto,
 } from "../dto/customer.dto";
 import { CustomerRepository } from "../infrastructure/customer.repository";
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class CustomerAddressService {
@@ -93,6 +94,7 @@ export class CustomerAddressService {
   }
 
   async removeAddress(
+    currentUser: CurrentUserPayload,
     businessId: string,
     customerId: string,
     addressId: string,
@@ -107,6 +109,7 @@ export class CustomerAddressService {
       await this.customers.updateAddress(tx, addressId, {
         isDefault: false,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
       });
 
       if (existingAddress.isDefault) {

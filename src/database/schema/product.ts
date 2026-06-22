@@ -16,6 +16,7 @@ import { sql } from "drizzle-orm";
 import { decimal } from "./common";
 import { business } from "./business";
 import { customer } from "./customer";
+import { systemUser } from "./system";
 
 export const ProductSimpleStatus = {
   ACTIVE: "ACTIVE",
@@ -83,8 +84,15 @@ export const productCategory = pgTable(
     imageUrl: text("image_url"),
     status: productSimpleStatusEnum().notNull(),
     sortOrder: integer("sort_order").default(0).notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -117,8 +125,15 @@ export const productBrand = pgTable(
     logoUrl: text("logo_url"),
     status: productSimpleStatusEnum().notNull(),
     sortOrder: integer("sort_order").default(0).notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -147,8 +162,15 @@ export const productUnit = pgTable(
       .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     name: varchar({ length: 100 }).notNull(),
     status: productSimpleStatusEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -179,8 +201,15 @@ export const productTag = pgTable(
     status: productSimpleStatusEnum().notNull(),
     // TODO: make it notNull
     isFeatured: boolean("is_featured"),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -225,8 +254,15 @@ export const product = pgTable(
     price: decimal({ precision: 12, scale: 2 }).notNull(),
     weight: decimal({ precision: 10, scale: 2 }),
     status: catalogProductStatusEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -273,8 +309,15 @@ export const productVariant = pgTable(
     priceOverride: decimal("price_override", { precision: 12, scale: 2 }),
     weight: decimal({ precision: 10, scale: 2 }),
     status: productVariantStatusEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -312,8 +355,15 @@ export const productAttribute = pgTable(
       .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     name: varchar({ length: 100 }).notNull(),
     status: productSimpleStatusEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -346,8 +396,15 @@ export const productAttributeValue = pgTable(
         onDelete: "cascade",
       }),
     value: varchar({ length: 150 }).notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -430,8 +487,15 @@ export const productImage = pgTable(
     altText: text("alt_text"),
     isThumbnail: boolean("is_thumbnail").notNull(),
     sortOrder: integer("sort_order").default(0).notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -497,8 +561,15 @@ export const productReview = pgTable(
     reviewerEmail: varchar("reviewer_email", { length: 150 }),
     reviewerPhone: varchar("reviewer_phone", { length: 30 }),
     status: productReviewStatusEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()

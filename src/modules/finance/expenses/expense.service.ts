@@ -203,12 +203,20 @@ export class ExpenseService {
     return apiResponse(cancelledExpense, "Expense cancelled successfully");
   }
 
-  async delete(businessId: string, expenseId: string) {
+  async delete(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    expenseId: string,
+  ) {
     const expense = await this.getExpenseOrThrow(businessId, expenseId);
 
-    await this.db.update(financeExpense).set({
-      deletedAt: new Date(),
-    });
+    await this.db
+      .update(financeExpense)
+      .set({
+        deletedAt: new Date(),
+        deletedBy: currentUser.id,
+      })
+      .where(eq(financeExpense.id, expense.id));
 
     return apiResponse(null, "Expense deleted successfully");
   }

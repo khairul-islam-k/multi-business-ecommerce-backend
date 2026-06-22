@@ -427,7 +427,11 @@ export class ProductVariantService {
         if (dto.images !== undefined) {
           await tx
             .update(productImage)
-            .set({ deletedAt: new Date(), updatedBy: currentUser.id })
+            .set({
+              deletedAt: new Date(),
+              deletedBy: currentUser.id,
+              updatedBy: currentUser.id,
+            })
             .where(
               and(
                 eq(productImage.variantId, variantId),
@@ -546,7 +550,11 @@ export class ProductVariantService {
           if (update.dto.images !== undefined) {
             await tx
               .update(productImage)
-              .set({ deletedAt: new Date(), updatedBy: currentUser.id })
+              .set({
+                deletedAt: new Date(),
+                deletedBy: currentUser.id,
+                updatedBy: currentUser.id,
+              })
               .where(
                 and(
                   eq(productImage.variantId, update.variantId),
@@ -630,6 +638,7 @@ export class ProductVariantService {
         .set({
           status: ProductVariantStatus.INACTIVE,
           deletedAt: new Date(),
+          deletedBy: currentUser.id,
           updatedBy: currentUser.id,
         })
         .where(eq(productVariant.id, variantId));

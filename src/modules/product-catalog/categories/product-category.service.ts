@@ -217,6 +217,7 @@ export class ProductCategoryService {
       .set({
         status: ProductSimpleStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
         updatedBy: currentUser.id,
       })
       .where(eq(productCategory.id, categoryId));

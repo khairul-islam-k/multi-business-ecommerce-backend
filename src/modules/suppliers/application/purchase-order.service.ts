@@ -282,7 +282,11 @@ export class PurchaseOrderService {
     );
   }
 
-  async removePurchaseOrder(businessId: string, purchaseOrderId: string) {
+  async removePurchaseOrder(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    purchaseOrderId: string,
+  ) {
     const purchaseOrder = await this.purchaseOrders.getPurchaseOrderOrThrow(
       businessId,
       purchaseOrderId,
@@ -292,7 +296,7 @@ export class PurchaseOrderService {
 
     await this.db
       .update(supplierPurchaseOrder)
-      .set({ deletedAt: new Date() })
+      .set({ deletedAt: new Date(), deletedBy: currentUser.id })
       .where(eq(supplierPurchaseOrder.id, purchaseOrderId));
 
     return apiResponse(null, "Purchase order deleted successfully");

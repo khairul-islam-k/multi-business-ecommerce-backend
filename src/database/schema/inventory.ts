@@ -11,8 +11,10 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
+import { business } from "./business";
 import { decimal } from "./common";
 import { product, productVariant } from "./product";
+import { systemUser } from "./system";
 
 export const WarehouseStatus = {
   ACTIVE: "ACTIVE",
@@ -135,13 +137,22 @@ export const warehouse = pgTable(
   "inventory_warehouses",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     name: varchar({ length: 150 }).notNull(),
     phone: varchar({ length: 30 }),
     address: text(),
     status: warehouseStatusEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -165,7 +176,9 @@ export const inventoryStock = pgTable(
   "inventory_stocks",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     productId: uuid("product_id")
       .notNull()
       .references((): AnyPgColumn => product.id, { onDelete: "restrict" }),
@@ -209,7 +222,9 @@ export const inventoryWarehouseStock = pgTable(
   "inventory_warehouse_stocks",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     stockId: uuid("stock_id")
       .notNull()
       .references((): AnyPgColumn => inventoryStock.id, {
@@ -262,7 +277,9 @@ export const inventoryStockMovement = pgTable(
   "inventory_stock_movements",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     stockId: uuid("stock_id")
       .notNull()
       .references((): AnyPgColumn => inventoryStock.id, {
@@ -312,7 +329,9 @@ export const inventoryOrderAllocation = pgTable(
   "inventory_order_allocations",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     orderId: uuid("order_id").notNull(),
     orderItemId: uuid("order_item_id").notNull(),
     stockId: uuid("stock_id")
@@ -362,7 +381,9 @@ export const inventoryStockAdjustment = pgTable(
   "inventory_stock_adjustments",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     warehouseId: uuid("warehouse_id")
       .notNull()
       .references((): AnyPgColumn => warehouse.id, { onDelete: "cascade" }),
@@ -370,8 +391,16 @@ export const inventoryStockAdjustment = pgTable(
     adjustmentType: inventoryAdjustmentTypeEnum("adjustment_type").notNull(),
     reason: text(),
     status: inventoryAdjustmentStatusEnum().notNull(),
-    createdBy: uuid("created_by"),
-    approvedBy: uuid("approved_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    approvedBy: uuid("approved_by").references(
+      (): AnyPgColumn => systemUser.id,
+      { onDelete: "set null" },
+    ),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     approvedAt: timestamp("approved_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
@@ -443,7 +472,9 @@ export const inventoryStockTransfer = pgTable(
   "inventory_stock_transfers",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     transferNo: varchar("transfer_no", { length: 100 }).notNull(),
     fromWarehouseId: uuid("from_warehouse_id")
       .notNull()
@@ -453,8 +484,16 @@ export const inventoryStockTransfer = pgTable(
       .references((): AnyPgColumn => warehouse.id, { onDelete: "restrict" }),
     status: inventoryTransferStatusEnum().notNull(),
     note: text(),
-    createdBy: uuid("created_by"),
-    approvedBy: uuid("approved_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    approvedBy: uuid("approved_by").references(
+      (): AnyPgColumn => systemUser.id,
+      { onDelete: "set null" },
+    ),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     shippedAt: timestamp("shipped_at", { mode: "date" }),
     receivedAt: timestamp("received_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),

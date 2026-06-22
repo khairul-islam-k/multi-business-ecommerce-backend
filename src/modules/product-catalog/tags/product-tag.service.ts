@@ -161,6 +161,7 @@ export class ProductTagService {
       .set({
         status: ProductSimpleStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
         updatedBy: currentUser.id,
       })
       .where(eq(productTag.id, tagId));

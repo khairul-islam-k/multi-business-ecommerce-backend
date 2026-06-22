@@ -13,7 +13,9 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 
 import { AdminGuard } from "../../auth/guards/admin.guard";
+import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard";
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { QueryPackageDto } from "../dto/query-package.dto";
 import {
   CreatePackagePlanDto,
@@ -83,8 +85,11 @@ export class AdminPackageController {
     description:
       "Deletes package plan from normal day-to-day use. Records may be kept internally when the system needs history for reporting or auditing.",
   })
-  deletePlan(@Param("planId", ParseUUIDPipe) planId: string) {
-    return this.packages.deletePlan(planId);
+  deletePlan(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("planId", ParseUUIDPipe) planId: string,
+  ) {
+    return this.packages.deletePlan(user, planId);
   }
 
   @Post("subscriptions")

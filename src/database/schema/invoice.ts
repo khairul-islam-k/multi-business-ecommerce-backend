@@ -12,8 +12,10 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
+import { business } from "./business";
 import { decimal, type JsonValue } from "./common";
 import { financeTax } from "./finance";
+import { systemUser } from "./system";
 
 export const InvoiceStatus = {
   DRAFT: "DRAFT",
@@ -48,7 +50,9 @@ export const invoice = pgTable(
   "invoices",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     orderId: uuid("order_id"),
     customerId: uuid("customer_id"),
     taxId: uuid("tax_id").references((): AnyPgColumn => financeTax.id, {
@@ -78,7 +82,12 @@ export const invoice = pgTable(
     totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull(),
     paidAmount: decimal("paid_amount", { precision: 12, scale: 2 }).notNull(),
     note: text(),
-    createdBy: uuid("created_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -141,7 +150,9 @@ export const invoiceTemplate = pgTable(
   "invoice_templates",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     name: varchar({ length: 150 }).notNull(),
     logoUrl: text("logo_url"),
     headerText: text("header_text"),
@@ -149,8 +160,15 @@ export const invoiceTemplate = pgTable(
     termsAndConditions: text("terms_and_conditions"),
     isDefault: boolean("is_default").notNull(),
     status: invoiceTemplateStatusEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()

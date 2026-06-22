@@ -181,8 +181,16 @@ export class SupplierService {
     );
   }
 
-  async removePurchaseOrder(businessId: string, purchaseOrderId: string) {
-    return this.purchaseOrders.removePurchaseOrder(businessId, purchaseOrderId);
+  async removePurchaseOrder(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    purchaseOrderId: string,
+  ) {
+    return this.purchaseOrders.removePurchaseOrder(
+      currentUser,
+      businessId,
+      purchaseOrderId,
+    );
   }
 
   async findSupplierInvoices(

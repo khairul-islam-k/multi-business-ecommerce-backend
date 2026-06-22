@@ -239,6 +239,7 @@ export class FinanceAccountService {
       .set({
         status: FinanceAccountStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
         updatedBy: currentUser.id,
       })
       .where(eq(financeAccount.id, accountId));
@@ -310,7 +311,9 @@ export class FinanceAccountService {
   }
 
   private async withAccountsCount(accounts: FinanceAccount[]) {
-    return Promise.all(accounts.map((account) => this.withAccountCount(account)));
+    return Promise.all(
+      accounts.map((account) => this.withAccountCount(account)),
+    );
   }
 
   private async withAccountCount(

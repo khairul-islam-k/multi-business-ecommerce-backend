@@ -325,6 +325,7 @@ export class BusinessService {
       .set({
         status: BusinessStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedById: currentUser.id,
         updatedById: currentUser.id,
       })
       .where(eq(business.id, businessId));

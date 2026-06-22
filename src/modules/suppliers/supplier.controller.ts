@@ -313,10 +313,15 @@ export class SupplierController {
       "Deletes supplier purchase order from normal day-to-day use. Records may be kept internally when the system needs history for reporting or auditing.",
   })
   removePurchaseOrder(
+    @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("purchaseOrderId", ParseUUIDPipe) purchaseOrderId: string,
   ) {
-    return this.suppliers.removePurchaseOrder(businessId, purchaseOrderId);
+    return this.suppliers.removePurchaseOrder(
+      user,
+      businessId,
+      purchaseOrderId,
+    );
   }
 
   @RequirePermission(RbacFeature.SUPPLIER_MANAGEMENT, PermissionAction.READ)

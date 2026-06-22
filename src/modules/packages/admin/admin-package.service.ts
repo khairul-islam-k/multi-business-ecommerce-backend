@@ -52,6 +52,7 @@ import {
   DatabaseService,
 } from "../../../database/database.service";
 import { PackageSubscriptionService } from "../package-subscription.service";
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { isUniqueConstraintError } from "../../../common/database/db-error.util";
 import {
   apiResponse,
@@ -232,7 +233,7 @@ export class AdminPackageService {
     }
   }
 
-  async deletePlan(planId: string) {
+  async deletePlan(currentUser: CurrentUserPayload, planId: string) {
     await this.assertPlanExists(planId);
 
     await this.db
@@ -241,6 +242,7 @@ export class AdminPackageService {
         status: PackageStatus.ARCHIVED,
         isDefault: false,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
       })
       .where(eq(packagePlan.id, planId));
 

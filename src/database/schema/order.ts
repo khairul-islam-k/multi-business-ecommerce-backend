@@ -14,9 +14,11 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
+import { business } from "./business";
 import { decimal, JsonValue } from "./common";
 import { customer } from "./customer";
 import { financeAccount, financeTax } from "./finance";
+import { systemUser } from "./system";
 
 export const OrderCartStatus = {
   ACTIVE: "ACTIVE",
@@ -196,7 +198,9 @@ export const orderCart = pgTable(
   "order_carts",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     customerId: uuid("customer_id").references((): AnyPgColumn => customer.id, {
       onDelete: "set null",
     }),
@@ -253,7 +257,9 @@ export const order = pgTable(
   "orders",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     customerId: uuid("customer_id").references((): AnyPgColumn => customer.id, {
       onDelete: "set null",
     }),
@@ -286,7 +292,12 @@ export const order = pgTable(
     totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull(),
     paidAmount: decimal("paid_amount", { precision: 12, scale: 2 }).notNull(),
     note: text(),
-    createdBy: uuid("created_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -391,7 +402,9 @@ export const orderPayment = pgTable(
   "order_payments",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     orderId: uuid("order_id")
       .notNull()
       .references((): AnyPgColumn => order.id, { onDelete: "cascade" }),
@@ -434,7 +447,9 @@ export const orderReturn = pgTable(
   "order_returns",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     orderId: uuid("order_id")
       .notNull()
       .references((): AnyPgColumn => order.id, { onDelete: "cascade" }),
@@ -444,8 +459,16 @@ export const orderReturn = pgTable(
     totalAmount: decimal("total_amount", { precision: 12, scale: 2 })
       .default(new Decimal(0))
       .notNull(),
-    createdBy: uuid("created_by"),
-    approvedBy: uuid("approved_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    approvedBy: uuid("approved_by").references(
+      (): AnyPgColumn => systemUser.id,
+      { onDelete: "set null" },
+    ),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     approvedAt: timestamp("approved_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
@@ -505,7 +528,9 @@ export const orderRefund = pgTable(
   "order_refunds",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     orderId: uuid("order_id")
       .notNull()
       .references((): AnyPgColumn => order.id, { onDelete: "cascade" }),

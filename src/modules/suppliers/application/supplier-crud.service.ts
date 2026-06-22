@@ -188,6 +188,7 @@ export class SupplierCrudService {
       .set({
         status: SupplierStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
         updatedBy: currentUser.id,
       })
       .where(eq(supplier.id, supplierId));

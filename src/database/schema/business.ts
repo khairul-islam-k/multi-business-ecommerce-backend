@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  AnyPgColumn,
   boolean,
   index,
   integer,
@@ -9,11 +11,9 @@ import {
   uniqueIndex,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 import { systemUser } from "./system";
-import { sql } from "drizzle-orm";
 
 export const BusinessStatus = {
   ACTIVE: "ACTIVE",
@@ -61,6 +61,10 @@ export const business = pgTable(
       { onDelete: "set null" },
     ),
     updatedById: uuid("updated_by").references(
+      (): AnyPgColumn => systemUser.id,
+      { onDelete: "set null" },
+    ),
+    deletedById: uuid("deleted_by").references(
       (): AnyPgColumn => systemUser.id,
       { onDelete: "set null" },
     ),
@@ -220,6 +224,10 @@ export const businessMember = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
+    deletedById: uuid("deleted_by").references(
+      (): AnyPgColumn => systemUser.id,
+      { onDelete: "set null" },
+    ),
     deletedAt: timestamp("deleted_at", {
       precision: 6,
       withTimezone: true,

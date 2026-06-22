@@ -103,6 +103,10 @@ export const rbacRole = pgTable(
       (): AnyPgColumn => systemUser.id,
       { onDelete: "set null" },
     ),
+    deletedById: uuid("deleted_by").references(
+      (): AnyPgColumn => systemUser.id,
+      { onDelete: "set null" },
+    ),
     createdAt: timestamp("created_at", {
       precision: 6,
       withTimezone: true,

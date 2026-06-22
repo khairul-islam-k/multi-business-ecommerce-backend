@@ -117,16 +117,12 @@ describe("StorefrontCustomerService", () => {
       phone: "+8801700000000",
     } as never);
 
-    const result = await service.createReview(
-      currentCustomer,
-      "website-1",
-      "product-1",
-      {
-        rating: 5,
-        title: "Great",
-        comment: "Loved it",
-      },
-    );
+    const result = await service.createReview(currentCustomer, "website-1", {
+      productId: "product-1",
+      rating: 5,
+      title: "Great",
+      comment: "Loved it",
+    });
 
     expect(result.data).toMatchObject({
       id: "created-1",

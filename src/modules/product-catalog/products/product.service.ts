@@ -321,7 +321,11 @@ export class ProductService {
         if (dto.images !== undefined) {
           await tx
             .update(productImage)
-            .set({ deletedAt: new Date(), updatedBy: currentUser.id })
+            .set({
+              deletedAt: new Date(),
+              deletedBy: currentUser.id,
+              updatedBy: currentUser.id,
+            })
             .where(
               and(
                 eq(productImage.productId, productId),
@@ -388,13 +392,18 @@ export class ProductService {
         .set({
           status: CatalogProductStatus.ARCHIVED,
           deletedAt: new Date(),
+          deletedBy: currentUser.id,
           updatedBy: currentUser.id,
         })
         .where(eq(product.id, productId));
 
       await tx
         .update(productVariant)
-        .set({ deletedAt: new Date(), updatedBy: currentUser.id })
+        .set({
+          deletedAt: new Date(),
+          deletedBy: currentUser.id,
+          updatedBy: currentUser.id,
+        })
         .where(
           and(
             eq(productVariant.productId, productId),

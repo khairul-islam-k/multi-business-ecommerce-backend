@@ -160,11 +160,17 @@ export class CustomerController {
       "Deletes customer address from normal day-to-day use. Records may be kept internally when the system needs history for reporting or auditing.",
   })
   removeAddress(
+    @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("customerId", ParseUUIDPipe) customerId: string,
     @Param("addressId", ParseUUIDPipe) addressId: string,
   ) {
-    return this.customers.removeAddress(businessId, customerId, addressId);
+    return this.customers.removeAddress(
+      user,
+      businessId,
+      customerId,
+      addressId,
+    );
   }
 
   @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.READ)

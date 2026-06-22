@@ -403,6 +403,7 @@ export class WebsiteService {
       .set({
         status: WebsiteStatus.ARCHIVED,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
         updatedBy: currentUser.id,
       })
       .where(eq(website.id, websiteId));

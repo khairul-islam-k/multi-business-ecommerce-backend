@@ -128,9 +128,10 @@ export class ExpenseController {
     description: "Delete expense. ",
   })
   delete(
+    @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("expenseId", ParseUUIDPipe) expenseId: string,
   ) {
-    return this.expenses.delete(businessId, expenseId);
+    return this.expenses.delete(user, businessId, expenseId);
   }
 }

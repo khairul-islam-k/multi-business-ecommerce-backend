@@ -143,6 +143,9 @@ export const packagePlan = pgTable(
     isDefault: boolean("is_default").notNull(),
     status: packageStatusEnum().notNull(),
     sortOrder: integer("sort_order").default(0).notNull(),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()

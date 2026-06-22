@@ -22,6 +22,7 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class ExpenseCategoryService {
@@ -116,7 +117,11 @@ export class ExpenseCategoryService {
     }
   }
 
-  async remove(businessId: string, categoryId: string) {
+  async remove(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    categoryId: string,
+  ) {
     await this.assertCategoryExists(businessId, categoryId);
 
     const [{ value: activeExpenseCount }] = await this.db
@@ -141,6 +146,7 @@ export class ExpenseCategoryService {
       .set({
         status: FinanceExpenseCategoryStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
       })
       .where(eq(financeExpenseCategory.id, categoryId));
 

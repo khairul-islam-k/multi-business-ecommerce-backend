@@ -171,6 +171,7 @@ export class WarehouseService {
       .set({
         status: WarehouseStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
         updatedBy: currentUser.id,
       })
       .where(eq(warehouse.id, warehouseId));
@@ -229,7 +230,12 @@ export class WarehouseService {
     const [{ value }] = await this.db
       .select({ value: count() })
       .from(table)
-      .where(and(eq(table.businessId, businessId), eq(table.warehouseId, warehouseId)));
+      .where(
+        and(
+          eq(table.businessId, businessId),
+          eq(table.warehouseId, warehouseId),
+        ),
+      );
 
     return value;
   }

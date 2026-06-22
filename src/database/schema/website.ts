@@ -16,6 +16,7 @@ import { sql } from "drizzle-orm";
 
 import { type JsonValue } from "./common";
 import { business } from "./business";
+import { systemUser } from "./system";
 
 export const WebsiteTemplate = {
   ELECTRONIC: "ELECTRONIC",
@@ -90,8 +91,15 @@ export const website = pgTable(
     slug: varchar({ length: 180 }).notNull(),
     status: websiteStatusEnum().notNull(),
     template: websiteTemplateEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()

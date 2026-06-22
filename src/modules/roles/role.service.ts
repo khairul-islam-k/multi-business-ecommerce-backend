@@ -278,6 +278,7 @@ export class RoleService {
         .set({
           status: CommonStatus.INACTIVE,
           deletedAt: new Date(),
+          deletedById: currentUser.id,
           updatedById: currentUser.id,
         })
         .where(eq(rbacRole.id, roleId));

@@ -11,7 +11,9 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
+import { business } from "./business";
 import { type JsonValue } from "./common";
+import { systemUser } from "./system";
 
 export const NotificationChannel = {
   IN_APP: "IN_APP",
@@ -90,7 +92,9 @@ export const notificationTemplate = pgTable(
   "notification_templates",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id"),
+    businessId: uuid("business_id").references((): AnyPgColumn => business.id, {
+      onDelete: "set null",
+    }),
     name: varchar({ length: 150 }).notNull(),
     code: varchar({ length: 100 }).notNull(),
     channel: notificationChannelEnum().notNull(),
@@ -99,8 +103,15 @@ export const notificationTemplate = pgTable(
     body: text().notNull(),
     variables: jsonb().$type<JsonValue>(),
     status: notificationTemplateStatusEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -127,7 +138,9 @@ export const notification = pgTable(
   "notifications",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id"),
+    businessId: uuid("business_id").references((): AnyPgColumn => business.id, {
+      onDelete: "set null",
+    }),
     recipientType: notificationRecipientTypeEnum("recipient_type").notNull(),
     recipientId: uuid("recipient_id").notNull(),
     templateId: uuid("template_id").references(

@@ -203,20 +203,28 @@ export class MediaService {
     });
   }
 
-  async deleteImage(businessId: string, mediaAssetId: string) {
+  async deleteImage(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    mediaAssetId: string,
+  ) {
     const asset = await this.getActiveImageAssetOrThrow(
       businessId,
       mediaAssetId,
     );
 
     await this.assertImagesAreNotInUse(businessId, [asset.fileUrl]);
-    await this.softDeleteImageAssets([asset.id]);
+    await this.softDeleteImageAssets([asset.id], currentUser.id);
     await this.uploader.delete(asset.fileUrl);
 
     return apiResponse(null, "Image deleted successfully");
   }
 
-  async deleteImages(businessId: string, dto: DeleteMediaBulkDto) {
+  async deleteImages(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    dto: DeleteMediaBulkDto,
+  ) {
     if (dto.mediaAssetIds.length > this.limits.maxBulkDeleteImages) {
       throw new BadRequestException(
         `You can delete up to ${this.limits.maxBulkDeleteImages} images at once`,
@@ -232,7 +240,10 @@ export class MediaService {
       businessId,
       assets.map((asset) => asset.fileUrl),
     );
-    await this.softDeleteImageAssets(assets.map((asset) => asset.id));
+    await this.softDeleteImageAssets(
+      assets.map((asset) => asset.id),
+      currentUser.id,
+    );
 
     await Promise.all(
       assets.map((asset) => this.uploader.delete(asset.fileUrl)),
@@ -339,12 +350,13 @@ export class MediaService {
     );
   }
 
-  private async softDeleteImageAssets(mediaAssetIds: string[]) {
+  private async softDeleteImageAssets(mediaAssetIds: string[], userId: string) {
     await this.db
       .update(mediaAsset)
       .set({
         status: MediaAssetStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedBy: userId,
       })
       .where(inArray(mediaAsset.id, mediaAssetIds));
   }

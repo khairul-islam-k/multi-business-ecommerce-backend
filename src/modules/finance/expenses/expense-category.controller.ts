@@ -13,6 +13,8 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { PermissionAction, RbacFeature } from "@/database/schema";
 
+import { CurrentUser } from "../../auth/decorators/current-user.decorator";
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import { RequirePermission } from "../../permissions/decorators/require-permission.decorator";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard";
 import { BusinessGuard } from "../../business/guards/business.guard";
@@ -83,9 +85,10 @@ export class ExpenseCategoryController {
       "Deletes expense category from normal day-to-day use. Records may be kept internally when the system needs history for reporting or auditing.",
   })
   remove(
+    @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("categoryId", ParseUUIDPipe) categoryId: string,
   ) {
-    return this.categories.remove(businessId, categoryId);
+    return this.categories.remove(user, businessId, categoryId);
   }
 }

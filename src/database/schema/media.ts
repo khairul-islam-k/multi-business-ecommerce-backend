@@ -13,6 +13,7 @@ import {
 
 import { business } from "./business";
 import { sql } from "drizzle-orm";
+import { systemUser } from "./system";
 
 export const MediaFileType = {
   IMAGE: "IMAGE",
@@ -67,6 +68,9 @@ export const mediaAsset = pgTable(
     fileSize: integer("file_size"),
     altText: text("alt_text"),
     status: mediaAssetStatusEnum().notNull(),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -88,9 +92,14 @@ export const mediaTag = pgTable(
   "media_tags",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     name: varchar({ length: 100 }).notNull(),
     status: mediaTagStatusEnum().notNull(),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()

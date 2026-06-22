@@ -12,7 +12,9 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
+import { business } from "./business";
 import { type JsonValue } from "./common";
+import { systemUser } from "./system";
 
 export const SmsProviderStatus = {
   ACTIVE: "ACTIVE",
@@ -163,15 +165,24 @@ export const smsProviderConfig = pgTable(
   "sms_provider_configs",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     providerId: uuid("provider_id")
       .notNull()
       .references((): AnyPgColumn => smsProvider.id, { onDelete: "restrict" }),
     configData: jsonb("config_data").$type<JsonValue>().notNull(),
     mode: smsProviderConfigModeEnum().notNull(),
     status: smsProviderConfigStatusEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -197,14 +208,23 @@ export const smsTemplate = pgTable(
   "sms_templates",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     name: varchar({ length: 150 }).notNull(),
     templateType: smsTemplateTypeEnum("template_type").notNull(),
     messageBody: text("message_body").notNull(),
     variables: jsonb().$type<JsonValue>(),
     status: smsTemplateStatusEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -229,7 +249,9 @@ export const smsCampaign = pgTable(
   "sms_campaigns",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     templateId: uuid("template_id").references(
       (): AnyPgColumn => smsTemplate.id,
       { onDelete: "set null" },
@@ -244,7 +266,12 @@ export const smsCampaign = pgTable(
     scheduledAt: timestamp("scheduled_at", { mode: "date" }),
     startedAt: timestamp("started_at", { mode: "date" }),
     completedAt: timestamp("completed_at", { mode: "date" }),
-    createdBy: uuid("created_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -297,7 +324,9 @@ export const smsLog = pgTable(
   "sms_logs",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     campaignId: uuid("campaign_id").references(
       (): AnyPgColumn => smsCampaign.id,
       { onDelete: "set null" },

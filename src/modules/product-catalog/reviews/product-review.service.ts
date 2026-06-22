@@ -165,7 +165,11 @@ export class ProductReviewService {
 
     await this.db
       .update(productReview)
-      .set({ deletedAt: new Date(), updatedBy: currentUser.id })
+      .set({
+        deletedAt: new Date(),
+        deletedBy: currentUser.id,
+        updatedBy: currentUser.id,
+      })
       .where(eq(productReview.id, review.id));
 
     return apiResponse(null, "Product review deleted successfully");

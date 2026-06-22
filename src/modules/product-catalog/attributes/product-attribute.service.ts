@@ -136,7 +136,10 @@ export class ProductAttributeService {
         .select()
         .from(productAttribute)
         .where(where)
-        .orderBy(this.attributeOrderBy(sortBy, sortOrder), asc(productAttribute.createdAt))
+        .orderBy(
+          this.attributeOrderBy(sortBy, sortOrder),
+          asc(productAttribute.createdAt),
+        )
         .limit(limit)
         .offset(skip)
         .then((rows) => this.withAttributesValues(rows)),
@@ -213,6 +216,7 @@ export class ProductAttributeService {
         .update(productAttributeValue)
         .set({
           deletedAt,
+          deletedBy: currentUser.id,
           updatedBy: currentUser.id,
         })
         .where(
@@ -227,6 +231,7 @@ export class ProductAttributeService {
         .set({
           status: ProductSimpleStatus.INACTIVE,
           deletedAt,
+          deletedBy: currentUser.id,
           updatedBy: currentUser.id,
         })
         .where(eq(productAttribute.id, attributeId));
@@ -307,6 +312,7 @@ export class ProductAttributeService {
       .update(productAttributeValue)
       .set({
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
         updatedBy: currentUser.id,
       })
       .where(eq(productAttributeValue.id, valueId));
@@ -469,8 +475,8 @@ export class ProductAttributeService {
   ) {
     const column =
       sortBy === ProductAttributeSortBy.CREATED_AT
-          ? productAttribute.createdAt
-          : productAttribute.name;
+        ? productAttribute.createdAt
+        : productAttribute.name;
 
     return sortOrder === "asc" ? asc(column) : desc(column);
   }

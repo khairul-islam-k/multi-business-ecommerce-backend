@@ -144,6 +144,7 @@ export class FinanceTaxService {
       .set({
         status: FinanceTaxStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
         updatedBy: currentUser.id,
       })
       .where(eq(financeTax.id, taxId));

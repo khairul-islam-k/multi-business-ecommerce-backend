@@ -150,7 +150,12 @@ export class CustomerService {
     const deletedAt = new Date();
 
     await this.customers.transaction(async (tx) => {
-      await this.customers.softDeleteAddresses(tx, customerId, deletedAt);
+      await this.customers.softDeleteAddresses(
+        tx,
+        customerId,
+        currentUser.id,
+        deletedAt,
+      );
       await this.customers.softDeleteCustomer(
         tx,
         customerId,
@@ -183,8 +188,18 @@ export class CustomerService {
     return this.addresses.updateAddress(businessId, customerId, addressId, dto);
   }
 
-  removeAddress(businessId: string, customerId: string, addressId: string) {
-    return this.addresses.removeAddress(businessId, customerId, addressId);
+  removeAddress(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    customerId: string,
+    addressId: string,
+  ) {
+    return this.addresses.removeAddress(
+      currentUser,
+      businessId,
+      customerId,
+      addressId,
+    );
   }
 
   findOrders(

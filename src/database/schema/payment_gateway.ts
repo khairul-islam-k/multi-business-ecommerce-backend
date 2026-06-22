@@ -12,7 +12,9 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
+import { business } from "./business";
 import { type JsonValue } from "./common";
+import { systemUser } from "./system";
 
 export const PaymentGatewayStatus = {
   ACTIVE: "ACTIVE",
@@ -121,7 +123,9 @@ export const paymentGatewayConfig = pgTable(
   "payment_gateway_configs",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     gatewayId: uuid("gateway_id")
       .notNull()
       .references((): AnyPgColumn => paymentGateway.id, {
@@ -130,8 +134,15 @@ export const paymentGatewayConfig = pgTable(
     configData: jsonb("config_data").$type<JsonValue>().notNull(),
     mode: paymentGatewayModeEnum().notNull(),
     status: paymentGatewayConfigStatusEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -155,7 +166,9 @@ export const paymentMethod = pgTable(
   "payment_methods",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     gatewayId: uuid("gateway_id").references(
       (): AnyPgColumn => paymentGateway.id,
       { onDelete: "set null" },
@@ -189,7 +202,9 @@ export const paymentWebhookEvent = pgTable(
   "payment_webhook_events",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     gatewayId: uuid("gateway_id")
       .notNull()
       .references((): AnyPgColumn => paymentGateway.id, {

@@ -413,6 +413,7 @@ export class EmployeeService {
         .set({
           status: BusinessMemberStatus.INACTIVE,
           deletedAt: now,
+          deletedById: currentUser.id,
         })
         .where(
           and(
@@ -460,7 +461,7 @@ export class EmployeeService {
 
       await tx
         .update(systemUserProfile)
-        .set({ deletedAt: now })
+        .set({ deletedAt: now, deletedById: currentUser.id })
         .where(
           and(
             eq(systemUserProfile.userId, employeeId),

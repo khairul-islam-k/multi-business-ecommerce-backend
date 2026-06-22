@@ -150,6 +150,7 @@ export class CustomerRepository {
       .set({
         status: CustomerStatus.INACTIVE,
         deletedAt,
+        deletedBy: userId,
         updatedBy: userId,
       })
       .where(eq(customer.id, customerId));
@@ -158,11 +159,12 @@ export class CustomerRepository {
   softDeleteAddresses(
     tx: DatabaseTransaction,
     customerId: string,
+    userId: string,
     deletedAt: Date,
   ) {
     return tx
       .update(customerAddress)
-      .set({ deletedAt })
+      .set({ deletedAt, deletedBy: userId })
       .where(
         and(
           eq(customerAddress.customerId, customerId),

@@ -1,7 +1,6 @@
+import Decimal from "decimal.js";
 import {
-  boolean,
-  customType,
-  date,
+  AnyPgColumn,
   index,
   integer,
   jsonb,
@@ -12,10 +11,11 @@ import {
   uniqueIndex,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import Decimal from "decimal.js";
-import { decimal, type JsonValue } from "./common";
+
+import { business } from "./business";
+import { decimal, JsonValue } from "./common";
+import { systemUser } from "./system";
 
 export const CourierStatus = {
   ACTIVE: "ACTIVE",
@@ -148,15 +148,24 @@ export const courierConfig = pgTable(
   "courier_configs",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     courierId: uuid("courier_id")
       .notNull()
       .references((): AnyPgColumn => courier.id, { onDelete: "restrict" }),
     configData: jsonb("config_data").$type<JsonValue>().notNull(),
     mode: courierConfigModeEnum().default("SANDBOX").notNull(),
     status: courierConfigStatusEnum().default("ACTIVE").notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -182,11 +191,16 @@ export const courierDeliveryZone = pgTable(
   "courier_delivery_zones",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     name: varchar({ length: 150 }).notNull(),
     description: text(),
     status: courierDeliveryZoneStatusEnum().default("ACTIVE").notNull(),
     sortOrder: integer("sort_order").default(0).notNull(),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -239,7 +253,9 @@ export const courierShippingCharge = pgTable(
   "courier_shipping_charges",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     deliveryZoneId: uuid("delivery_zone_id")
       .notNull()
       .references((): AnyPgColumn => courierDeliveryZone.id, {
@@ -280,7 +296,9 @@ export const courierShipment = pgTable(
   "courier_shipments",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     orderId: uuid("order_id").notNull(),
     courierId: uuid("courier_id").references((): AnyPgColumn => courier.id, {
       onDelete: "set null",
@@ -310,7 +328,12 @@ export const courierShipment = pgTable(
     shippedAt: timestamp("shipped_at", { mode: "date" }),
     deliveredAt: timestamp("delivered_at", { mode: "date" }),
     cancelledAt: timestamp("cancelled_at", { mode: "date" }),
-    createdBy: uuid("created_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -370,7 +393,9 @@ export const courierReceivable = pgTable(
   "courier_receivables",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     courierId: uuid("courier_id")
       .notNull()
       .references((): AnyPgColumn => courier.id, { onDelete: "restrict" }),
@@ -418,7 +443,9 @@ export const courierSettlement = pgTable(
   "courier_settlements",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     courierId: uuid("courier_id")
       .notNull()
       .references((): AnyPgColumn => courier.id, { onDelete: "restrict" }),
@@ -439,7 +466,12 @@ export const courierSettlement = pgTable(
     status: courierSettlementStatusEnum().default("DRAFT").notNull(),
     referenceNo: varchar("reference_no", { length: 150 }),
     note: text(),
-    createdBy: uuid("created_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
