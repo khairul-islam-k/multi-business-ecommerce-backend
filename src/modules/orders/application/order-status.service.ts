@@ -182,6 +182,23 @@ export class OrderStatusService {
     businessId: string,
     orderId: string,
   ) {
+    return this.cancelOrder(businessId, orderId, currentUser.id);
+  }
+
+  async cancelByCustomer(
+    businessId: string,
+    orderId: string,
+    note?: string | null,
+  ) {
+    return this.cancelOrder(businessId, orderId, undefined, note);
+  }
+
+  private async cancelOrder(
+    businessId: string,
+    orderId: string,
+    changedBy?: string,
+    note?: string | null,
+  ) {
     const order = await this.orders.getByIdOrThrow(businessId, orderId);
 
     assertCanCancelOrder(order.status);
@@ -205,7 +222,7 @@ export class OrderStatusService {
         await this.inventory.releaseOrderReservation(
           tx,
           { businessId, allocationId: allocation.id },
-          currentUser.id,
+          changedBy,
         );
       }
 
@@ -257,7 +274,8 @@ export class OrderStatusService {
         orderId,
         fromStatus: order.status,
         toStatus: OrderStatus.CANCELLED,
-        changedBy: currentUser.id,
+        changedBy,
+        note,
       });
 
       return this.orders.hydrate(updated, tx);

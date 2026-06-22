@@ -30,6 +30,10 @@ export class OrderService {
     return this.createOrderService.create(currentUser, businessId, dto);
   }
 
+  async createStorefrontOrder(businessId: string, dto: CreateOrderDto) {
+    return this.createOrderService.createStorefrontOrder(businessId, dto);
+  }
+
   async createPosSale(
     currentUser: CurrentUserPayload,
     businessId: string,
@@ -82,5 +86,13 @@ export class OrderService {
     orderId: string,
   ) {
     return this.orderStatusService.cancel(currentUser, businessId, orderId);
+  }
+
+  async cancelByCustomer(
+    businessId: string,
+    orderId: string,
+    note?: string | null,
+  ) {
+    return this.orderStatusService.cancelByCustomer(businessId, orderId, note);
   }
 }

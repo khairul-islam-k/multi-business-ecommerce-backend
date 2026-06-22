@@ -2,7 +2,10 @@ import Decimal from "decimal.js";
 import { describe, expect, it, jest } from "@jest/globals";
 
 import {
+  orderCart,
+  OrderCartStatus,
   orderCartItem,
+  OrderStatus,
   productReview,
   ProductReviewStatus,
 } from "@/database/schema";
@@ -50,12 +53,21 @@ function createService() {
       businessId: "business-1",
     })),
   };
+  const orders = {
+    createStorefrontOrder: jest.fn(),
+    cancelByCustomer: jest.fn(),
+  };
+  const orderCodes = {
+    generateUniqueReturnNo: jest.fn(),
+  };
   const service = new StorefrontCustomerService(
     { db } as never,
     websites as never,
+    orders as never,
+    orderCodes as never,
   );
 
-  return { db, inserts, service, updates };
+  return { db, inserts, orderCodes, orders, service, updates };
 }
 
 describe("StorefrontCustomerService", () => {
@@ -140,6 +152,76 @@ describe("StorefrontCustomerService", () => {
         reviewerPhone: "+8801700000000",
         status: ProductReviewStatus.PENDING,
       }),
+    });
+  });
+
+  it("places the active cart as an unpaid storefront order", async () => {
+    const { orders, service, updates } = createService();
+    const cart = {
+      id: "cart-1",
+      businessId: "business-1",
+      customerId: "customer-1",
+    };
+    const placedOrder = {
+      id: "order-1",
+      status: OrderStatus.PENDING,
+    };
+
+    orders.createStorefrontOrder.mockResolvedValue({
+      data: { id: "order-1" },
+    } as never);
+
+    jest
+      .spyOn(service as any, "assertStorefrontCustomer")
+      .mockResolvedValue({ id: "website-1" } as never);
+    jest.spyOn(service as any, "getCustomerOrThrow").mockResolvedValue({
+      id: "customer-1",
+      name: "Buyer One",
+      phone: "+8801700000000",
+    } as never);
+    jest
+      .spyOn(service as any, "findActiveCart")
+      .mockResolvedValue(cart as never);
+    jest.spyOn(service as any, "getCartItems").mockResolvedValue([
+      {
+        productId: "product-1",
+        variantId: null,
+        quantity: new Decimal(2),
+      },
+    ] as never);
+    jest
+      .spyOn(service as any, "findCustomerOrderOrThrow")
+      .mockResolvedValue(placedOrder as never);
+
+    const result = await service.placeOrder(currentCustomer, "website-1", {
+      taxId: "tax-1",
+      shippingCharge: 50,
+    });
+
+    expect(result.data).toBe(placedOrder);
+    expect(orders.createStorefrontOrder).toHaveBeenCalledWith("business-1", {
+      customerId: "customer-1",
+      customerName: "Buyer One",
+      customerPhone: "+8801700000000",
+      customerEmail: "buyer@example.com",
+      items: [
+        {
+          productId: "product-1",
+          variantId: undefined,
+          quantity: 2,
+        },
+      ],
+      note: undefined,
+      shippingAddressSnapshot: undefined,
+      shippingCharge: 50,
+      taxId: "tax-1",
+      warehouseId: undefined,
+    });
+    expect(updates).toContainEqual({
+      table: orderCart,
+      values: {
+        status: OrderCartStatus.ORDERED,
+      },
     });
   });
 });

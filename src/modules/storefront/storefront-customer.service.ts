@@ -1,12 +1,20 @@
 import Decimal from "decimal.js";
-import { and, count, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import {
   CatalogProductStatus,
   customer,
   OrderCartStatus,
+  order,
   orderCart,
   orderCartItem,
+  orderItem,
+  orderPayment,
+  OrderReturnStatus,
+  orderReturn,
+  orderReturnItem,
+  OrderStatus,
+  orderStatusLog,
   product,
   productReview,
   ProductReviewStatus,
@@ -14,6 +22,7 @@ import {
   ProductVariantStatus,
 } from "@/database/schema";
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -32,11 +41,19 @@ import { DatabaseService } from "../../database/database.service";
 import { WebsiteService } from "../website/website.service";
 import {
   AddStorefrontCartItemDto,
+  CancelStorefrontOrderDto,
+  CreateStorefrontOrderReturnDto,
   CreateStorefrontReviewDto,
+  PlaceStorefrontOrderDto,
   StorefrontCartQueryDto,
+  StorefrontOrderQueryDto,
   StorefrontReviewQueryDto,
   UpdateStorefrontCartItemDto,
 } from "./dto/storefront-customer.dto";
+import { OrderService } from "../orders/order.service";
+import { OrderCodeRepository } from "../orders/infrastructure/order-code.repository";
+import { OrderSortBy } from "../orders/dto/order.dto";
+import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 
 import type { CurrentCustomerPayload } from "../customer-auth/strategies/customer-jwt.strategy";
 
@@ -45,6 +62,8 @@ export class StorefrontCustomerService {
   constructor(
     private readonly database: DatabaseService,
     private readonly websites: WebsiteService,
+    private readonly orders: OrderService,
+    private readonly orderCodes: OrderCodeRepository,
   ) {}
 
   private get db() {
@@ -214,11 +233,267 @@ export class StorefrontCustomerService {
         reviewerName: normalizeRequiredText(customerRow.name),
         reviewerEmail: normalizeOptionalText(currentCustomer.email),
         reviewerPhone: normalizeOptionalText(customerRow.phone),
-        status: ProductReviewStatus.APPROVED,
+        status: ProductReviewStatus.PENDING,
       })
       .returning();
 
     return apiResponse(review, "Product review created successfully");
+  }
+
+  async placeOrder(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string,
+    dto: PlaceStorefrontOrderDto,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+    const [customerRow, cart] = await Promise.all([
+      this.getCustomerOrThrow(currentCustomer),
+      this.findActiveCart(currentCustomer),
+    ]);
+
+    if (!cart) {
+      throw new BadRequestException("Active cart is empty");
+    }
+
+    const cartItems = await this.getCartItems(cart.id);
+
+    if (cartItems.length === 0) {
+      throw new BadRequestException("Active cart is empty");
+    }
+
+    const createdOrderResponse = await this.orders.createStorefrontOrder(
+      currentCustomer.businessId,
+      {
+        customerId: currentCustomer.customerId,
+        warehouseId: dto.warehouseId,
+        taxId: dto.taxId,
+        customerName: customerRow.name,
+        customerPhone: customerRow.phone ?? undefined,
+        customerEmail: currentCustomer.email,
+        shippingAddressSnapshot: dto.shippingAddressSnapshot,
+        shippingCharge: dto.shippingCharge,
+        note: dto.note,
+        items: cartItems.map((row) => ({
+          productId: row.productId,
+          variantId: row.variantId ?? undefined,
+          quantity: Number(new Decimal(row.quantity).toString()),
+        })),
+      },
+    );
+
+    await this.db
+      .update(orderCart)
+      .set({
+        status: OrderCartStatus.ORDERED,
+      })
+      .where(eq(orderCart.id, cart.id));
+
+    const placedOrder = await this.findCustomerOrderOrThrow(
+      currentCustomer,
+      createdOrderResponse.data.id,
+    );
+
+    return apiResponse(placedOrder, "Order placed successfully");
+  }
+
+  async findOrders(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string,
+    query: StorefrontOrderQueryDto,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const skip = (page - 1) * limit;
+    const where = and(
+      eq(order.businessId, currentCustomer.businessId),
+      eq(order.customerId, currentCustomer.customerId),
+      isNull(order.deletedAt),
+      query.status ? eq(order.status, query.status) : undefined,
+      query.paymentStatus
+        ? eq(order.paymentStatus, query.paymentStatus)
+        : undefined,
+    );
+
+    const [rows, total] = await Promise.all([
+      this.db
+        .select()
+        .from(order)
+        .where(where)
+        .orderBy(
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [OrderSortBy.ORDER_NO]: order.orderNo,
+                [OrderSortBy.TOTAL_AMOUNT]: order.totalAmount,
+                [OrderSortBy.CREATED_AT]: order.createdAt,
+                [OrderSortBy.UPDATED_AT]: order.updatedAt,
+              },
+              OrderSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
+          ),
+        )
+        .limit(limit)
+        .offset(skip),
+      this.db
+        .select({ value: count() })
+        .from(order)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
+    ]);
+
+    return paginatedResponse(
+      await Promise.all(rows.map((row) => this.hydrateOrder(row))),
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    );
+  }
+
+  async findOrder(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string,
+    orderId: string,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+
+    return apiResponse(
+      await this.findCustomerOrderOrThrow(currentCustomer, orderId),
+    );
+  }
+
+  async cancelOrder(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string,
+    orderId: string,
+    dto: CancelStorefrontOrderDto,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+    await this.assertCustomerOrderExists(currentCustomer, orderId);
+    await this.orders.cancelByCustomer(
+      currentCustomer.businessId,
+      orderId,
+      normalizeOptionalText(dto.reason),
+    );
+
+    return apiResponse(
+      await this.findCustomerOrderOrThrow(currentCustomer, orderId),
+      "Order cancelled successfully",
+    );
+  }
+
+  async createOrderReturn(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string,
+    orderId: string,
+    dto: CreateStorefrontOrderReturnDto,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+    const orderRow = await this.getCustomerOrderRowOrThrow(
+      currentCustomer,
+      orderId,
+    );
+
+    if (orderRow.status !== OrderStatus.DELIVERED) {
+      throw new BadRequestException("Only delivered orders can be returned");
+    }
+
+    if (dto.items.length === 0) {
+      throw new BadRequestException("At least one return item is required");
+    }
+
+    const uniqueOrderItemIds = new Set(
+      dto.items.map((item) => item.orderItemId),
+    );
+
+    if (uniqueOrderItemIds.size !== dto.items.length) {
+      throw new BadRequestException("Duplicate return items are not allowed");
+    }
+
+    const orderItems = await this.db
+      .select()
+      .from(orderItem)
+      .where(
+        and(
+          eq(orderItem.orderId, orderId),
+          inArray(orderItem.id, [...uniqueOrderItemIds]),
+        ),
+      );
+
+    if (orderItems.length !== dto.items.length) {
+      throw new BadRequestException("One or more return items are invalid");
+    }
+
+    const itemById = new Map(orderItems.map((item) => [item.id, item]));
+    const returnItems = dto.items.map((item) => {
+      const sourceItem = itemById.get(item.orderItemId)!;
+      const quantity = new Decimal(item.quantity);
+      const sourceQuantity = new Decimal(sourceItem.quantity);
+
+      if (quantity.greaterThan(sourceQuantity)) {
+        throw new BadRequestException(
+          "Return quantity cannot exceed ordered quantity",
+        );
+      }
+
+      const lineTotal = new Decimal(sourceItem.lineTotal)
+        .mul(quantity)
+        .div(sourceQuantity)
+        .toDecimalPlaces(2);
+
+      return {
+        sourceItem,
+        quantity,
+        lineTotal,
+        reason: normalizeOptionalText(item.reason),
+      };
+    });
+    const totalAmount = returnItems.reduce(
+      (total, item) => total.plus(item.lineTotal),
+      new Decimal(0),
+    );
+    const returnNo = await this.orderCodes.generateUniqueReturnNo(
+      currentCustomer.businessId,
+    );
+
+    const createdReturn = await this.db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(orderReturn)
+        .values({
+          businessId: currentCustomer.businessId,
+          orderId,
+          returnNo,
+          status: OrderReturnStatus.REQUESTED,
+          reason: normalizeOptionalText(dto.reason),
+          totalAmount,
+        })
+        .returning();
+
+      await tx.insert(orderReturnItem).values(
+        returnItems.map((item) => ({
+          returnId: created.id,
+          orderItemId: item.sourceItem.id,
+          productId: item.sourceItem.productId,
+          variantId: item.sourceItem.variantId,
+          quantity: item.quantity,
+          unitPrice: item.sourceItem.unitPrice,
+          lineTotal: item.lineTotal,
+          reason: item.reason,
+        })),
+      );
+
+      return created;
+    });
+
+    return apiResponse(
+      await this.hydrateOrderReturn(createdReturn),
+      "Order return requested successfully",
+    );
   }
 
   async findReviews(
@@ -355,6 +630,108 @@ export class StorefrontCustomerService {
         product: row.product,
         variant: row.variant,
       })),
+    };
+  }
+
+  private getCartItems(cartId: string) {
+    return this.db
+      .select()
+      .from(orderCartItem)
+      .where(eq(orderCartItem.cartId, cartId))
+      .orderBy(asc(orderCartItem.createdAt));
+  }
+
+  private async findCustomerOrderOrThrow(
+    currentCustomer: CurrentCustomerPayload,
+    orderId: string,
+  ) {
+    const orderRow = await this.getCustomerOrderRowOrThrow(
+      currentCustomer,
+      orderId,
+    );
+
+    return this.hydrateOrder(orderRow);
+  }
+
+  private async assertCustomerOrderExists(
+    currentCustomer: CurrentCustomerPayload,
+    orderId: string,
+  ) {
+    await this.getCustomerOrderRowOrThrow(currentCustomer, orderId);
+  }
+
+  private async getCustomerOrderRowOrThrow(
+    currentCustomer: CurrentCustomerPayload,
+    orderId: string,
+  ) {
+    const [orderRow] = await this.db
+      .select()
+      .from(order)
+      .where(
+        and(
+          eq(order.id, orderId),
+          eq(order.businessId, currentCustomer.businessId),
+          eq(order.customerId, currentCustomer.customerId),
+          isNull(order.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!orderRow) {
+      throw new NotFoundException("Order not found");
+    }
+
+    return orderRow;
+  }
+
+  private async hydrateOrder(orderRow: typeof order.$inferSelect) {
+    const [items, payments, statusLogs, returns] = await Promise.all([
+      this.db
+        .select()
+        .from(orderItem)
+        .where(eq(orderItem.orderId, orderRow.id))
+        .orderBy(asc(orderItem.createdAt)),
+      this.db
+        .select()
+        .from(orderPayment)
+        .where(eq(orderPayment.orderId, orderRow.id))
+        .orderBy(desc(orderPayment.createdAt)),
+      this.db
+        .select()
+        .from(orderStatusLog)
+        .where(eq(orderStatusLog.orderId, orderRow.id))
+        .orderBy(asc(orderStatusLog.createdAt)),
+      this.db
+        .select()
+        .from(orderReturn)
+        .where(
+          and(
+            eq(orderReturn.orderId, orderRow.id),
+            isNull(orderReturn.deletedAt),
+          ),
+        )
+        .orderBy(desc(orderReturn.createdAt)),
+    ]);
+
+    return {
+      ...orderRow,
+      items,
+      payments,
+      statusLogs,
+      returns,
+    };
+  }
+
+  private async hydrateOrderReturn(returnRow: typeof orderReturn.$inferSelect) {
+    const items = await this.db
+      .select()
+      .from(orderReturnItem)
+      .where(eq(orderReturnItem.returnId, returnRow.id))
+      .orderBy(asc(orderReturnItem.createdAt));
+
+    return {
+      ...returnRow,
+      items,
     };
   }
 

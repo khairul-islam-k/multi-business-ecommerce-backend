@@ -16,8 +16,12 @@ import { CurrentCustomer } from "../customer-auth/decorators/current-customer.de
 import { CustomerAuthGuard } from "../customer-auth/guards/customer-auth.guard";
 import {
   AddStorefrontCartItemDto,
+  CancelStorefrontOrderDto,
+  CreateStorefrontOrderReturnDto,
   CreateStorefrontReviewDto,
+  PlaceStorefrontOrderDto,
   StorefrontCartQueryDto,
+  StorefrontOrderQueryDto,
   StorefrontReviewQueryDto,
   UpdateStorefrontCartItemDto,
 } from "./dto/storefront-customer.dto";
@@ -96,6 +100,68 @@ export class StorefrontCustomerController {
     @Param("websiteId", ParseUUIDPipe) websiteId: string,
   ) {
     return this.storefrontCustomers.clearActiveCart(customer, websiteId);
+  }
+
+  @Post("orders/place")
+  @ApiOperation({ summary: "Place active cart as an unpaid order" })
+  placeOrder(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Param("websiteId", ParseUUIDPipe) websiteId: string,
+    @Body() dto: PlaceStorefrontOrderDto,
+  ) {
+    return this.storefrontCustomers.placeOrder(customer, websiteId, dto);
+  }
+
+  @Get("orders")
+  @ApiOperation({ summary: "Get customer order history" })
+  findOrders(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Param("websiteId", ParseUUIDPipe) websiteId: string,
+    @Query() query: StorefrontOrderQueryDto,
+  ) {
+    return this.storefrontCustomers.findOrders(customer, websiteId, query);
+  }
+
+  @Get("orders/:orderId")
+  @ApiOperation({ summary: "Get customer order details" })
+  findOrder(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Param("websiteId", ParseUUIDPipe) websiteId: string,
+    @Param("orderId", ParseUUIDPipe) orderId: string,
+  ) {
+    return this.storefrontCustomers.findOrder(customer, websiteId, orderId);
+  }
+
+  @Post("orders/:orderId/cancel")
+  @ApiOperation({ summary: "Cancel a customer order" })
+  cancelOrder(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Param("websiteId", ParseUUIDPipe) websiteId: string,
+    @Param("orderId", ParseUUIDPipe) orderId: string,
+    @Body() dto: CancelStorefrontOrderDto,
+  ) {
+    return this.storefrontCustomers.cancelOrder(
+      customer,
+      websiteId,
+      orderId,
+      dto,
+    );
+  }
+
+  @Post("orders/:orderId/return")
+  @ApiOperation({ summary: "Request a customer order return" })
+  createOrderReturn(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Param("websiteId", ParseUUIDPipe) websiteId: string,
+    @Param("orderId", ParseUUIDPipe) orderId: string,
+    @Body() dto: CreateStorefrontOrderReturnDto,
+  ) {
+    return this.storefrontCustomers.createOrderReturn(
+      customer,
+      websiteId,
+      orderId,
+      dto,
+    );
   }
 
   @Get("reviews")

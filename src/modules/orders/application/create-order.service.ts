@@ -72,6 +72,17 @@ export class CreateOrderService {
       orderType: dto.orderType ?? OrderType.ADMIN,
       orderSource: dto.orderSource ?? OrderSource.ADMIN_PANEL,
       fulfillImmediately: false,
+      initialStatus: OrderStatus.CONFIRMED,
+    });
+  }
+
+  async createStorefrontOrder(businessId: string, dto: CreateOrderDto) {
+    return this.createOrderFlow(undefined, businessId, {
+      ...dto,
+      orderType: OrderType.ONLINE,
+      orderSource: OrderSource.WEBSITE,
+      fulfillImmediately: false,
+      initialStatus: OrderStatus.PENDING,
     });
   }
 
@@ -96,16 +107,18 @@ export class CreateOrderService {
       orderType: OrderType.POS,
       orderSource: OrderSource.POS,
       fulfillImmediately: true,
+      initialStatus: OrderStatus.DELIVERED,
     });
   }
 
   private async createOrderFlow(
-    currentUser: CurrentUserPayload,
+    currentUser: CurrentUserPayload | undefined,
     businessId: string,
     params: CreateOrderDto & {
       orderType: OrderType;
       orderSource: OrderSource;
       fulfillImmediately: boolean;
+      initialStatus: OrderStatus;
     },
   ) {
     assertOrderItems(params.items);
@@ -142,9 +155,7 @@ export class CreateOrderService {
           orderNo,
           orderType: params.orderType,
           orderSource: params.orderSource,
-          status: params.fulfillImmediately
-            ? OrderStatus.DELIVERED
-            : OrderStatus.CONFIRMED,
+          status: params.initialStatus,
           paymentStatus: OrderPaymentStatus.UNPAID,
           customerName: this.normalizeNullableText(params.customerName),
           customerPhone: this.normalizeNullableText(params.customerPhone),
@@ -159,17 +170,15 @@ export class CreateOrderService {
           shippingCharge: totals.shippingCharge,
           totalAmount: totals.totalAmount,
           note: this.normalizeNullableText(params.note),
-          createdBy: currentUser.id,
+          createdBy: currentUser?.id,
           paidAmount: new Decimal(0),
         })
         .returning();
 
       await tx.insert(orderStatusLog).values({
         orderId: createdOrder.id,
-        toStatus: params.fulfillImmediately
-          ? OrderStatus.DELIVERED
-          : OrderStatus.CONFIRMED,
-        changedBy: currentUser.id,
+        toStatus: params.initialStatus,
+        changedBy: currentUser?.id,
       });
 
       const createdItems: OrderItem[] = [];
@@ -201,7 +210,7 @@ export class CreateOrderService {
             variantId: item.variantId ?? null,
             quantity: item.quantity,
             warehouseId: params.warehouseId,
-            createdBy: currentUser.id,
+            createdBy: currentUser?.id,
           },
         );
 
@@ -209,7 +218,7 @@ export class CreateOrderService {
           await this.inventoryLookupService.fulfillOrderAllocation(
             tx,
             { businessId, allocationId: allocation.id },
-            currentUser.id,
+            currentUser?.id,
           );
         }
       }
@@ -221,10 +230,16 @@ export class CreateOrderService {
         invoiceNo,
         taxId: tax.id,
         taxRate: tax.rate,
-        currentUserId: currentUser.id,
+        currentUserId: currentUser?.id,
       });
 
       if (params.payment) {
+        if (!currentUser?.id) {
+          throw new BadRequestException(
+            "Payment cannot be created without a system user",
+          );
+        }
+
         await this.orderPaymentService.createPayment(tx, {
           businessId,
           orderId: createdOrder.id,
@@ -241,7 +256,7 @@ export class CreateOrderService {
           items: createdItems,
           courier: params.courier,
           isCod: params.isCod ?? false,
-          currentUserId: currentUser.id,
+          currentUserId: currentUser?.id,
         });
       }
 
@@ -264,7 +279,7 @@ export class CreateOrderService {
       invoiceNo: string;
       taxId: string;
       taxRate: Decimal.Value;
-      currentUserId: string;
+      currentUserId?: string;
     },
   ) {
     const [createdInvoice] = await tx
@@ -317,7 +332,7 @@ export class CreateOrderService {
       items: OrderItem[];
       courier: NonNullable<CreateOrderDto["courier"]>;
       isCod: boolean;
-      currentUserId: string;
+      currentUserId?: string;
     },
   ) {
     const shipmentNo = await this.orderCodeRepository.generateUniqueShipmentNo(

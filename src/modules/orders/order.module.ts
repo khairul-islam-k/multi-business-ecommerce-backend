@@ -34,6 +34,6 @@ import { PermissionModule } from "../permissions/permission.module";
     OrderRepository,
     OrderCodeRepository,
   ],
-  exports: [OrderService],
+  exports: [OrderService, OrderCodeRepository],
 })
 export class OrderModule {}
