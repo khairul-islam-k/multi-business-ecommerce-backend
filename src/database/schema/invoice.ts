@@ -11,7 +11,6 @@ import {
   varchar,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import Decimal from "decimal.js";
 
 import { decimal, type JsonValue } from "./common";
 import { financeTax } from "./finance";
@@ -105,7 +104,7 @@ export type Invoice = typeof invoice.$inferSelect;
 export type NewInvoice = typeof invoice.$inferInsert;
 
 export const invoiceItem = pgTable(
-  "invoice_invoice_items",
+  "invoice_items",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
     invoiceId: uuid("invoice_id")
@@ -129,10 +128,10 @@ export const invoiceItem = pgTable(
       .notNull(),
   },
   (table) => [
-    index("invoice_invoice_items_invoice_id_idx").on(table.invoiceId),
-    index("invoice_invoice_items_order_item_id_idx").on(table.orderItemId),
-    index("invoice_invoice_items_product_id_idx").on(table.productId),
-    index("invoice_invoice_items_variant_id_idx").on(table.variantId),
+    index("invoice_items_invoice_id_idx").on(table.invoiceId),
+    index("invoice_items_order_item_id_idx").on(table.orderItemId),
+    index("invoice_items_product_id_idx").on(table.productId),
+    index("invoice_items_variant_id_idx").on(table.variantId),
   ],
 );
 export type InvoiceItem = typeof invoiceItem.$inferSelect;

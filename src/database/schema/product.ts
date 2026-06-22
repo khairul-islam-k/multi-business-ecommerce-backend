@@ -15,6 +15,7 @@ import { sql } from "drizzle-orm";
 
 import { decimal } from "./common";
 import { business } from "./business";
+import { customer } from "./customer";
 
 export const ProductSimpleStatus = {
   ACTIVE: "ACTIVE",
@@ -482,6 +483,9 @@ export const productReview = pgTable(
     productId: uuid("product_id")
       .notNull()
       .references((): AnyPgColumn => product.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id").references((): AnyPgColumn => customer.id, {
+      onDelete: "set null",
+    }),
     variantId: uuid("variant_id").references(
       (): AnyPgColumn => productVariant.id,
       { onDelete: "set null" },
@@ -505,6 +509,11 @@ export const productReview = pgTable(
   (table) => [
     index("product_reviews_business_id_idx").on(table.businessId),
     index("product_reviews_product_id_idx").on(table.productId),
+    index("product_reviews_customer_id_idx").on(table.customerId),
+    index("product_reviews_business_id_customer_id_idx").on(
+      table.businessId,
+      table.customerId,
+    ),
     index("product_reviews_variant_id_idx").on(table.variantId),
     index("product_reviews_status_idx").on(table.status),
     index("product_reviews_rating_idx").on(table.rating),

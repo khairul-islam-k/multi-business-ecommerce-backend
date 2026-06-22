@@ -46,10 +46,10 @@ export class StorefrontProductQueryDto {
   @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsOptional()
   @IsUUID()
-  tagId?: string;
+  brandId?: string;
 
   @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsOptional()
   @IsUUID()
-  brandId?: string;
+  tagId?: string;
 }

@@ -1,4 +1,7 @@
+import Decimal from "decimal.js";
+import { sql } from "drizzle-orm";
 import {
+  AnyPgColumn,
   boolean,
   index,
   jsonb,
@@ -9,13 +12,11 @@ import {
   uniqueIndex,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import Decimal from "decimal.js";
 
-import { decimal, type JsonValue } from "./common";
-import { financeAccount, financeTax } from "./finance";
+import { decimal, JsonValue } from "./common";
 import { customer } from "./customer";
+import { financeAccount, financeTax } from "./finance";
 
 export const OrderCartStatus = {
   ACTIVE: "ACTIVE",
@@ -213,6 +214,11 @@ export const orderCart = pgTable(
     index("order_carts_customer_id_idx").on(table.customerId),
     index("order_carts_session_id_idx").on(table.sessionId),
     index("order_carts_status_idx").on(table.status),
+    uniqueIndex("order_carts_active_customer_unique")
+      .on(table.businessId, table.customerId)
+      .where(
+        sql`${table.customerId} IS NOT NULL AND ${table.status} = 'ACTIVE'`,
+      ),
   ],
 );
 export type OrderCart = typeof orderCart.$inferSelect;
