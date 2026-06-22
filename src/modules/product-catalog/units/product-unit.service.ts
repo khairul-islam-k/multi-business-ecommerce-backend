@@ -9,10 +9,13 @@ import {
   product,
   productUnit,
 } from "@/database/schema";
-import { and, asc, count, desc, eq, ilike, isNull } from "drizzle-orm";
+import { and, count, eq, ilike, isNull } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { QueryCatalogDto } from "../common/dto/query-catalog.dto";
+import {
+  CatalogSortBy,
+  QueryCatalogDto,
+} from "../common/dto/query-catalog.dto";
 import {
   CreateProductUnitDto,
   UpdateProductUnitDto,
@@ -23,6 +26,10 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import {
+  buildOrderBy,
+  resolveSortColumn,
+} from "../../../common/http/sort.util";
 
 type UnitWithCount = ProductUnit & {
   _count: { products: number };
@@ -82,9 +89,18 @@ export class ProductUnitService {
         .from(productUnit)
         .where(where)
         .orderBy(
-          query.sortOrder === "asc"
-            ? asc(productUnit.createdAt)
-            : desc(productUnit.createdAt),
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [CatalogSortBy.NAME]: productUnit.name,
+                [CatalogSortBy.CREATED_AT]: productUnit.createdAt,
+                [CatalogSortBy.UPDATED_AT]: productUnit.updatedAt,
+              },
+              CatalogSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
+          ),
         )
         .limit(limit)
         .offset(skip)

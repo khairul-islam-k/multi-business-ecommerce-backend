@@ -9,10 +9,13 @@ import {
   product,
   productCategory,
 } from "@/database/schema";
-import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+import { and, asc, count, eq, ilike, isNull, or } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { QueryCatalogDto } from "../common/dto/query-catalog.dto";
+import {
+  CatalogSortBy,
+  QueryCatalogDto,
+} from "../common/dto/query-catalog.dto";
 import {
   CreateProductCategoryDto,
   UpdateProductCategoryDto,
@@ -23,6 +26,10 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import {
+  buildOrderBy,
+  resolveSortColumn,
+} from "../../../common/http/sort.util";
 
 type CategoryWithDetails = ProductCategory & {
   parent: ProductCategory | null;
@@ -107,9 +114,18 @@ export class ProductCategoryService {
         .where(where)
         .orderBy(
           asc(productCategory.sortOrder),
-          query.sortOrder === "asc"
-            ? asc(productCategory.createdAt)
-            : desc(productCategory.createdAt),
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [CatalogSortBy.NAME]: productCategory.name,
+                [CatalogSortBy.CREATED_AT]: productCategory.createdAt,
+                [CatalogSortBy.UPDATED_AT]: productCategory.updatedAt,
+              },
+              CatalogSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
+          ),
         )
         .limit(limit)
         .offset(skip)

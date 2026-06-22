@@ -3,7 +3,6 @@ import {
   and,
   asc,
   count,
-  desc,
   eq,
   getTableColumns,
   ilike,
@@ -36,8 +35,10 @@ import { ProductReviewService } from "../product-catalog/reviews/product-review.
 import { WebsiteService } from "../website/website.service";
 import {
   ResolveStorefrontDto,
+  StorefrontProductSortBy,
   StorefrontProductQueryDto,
 } from "./dto/storefront.dto";
+import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 
 type CategoryRow = typeof productCategory.$inferInsert;
 
@@ -185,12 +186,25 @@ export class StorefrontService {
         : undefined,
     );
 
+    const orderBy = buildOrderBy(
+      resolveSortColumn(
+        query.sortBy,
+        {
+          [StorefrontProductSortBy.NAME]: product.name,
+          [StorefrontProductSortBy.PRICE]: product.price,
+          [StorefrontProductSortBy.CREATED_AT]: product.createdAt,
+        },
+        StorefrontProductSortBy.CREATED_AT,
+      ),
+      query.sortOrder,
+    );
+
     const [rows, total] = await Promise.all([
       this.db
         .select()
         .from(product)
         .where(where)
-        .orderBy(desc(product.createdAt))
+        .orderBy(orderBy)
         .limit(limit)
         .offset(skip)
         .then((items) =>

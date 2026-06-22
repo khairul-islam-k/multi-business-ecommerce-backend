@@ -1,38 +1,19 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { CommonStatus } from "@/database/schema";
 import { Type } from "class-transformer";
-import {
-  IsBoolean,
-  IsEnum,
-  IsIn,
-  IsInt,
-  IsOptional,
-  IsString,
-  Max,
-  Min,
-} from "class-validator";
+import { IsBoolean, IsEnum, IsIn, IsOptional } from "class-validator";
 
-export class QueryRoleDto {
-  @ApiPropertyOptional({ example: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
+import { SortedPaginationQueryDto } from "../../../common/http/query.dto";
 
-  @ApiPropertyOptional({ example: 10 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit?: number = 10;
+export const RoleSortBy = {
+  NAME: "name",
+  STATUS: "status",
+  CREATED_AT: "createdAt",
+  UPDATED_AT: "updatedAt",
+} as const;
+export type RoleSortBy = (typeof RoleSortBy)[keyof typeof RoleSortBy];
 
-  @ApiPropertyOptional({ example: "manager" })
-  @IsOptional()
-  @IsString()
-  search?: string;
-
+export class QueryRoleDto extends SortedPaginationQueryDto<RoleSortBy> {
   @ApiPropertyOptional({
     enum: CommonStatus,
     example: CommonStatus.ACTIVE,
@@ -50,18 +31,10 @@ export class QueryRoleDto {
   includeDeleted?: boolean;
 
   @ApiPropertyOptional({
-    enum: ["name", "status", "createdAt", "updatedAt"],
+    enum: RoleSortBy,
     example: "createdAt",
   })
   @IsOptional()
-  @IsIn(["name", "status", "createdAt", "updatedAt"])
-  sortBy?: "name" | "status" | "createdAt" | "updatedAt";
-
-  @ApiPropertyOptional({
-    enum: ["asc", "desc"],
-    example: "desc",
-  })
-  @IsOptional()
-  @IsIn(["asc", "desc"])
-  sortOrder?: "asc" | "desc";
+  @IsIn(Object.values(RoleSortBy))
+  sortBy?: RoleSortBy = RoleSortBy.CREATED_AT;
 }

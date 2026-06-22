@@ -43,7 +43,7 @@ import type { CurrentUserPayload } from "../auth/decorators/current-user.decorat
 import { AssignRoleDto } from "./dto/assign-role.dto";
 import { CreateRoleDto } from "./dto/create-role.dto";
 import { QueryRoleAssignmentsDto } from "./dto/query-role-assignment.dto";
-import { QueryRoleDto } from "./dto/query-role.dto";
+import { QueryRoleDto, RoleSortBy } from "./dto/query-role.dto";
 import { RolePermissionDto } from "./dto/role-permission.dto";
 import { UpdateRoleAssignmentDto } from "./dto/update-role-assignment.dto";
 import { UpdateRoleDto } from "./dto/update-role.dto";
@@ -53,6 +53,7 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
+import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 
 const ACCESSIBLE_BUSINESS_STATUSES = [
   BusinessStatus.ACTIVE,
@@ -142,8 +143,6 @@ export class RoleService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const sortBy = query.sortBy ?? "createdAt";
-    const sortOrder = query.sortOrder ?? "desc";
     const canIncludeDeleted =
       currentUser.type === SystemUserType.ADMIN && query.includeDeleted;
     const where = and(
@@ -163,7 +162,21 @@ export class RoleService {
         .select()
         .from(rbacRole)
         .where(where)
-        .orderBy(this.roleOrderBy(sortBy, sortOrder))
+        .orderBy(
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [RoleSortBy.NAME]: rbacRole.name,
+                [RoleSortBy.STATUS]: rbacRole.status,
+                [RoleSortBy.CREATED_AT]: rbacRole.createdAt,
+                [RoleSortBy.UPDATED_AT]: rbacRole.updatedAt,
+              },
+              RoleSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
+          ),
+        )
         .limit(limit)
         .offset(skip)
         .then((rows) => this.withRolesDetails(rows)),
@@ -683,22 +696,6 @@ export class RoleService {
       .where(eq(systemUser.id, userId))
       .limit(1)
       .then(([user]) => user ?? null);
-  }
-
-  private roleOrderBy(
-    sortBy: NonNullable<QueryRoleDto["sortBy"]>,
-    sortOrder: NonNullable<QueryRoleDto["sortOrder"]>,
-  ) {
-    const column =
-      sortBy === "name"
-        ? rbacRole.name
-        : sortBy === "status"
-          ? rbacRole.status
-          : sortBy === "updatedAt"
-            ? rbacRole.updatedAt
-            : rbacRole.createdAt;
-
-    return sortOrder === "asc" ? asc(column) : desc(column);
   }
 
   private normalizeRoleName(name: string) {

@@ -1,44 +1,28 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { ProductSimpleStatus } from "@/database/schema";
-import { Type } from "class-transformer";
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsEnum, IsIn, IsOptional } from "class-validator";
 
-export enum CatalogSortOrder {
-  ASC = "asc",
-  DESC = "desc",
-}
+import { SortedPaginationQueryDto } from "../../../../common/http/query.dto";
+export { SortOrder as CatalogSortOrder } from "../../../../common/http/sort.util";
 
-export class QueryCatalogDto {
-  @ApiPropertyOptional({ example: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
+export const CatalogSortBy = {
+  NAME: "name",
+  CREATED_AT: "createdAt",
+  UPDATED_AT: "updatedAt",
+} as const;
+export type CatalogSortBy = (typeof CatalogSortBy)[keyof typeof CatalogSortBy];
 
-  @ApiPropertyOptional({ example: 10 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit?: number = 10;
-
-  @ApiPropertyOptional({ example: "summer" })
-  @IsOptional()
-  @IsString()
-  search?: string;
-
+export class QueryCatalogDto extends SortedPaginationQueryDto<CatalogSortBy> {
   @ApiPropertyOptional({ enum: ProductSimpleStatus })
   @IsOptional()
   @IsEnum(ProductSimpleStatus)
   status?: ProductSimpleStatus;
 
   @ApiPropertyOptional({
-    enum: CatalogSortOrder,
-    example: CatalogSortOrder.DESC,
+    enum: CatalogSortBy,
+    example: CatalogSortBy.CREATED_AT,
   })
   @IsOptional()
-  @IsEnum(CatalogSortOrder)
-  sortOrder?: CatalogSortOrder = CatalogSortOrder.DESC;
+  @IsIn(Object.values(CatalogSortBy))
+  sortBy?: CatalogSortBy = CatalogSortBy.CREATED_AT;
 }

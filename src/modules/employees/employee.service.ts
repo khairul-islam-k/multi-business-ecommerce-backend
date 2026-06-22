@@ -28,7 +28,6 @@ import {
   and,
   asc,
   count,
-  desc,
   eq,
   exists,
   ilike,
@@ -42,7 +41,7 @@ import type { CurrentUserPayload } from "../auth/decorators/current-user.decorat
 import { AssignEmployeeRolesDto } from "./dto/assign-employee-roles.dto";
 import { CreateEmployeeDto } from "./dto/create-employee.dto";
 import { EmployeeProfileDto } from "./dto/employee-profile.dto";
-import { QueryEmployeesDto } from "./dto/query-employees.dto";
+import { EmployeeSortBy, QueryEmployeesDto } from "./dto/query-employees.dto";
 import { UpdateEmployeeStatusDto } from "./dto/update-employee-status.dto";
 import { UpdateEmployeeDto } from "./dto/update-employee.dto";
 import { DatabaseService } from "../../database/database.service";
@@ -51,6 +50,7 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
+import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 
 type UserSummary = Pick<SystemUser, "id" | "name" | "email" | "type">;
 
@@ -177,8 +177,6 @@ export class EmployeeService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const sortBy = query.sortBy ?? "createdAt";
-    const sortOrder = query.sortOrder ?? "desc";
     const where = and(
       eq(systemUser.type, SystemUserType.EMPLOYEE),
       exists(
@@ -210,7 +208,22 @@ export class EmployeeService {
         .select()
         .from(systemUser)
         .where(where)
-        .orderBy(this.employeeOrderBy(sortBy, sortOrder))
+        .orderBy(
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [EmployeeSortBy.NAME]: systemUser.name,
+                [EmployeeSortBy.EMAIL]: systemUser.email,
+                [EmployeeSortBy.STATUS]: systemUser.status,
+                [EmployeeSortBy.CREATED_AT]: systemUser.createdAt,
+                [EmployeeSortBy.UPDATED_AT]: systemUser.updatedAt,
+              },
+              EmployeeSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
+          ),
+        )
         .limit(limit)
         .offset(skip)
         .then((rows) => this.withEmployeesDetails(rows, businessId)),
@@ -744,24 +757,6 @@ export class EmployeeService {
       .where(eq(systemUser.id, userId))
       .limit(1)
       .then(([user]) => user ?? null);
-  }
-
-  private employeeOrderBy(
-    sortBy: NonNullable<QueryEmployeesDto["sortBy"]>,
-    sortOrder: NonNullable<QueryEmployeesDto["sortOrder"]>,
-  ) {
-    const column =
-      sortBy === "name"
-        ? systemUser.name
-        : sortBy === "email"
-          ? systemUser.email
-          : sortBy === "status"
-            ? systemUser.status
-            : sortBy === "updatedAt"
-              ? systemUser.updatedAt
-              : systemUser.createdAt;
-
-    return sortOrder === "asc" ? asc(column) : desc(column);
   }
 
   private normalizeEmail(email: string) {

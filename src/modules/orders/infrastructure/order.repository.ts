@@ -7,14 +7,18 @@ import {
   orderPayment,
   orderStatusLog,
 } from "@/database/schema";
-import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+import { and, asc, count, eq, ilike, isNull, or } from "drizzle-orm";
 
-import type { QueryOrderDto } from "../dto/order.dto";
+import { OrderSortBy, type QueryOrderDto } from "../dto/order.dto";
 import {
   DatabaseService,
   type Database,
   type DatabaseTransaction,
 } from "../../../database/database.service";
+import {
+  buildOrderBy,
+  resolveSortColumn,
+} from "../../../common/http/sort.util";
 
 @Injectable()
 export class OrderRepository {
@@ -45,8 +49,19 @@ export class OrderRepository {
         : undefined,
     );
 
-    const orderBy =
-      query.sortOrder === "asc" ? asc(order.createdAt) : desc(order.createdAt);
+    const orderBy = buildOrderBy(
+      resolveSortColumn(
+        query.sortBy,
+        {
+          [OrderSortBy.ORDER_NO]: order.orderNo,
+          [OrderSortBy.TOTAL_AMOUNT]: order.totalAmount,
+          [OrderSortBy.CREATED_AT]: order.createdAt,
+          [OrderSortBy.UPDATED_AT]: order.updatedAt,
+        },
+        OrderSortBy.CREATED_AT,
+      ),
+      query.sortOrder,
+    );
 
     const [rows, total] = await Promise.all([
       this.db

@@ -1,8 +1,16 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { Type } from "class-transformer";
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsIn, IsOptional, IsString } from "class-validator";
 
-export class QueryMediaDto {
+import { SortedPaginationQueryDto } from "../../../common/http/query.dto";
+
+export const MediaSortBy = {
+  CREATED_AT: "createdAt",
+  FILE_NAME: "fileName",
+  FILE_SIZE: "fileSize",
+} as const;
+export type MediaSortBy = (typeof MediaSortBy)[keyof typeof MediaSortBy];
+
+export class QueryMediaDto extends SortedPaginationQueryDto<MediaSortBy> {
   @ApiPropertyOptional({
     example: "hero,banner",
     description: "Comma-separated tags. Returns images matching any tag.",
@@ -11,34 +19,11 @@ export class QueryMediaDto {
   @IsString()
   tags?: string;
 
-  @ApiPropertyOptional({ example: 1, default: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
-
-  @ApiPropertyOptional({ example: 10, default: 10 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit?: number = 10;
-
   @ApiPropertyOptional({
     example: "createdAt",
-    enum: ["createdAt", "fileName", "fileSize"],
+    enum: MediaSortBy,
   })
   @IsOptional()
-  @IsIn(["createdAt", "fileName", "fileSize"])
-  sortBy?: "createdAt" | "fileName" | "fileSize" = "createdAt";
-
-  @ApiPropertyOptional({
-    example: "desc",
-    enum: ["asc", "desc"],
-  })
-  @IsOptional()
-  @IsIn(["asc", "desc"])
-  sortOrder?: "asc" | "desc" = "desc";
+  @IsIn(Object.values(MediaSortBy))
+  sortBy?: MediaSortBy = MediaSortBy.CREATED_AT;
 }

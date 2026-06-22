@@ -49,7 +49,6 @@ import {
   asc,
   avg,
   count,
-  desc,
   eq,
   exists,
   ilike,
@@ -60,10 +59,10 @@ import {
 } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { CatalogSortOrder } from "../common/dto/query-catalog.dto";
 import { ProductImageInputDto } from "../common/dto/product-media.dto";
 import {
   CreateProductDto,
+  ProductSortBy,
   QueryProductDto,
   UpdateProductDto,
 } from "./dto/product.dto";
@@ -74,6 +73,10 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import {
+  buildOrderBy,
+  resolveSortColumn,
+} from "../../../common/http/sort.util";
 
 type ProductTagWithTag = ProductTagMap & {
   tag: ProductTag;
@@ -257,9 +260,19 @@ export class ProductService {
         .from(product)
         .where(where)
         .orderBy(
-          query.sortOrder === CatalogSortOrder.ASC
-            ? asc(product.createdAt)
-            : desc(product.createdAt),
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [ProductSortBy.NAME]: product.name,
+                [ProductSortBy.PRICE]: product.price,
+                [ProductSortBy.CREATED_AT]: product.createdAt,
+                [ProductSortBy.UPDATED_AT]: product.updatedAt,
+              },
+              ProductSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
+          ),
         )
         .limit(limit)
         .offset(skip)

@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, exists, ilike, isNull } from "drizzle-orm";
+import { and, count, eq, exists, ilike, isNull } from "drizzle-orm";
 
 import {
   product,
@@ -18,7 +18,10 @@ import {
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
 import { DatabaseService } from "../../../database/database.service";
-import { QueryCatalogDto } from "../common/dto/query-catalog.dto";
+import {
+  CatalogSortBy,
+  QueryCatalogDto,
+} from "../common/dto/query-catalog.dto";
 import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
 import {
   CreateProductTagDto,
@@ -26,6 +29,10 @@ import {
 } from "./dto/product-tag.dto";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import {
+  buildOrderBy,
+  resolveSortColumn,
+} from "../../../common/http/sort.util";
 
 type TagWithCount = ProductTag & {
   _count: { products: number };
@@ -86,9 +93,18 @@ export class ProductTagService {
         .from(productTag)
         .where(where)
         .orderBy(
-          query.sortOrder === "asc"
-            ? asc(productTag.createdAt)
-            : desc(productTag.createdAt),
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [CatalogSortBy.NAME]: productTag.name,
+                [CatalogSortBy.CREATED_AT]: productTag.createdAt,
+                [CatalogSortBy.UPDATED_AT]: productTag.updatedAt,
+              },
+              CatalogSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
+          ),
         )
         .limit(limit)
         .offset(skip)

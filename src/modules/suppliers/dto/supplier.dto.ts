@@ -11,6 +11,7 @@ import {
   IsArray,
   IsDate,
   IsEnum,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -21,7 +22,16 @@ import {
   ValidateNested,
 } from "class-validator";
 
-import { CatalogSortOrder } from "../../product-catalog/common/dto/query-catalog.dto";
+import { SortedPaginationQueryDto } from "../../../common/http/query.dto";
+
+export const SupplierSortBy = {
+  NAME: "name",
+  STATUS: "status",
+  CREATED_AT: "createdAt",
+  UPDATED_AT: "updatedAt",
+} as const;
+export type SupplierSortBy =
+  (typeof SupplierSortBy)[keyof typeof SupplierSortBy];
 
 export class CreateSupplierDto {
   @ApiProperty({ example: "Acme Supply" })
@@ -77,37 +87,19 @@ export class CreateSupplierDto {
 
 export class UpdateSupplierDto extends PartialType(CreateSupplierDto) {}
 
-export class QuerySupplierDto {
-  @ApiPropertyOptional({ example: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @Min(1)
-  page?: number = 1;
-
-  @ApiPropertyOptional({ example: 10 })
-  @IsOptional()
-  @Type(() => Number)
-  @Min(1)
-  @Max(100)
-  limit?: number = 10;
-
-  @ApiPropertyOptional({ example: "acme" })
-  @IsOptional()
-  @IsString()
-  search?: string;
-
+export class QuerySupplierDto extends SortedPaginationQueryDto<SupplierSortBy> {
   @ApiPropertyOptional({ enum: SupplierStatus })
   @IsOptional()
   @IsEnum(SupplierStatus)
   status?: SupplierStatus;
 
   @ApiPropertyOptional({
-    enum: CatalogSortOrder,
-    example: CatalogSortOrder.DESC,
+    enum: SupplierSortBy,
+    example: SupplierSortBy.CREATED_AT,
   })
   @IsOptional()
-  @IsEnum(CatalogSortOrder)
-  sortOrder?: CatalogSortOrder = CatalogSortOrder.DESC;
+  @IsIn(Object.values(SupplierSortBy))
+  sortBy?: SupplierSortBy = SupplierSortBy.CREATED_AT;
 }
 
 export class SupplierProductMapDto {

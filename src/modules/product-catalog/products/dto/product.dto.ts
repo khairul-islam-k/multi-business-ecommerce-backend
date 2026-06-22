@@ -4,6 +4,7 @@ import { Type } from "class-transformer";
 import {
   IsArray,
   IsEnum,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -14,7 +15,15 @@ import {
 } from "class-validator";
 
 import { ProductImagesDto } from "../../common/dto/product-media.dto";
-import { CatalogSortOrder } from "../../common/dto/query-catalog.dto";
+import { SortedPaginationQueryDto } from "../../../../common/http/query.dto";
+
+export const ProductSortBy = {
+  NAME: "name",
+  PRICE: "price",
+  CREATED_AT: "createdAt",
+  UPDATED_AT: "updatedAt",
+} as const;
+export type ProductSortBy = (typeof ProductSortBy)[keyof typeof ProductSortBy];
 
 export class CreateProductDto extends ProductImagesDto {
   @ApiProperty({ example: "Classic sneaker" })
@@ -70,25 +79,7 @@ export class CreateProductDto extends ProductImagesDto {
 
 export class UpdateProductDto extends PartialType(CreateProductDto) {}
 
-export class QueryProductDto {
-  @ApiPropertyOptional({ example: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @Min(1)
-  page?: number = 1;
-
-  @ApiPropertyOptional({ example: 10 })
-  @IsOptional()
-  @Type(() => Number)
-  @Min(1)
-  @Max(100)
-  limit?: number = 10;
-
-  @ApiPropertyOptional({ example: "sneaker" })
-  @IsOptional()
-  @IsString()
-  search?: string;
-
+export class QueryProductDto extends SortedPaginationQueryDto<ProductSortBy> {
   @ApiPropertyOptional({ enum: CatalogProductStatus })
   @IsOptional()
   @IsEnum(CatalogProductStatus)
@@ -115,10 +106,10 @@ export class QueryProductDto {
   warehouseId?: string;
 
   @ApiPropertyOptional({
-    enum: CatalogSortOrder,
-    example: CatalogSortOrder.DESC,
+    enum: ProductSortBy,
+    example: ProductSortBy.CREATED_AT,
   })
   @IsOptional()
-  @IsEnum(CatalogSortOrder)
-  sortOrder?: CatalogSortOrder = CatalogSortOrder.DESC;
+  @IsIn(Object.values(ProductSortBy))
+  sortBy?: ProductSortBy = ProductSortBy.CREATED_AT;
 }

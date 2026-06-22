@@ -9,10 +9,13 @@ import {
   product,
   productBrand,
 } from "@/database/schema";
-import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+import { and, asc, count, eq, ilike, isNull, or } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { QueryCatalogDto } from "../common/dto/query-catalog.dto";
+import {
+  CatalogSortBy,
+  QueryCatalogDto,
+} from "../common/dto/query-catalog.dto";
 import {
   CreateProductBrandDto,
   UpdateProductBrandDto,
@@ -23,6 +26,10 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import {
+  buildOrderBy,
+  resolveSortColumn,
+} from "../../../common/http/sort.util";
 
 type BrandWithCount = ProductBrand & {
   _count: { products: number };
@@ -91,9 +98,18 @@ export class ProductBrandService {
         .where(where)
         .orderBy(
           asc(productBrand.sortOrder),
-          query.sortOrder === "asc"
-            ? asc(productBrand.createdAt)
-            : desc(productBrand.createdAt),
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [CatalogSortBy.NAME]: productBrand.name,
+                [CatalogSortBy.CREATED_AT]: productBrand.createdAt,
+                [CatalogSortBy.UPDATED_AT]: productBrand.updatedAt,
+              },
+              CatalogSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
+          ),
         )
         .limit(limit)
         .offset(skip)

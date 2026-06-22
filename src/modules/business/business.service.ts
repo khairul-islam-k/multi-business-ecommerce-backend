@@ -6,9 +6,7 @@ import {
 } from "@nestjs/common";
 import {
   and,
-  asc,
   count,
-  desc,
   eq,
   ilike,
   inArray,
@@ -31,8 +29,9 @@ import {
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { CreateBusinessDto } from "./dto/create-business.dto";
-import { QueryBusinessDto } from "./dto/query-business.dto";
+import { BusinessSortBy, QueryBusinessDto } from "./dto/query-business.dto";
 import { UpdateBusinessDto } from "./dto/update-business.dto";
+import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 import {
   DatabaseService,
   type Database,
@@ -142,9 +141,6 @@ export class BusinessService {
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
 
-    const sortBy = query.sortBy ?? "createdAt";
-    const sortOrder = query.sortOrder ?? "desc";
-
     const canIncludeDeleted =
       currentUser.type === SystemUserType.ADMIN && query.includeDeleted;
 
@@ -168,8 +164,20 @@ export class BusinessService {
     ].filter(Boolean);
 
     const where = and(...conditions);
-    const orderColumn = business[sortBy];
-    const orderBy = sortOrder === "asc" ? asc(orderColumn) : desc(orderColumn);
+    const orderBy = buildOrderBy(
+      resolveSortColumn(
+        query.sortBy,
+        {
+          [BusinessSortBy.ID]: business.id,
+          [BusinessSortBy.NAME]: business.name,
+          [BusinessSortBy.STATUS]: business.status,
+          [BusinessSortBy.CREATED_AT]: business.createdAt,
+          [BusinessSortBy.UPDATED_AT]: business.updatedAt,
+        },
+        BusinessSortBy.CREATED_AT,
+      ),
+      query.sortOrder,
+    );
 
     const items = await this.selectBusinesses(where)
       .orderBy(orderBy)

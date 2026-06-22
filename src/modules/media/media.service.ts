@@ -17,11 +17,11 @@ import {
   mediaTag,
   productImage,
 } from "@/database/schema";
-import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { DeleteMediaBulkDto } from "./dto/delete-media.dto";
-import { QueryMediaDto } from "./dto/query-media.dto";
+import { MediaSortBy, QueryMediaDto } from "./dto/query-media.dto";
 import { UploadMediaDto } from "./dto/upload-media.dto";
 import { DatabaseService } from "../../database/database.service";
 import { PackageLimitService } from "../packages/package-limit.service";
@@ -38,6 +38,7 @@ import type {
   MediaUploader,
   UploadableMediaFile,
 } from "./uploaders/media-uploader.types";
+import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 
 const SUPPORTED_IMAGE_MIME_TYPES = new Set([
   "image/gif",
@@ -180,9 +181,17 @@ export class MediaService {
         .from(mediaAsset)
         .where(where)
         .orderBy(
-          this.mediaOrderBy(
-            query.sortBy ?? "createdAt",
-            query.sortOrder ?? "desc",
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [MediaSortBy.CREATED_AT]: mediaAsset.createdAt,
+                [MediaSortBy.FILE_NAME]: mediaAsset.fileName,
+                [MediaSortBy.FILE_SIZE]: mediaAsset.fileSize,
+              },
+              MediaSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
           ),
         )
         .limit(limit)
@@ -446,20 +455,6 @@ export class MediaService {
         tag: row.tag,
       })),
     };
-  }
-
-  private mediaOrderBy(
-    sortBy: NonNullable<QueryMediaDto["sortBy"]>,
-    sortOrder: NonNullable<QueryMediaDto["sortOrder"]>,
-  ) {
-    const column =
-      sortBy === "fileName"
-        ? mediaAsset.fileName
-        : sortBy === "fileSize"
-          ? mediaAsset.fileSize
-          : mediaAsset.createdAt;
-
-    return sortOrder === "asc" ? asc(column) : desc(column);
   }
 
   private normalizeTags(value?: string) {

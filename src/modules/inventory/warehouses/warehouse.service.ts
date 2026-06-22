@@ -11,12 +11,13 @@ import {
   supplierPurchaseOrder,
   warehouse,
 } from "@/database/schema";
-import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+import { and, count, eq, ilike, isNull, or } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import {
   CreateWarehouseDto,
   QueryWarehouseDto,
+  WarehouseSortBy,
   UpdateWarehouseDto,
 } from "./dto/warehouse.dto";
 import { DatabaseService } from "../../../database/database.service";
@@ -25,6 +26,10 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import {
+  buildOrderBy,
+  resolveSortColumn,
+} from "../../../common/http/sort.util";
 
 @Injectable()
 export class WarehouseService {
@@ -88,9 +93,19 @@ export class WarehouseService {
         .from(warehouse)
         .where(where)
         .orderBy(
-          query.sortOrder === "asc"
-            ? asc(warehouse.createdAt)
-            : desc(warehouse.createdAt),
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [WarehouseSortBy.NAME]: warehouse.name,
+                [WarehouseSortBy.STATUS]: warehouse.status,
+                [WarehouseSortBy.CREATED_AT]: warehouse.createdAt,
+                [WarehouseSortBy.UPDATED_AT]: warehouse.updatedAt,
+              },
+              WarehouseSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
+          ),
         )
         .limit(limit)
         .offset(skip),

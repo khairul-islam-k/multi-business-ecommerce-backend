@@ -15,7 +15,6 @@ import {
   and,
   asc,
   count,
-  desc,
   eq,
   exists,
   ilike,
@@ -34,12 +33,16 @@ import {
   UpdateProductAttributeValueDto,
 } from "./dto/product-attribute.dto";
 import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
-import { CatalogSortOrder } from "../common/dto/query-catalog.dto";
 import { DatabaseService } from "../../../database/database.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import {
+  buildOrderBy,
+  resolveSortColumn,
+  SortOrder,
+} from "../../../common/http/sort.util";
 
 type AttributeWithValues = ProductAttribute & {
   values: ProductAttributeValue[];
@@ -106,8 +109,6 @@ export class ProductAttributeService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const sortBy = query.sortBy ?? ProductAttributeSortBy.NAME;
-    const sortOrder = query.sortOrder ?? CatalogSortOrder.ASC;
     const where = and(
       eq(productAttribute.businessId, businessId),
       isNull(productAttribute.deletedAt),
@@ -137,7 +138,18 @@ export class ProductAttributeService {
         .from(productAttribute)
         .where(where)
         .orderBy(
-          this.attributeOrderBy(sortBy, sortOrder),
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [ProductAttributeSortBy.NAME]: productAttribute.name,
+                [ProductAttributeSortBy.CREATED_AT]: productAttribute.createdAt,
+              },
+              ProductAttributeSortBy.NAME,
+            ),
+            query.sortOrder,
+            SortOrder.ASC,
+          ),
           asc(productAttribute.createdAt),
         )
         .limit(limit)
@@ -467,17 +479,5 @@ export class ProductAttributeService {
       ...attribute,
       values,
     };
-  }
-
-  private attributeOrderBy(
-    sortBy: NonNullable<QueryProductAttributeDto["sortBy"]>,
-    sortOrder: NonNullable<QueryProductAttributeDto["sortOrder"]>,
-  ) {
-    const column =
-      sortBy === ProductAttributeSortBy.CREATED_AT
-        ? productAttribute.createdAt
-        : productAttribute.name;
-
-    return sortOrder === "asc" ? asc(column) : desc(column);
   }
 }

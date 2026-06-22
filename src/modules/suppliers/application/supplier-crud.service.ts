@@ -1,11 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import { SupplierStatus, supplier } from "@/database/schema";
-import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+import { and, count, eq, ilike, isNull, or } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import {
   CreateSupplierDto,
   QuerySupplierDto,
+  SupplierSortBy,
   UpdateSupplierDto,
 } from "../dto/supplier.dto";
 import {
@@ -18,6 +19,10 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import {
+  buildOrderBy,
+  resolveSortColumn,
+} from "../../../common/http/sort.util";
 
 @Injectable()
 export class SupplierCrudService {
@@ -83,9 +88,19 @@ export class SupplierCrudService {
         .from(supplier)
         .where(where)
         .orderBy(
-          query.sortOrder === "asc"
-            ? asc(supplier.createdAt)
-            : desc(supplier.createdAt),
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [SupplierSortBy.NAME]: supplier.name,
+                [SupplierSortBy.STATUS]: supplier.status,
+                [SupplierSortBy.CREATED_AT]: supplier.createdAt,
+                [SupplierSortBy.UPDATED_AT]: supplier.updatedAt,
+              },
+              SupplierSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
+          ),
         )
         .limit(limit)
         .offset(skip),

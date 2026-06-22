@@ -22,6 +22,15 @@ import {
   OrderType,
 } from "@/database/schema";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { SortedPaginationQueryDto } from "../../../common/http/query.dto";
+
+export const OrderSortBy = {
+  ORDER_NO: "orderNo",
+  TOTAL_AMOUNT: "totalAmount",
+  CREATED_AT: "createdAt",
+  UPDATED_AT: "updatedAt",
+} as const;
+export type OrderSortBy = (typeof OrderSortBy)[keyof typeof OrderSortBy];
 
 export class OrderItemInputDto {
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
@@ -176,25 +185,7 @@ export class CreateOrderDto {
   courier?: OrderCourierInputDto;
 }
 
-export class QueryOrderDto {
-  @ApiPropertyOptional({ example: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @Min(1)
-  page?: number = 1;
-
-  @ApiPropertyOptional({ example: 10 })
-  @IsOptional()
-  @Type(() => Number)
-  @Min(1)
-  @Max(100)
-  limit?: number = 10;
-
-  @ApiPropertyOptional({ example: "ORD" })
-  @IsOptional()
-  @IsString()
-  search?: string;
-
+export class QueryOrderDto extends SortedPaginationQueryDto<OrderSortBy> {
   @ApiPropertyOptional({ enum: OrderStatus })
   @IsOptional()
   @IsEnum(OrderStatus)
@@ -211,12 +202,12 @@ export class QueryOrderDto {
   orderType?: OrderType;
 
   @ApiPropertyOptional({
-    example: "desc",
-    enum: ["asc", "desc"],
+    example: OrderSortBy.CREATED_AT,
+    enum: OrderSortBy,
   })
   @IsOptional()
-  @IsIn(["asc", "desc"])
-  sortOrder?: "asc" | "desc" = "desc";
+  @IsIn(Object.values(OrderSortBy))
+  sortBy?: OrderSortBy = OrderSortBy.CREATED_AT;
 }
 
 export class AddOrderPaymentDto extends OrderPaymentInputDto {}
