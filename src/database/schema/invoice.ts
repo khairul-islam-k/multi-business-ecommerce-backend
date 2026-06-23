@@ -122,6 +122,9 @@ export const invoiceItem = pgTable(
     orderItemId: uuid("order_item_id"),
     productId: uuid("product_id").notNull(),
     variantId: uuid("variant_id"),
+    taxId: uuid("tax_id")
+      .notNull()
+      .references((): AnyPgColumn => financeTax.id, { onDelete: "restrict" }),
     quantity: decimal({ precision: 14, scale: 3 }).notNull(),
     unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
     discountAmount: decimal("discount_amount", {
@@ -129,6 +132,7 @@ export const invoiceItem = pgTable(
       scale: 2,
     }).notNull(),
     taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).notNull(),
+    taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
     lineTotal: decimal("line_total", { precision: 12, scale: 2 }).notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
@@ -141,6 +145,7 @@ export const invoiceItem = pgTable(
     index("invoice_items_order_item_id_idx").on(table.orderItemId),
     index("invoice_items_product_id_idx").on(table.productId),
     index("invoice_items_variant_id_idx").on(table.variantId),
+    index("invoice_items_tax_id_idx").on(table.taxId),
   ],
 );
 export type InvoiceItem = typeof invoiceItem.$inferSelect;

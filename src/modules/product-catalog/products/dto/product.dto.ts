@@ -1,5 +1,3 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { CatalogProductStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsArray,
@@ -9,13 +7,15 @@ import {
   IsOptional,
   IsString,
   IsUUID,
-  Max,
   MaxLength,
   Min,
 } from "class-validator";
 
-import { ProductImagesDto } from "../../common/dto/product-media.dto";
+import { CatalogProductStatus } from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+
 import { SortedPaginationQueryDto } from "../../../../common/http/query.dto";
+import { ProductImagesDto } from "../../common/dto/product-media.dto";
 
 export const ProductSortBy = {
   NAME: "name",
@@ -50,20 +50,21 @@ export class CreateProductDto extends ProductImagesDto {
   @Min(0)
   weight?: number;
 
-  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
-  @IsOptional()
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsUUID()
-  categoryId?: string;
+  categoryId!: string;
 
-  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
-  @IsOptional()
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsUUID()
-  brandId?: string;
+  brandId!: string;
 
-  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
-  @IsOptional()
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsUUID()
-  unitId?: string;
+  unitId!: string;
+
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsUUID()
+  taxId!: string;
 
   @ApiPropertyOptional({ enum: CatalogProductStatus })
   @IsOptional()

@@ -1,11 +1,3 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import {
-  SupplierProductMapStatus,
-  SupplierInvoiceStatus,
-  SupplierPurchaseOrderStatus,
-  SupplierPurchaseReturnStatus,
-  SupplierStatus,
-} from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsArray,
@@ -21,6 +13,15 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
+
+import {
+  SupplierInvoiceStatus,
+  SupplierProductMapStatus,
+  SupplierPurchaseOrderStatus,
+  SupplierPurchaseReturnStatus,
+  SupplierStatus,
+} from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 
 import { SortedPaginationQueryDto } from "../../../common/http/query.dto";
 
@@ -219,10 +220,6 @@ export class CreatePurchaseOrderDto {
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsUUID()
   warehouseId!: string;
-
-  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
-  @IsUUID()
-  taxId!: string;
 
   @ApiPropertyOptional({ example: "2026-05-25T00:00:00.000Z" })
   @IsOptional()

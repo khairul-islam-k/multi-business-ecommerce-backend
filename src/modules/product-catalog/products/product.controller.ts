@@ -1,4 +1,9 @@
 import {
+  PackageLimitKey,
+  PermissionAction,
+  RbacFeature,
+} from "@/database/schema";
+import {
   Body,
   Controller,
   Delete,
@@ -11,16 +16,14 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { PackageLimitKey, PermissionAction, RbacFeature } from "@/database/schema";
 
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { RequirePackageLimit } from "../../packages/decorators/require-package-limit.decorator";
-import { RequirePermission } from "../../permissions/decorators/require-permission.decorator";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard";
 import { BusinessGuard } from "../../business/guards/business.guard";
+import { RequirePackageLimit } from "../../packages/decorators/require-package-limit.decorator";
 import { PackageLimitGuard } from "../../packages/guards/package-limit.guard";
 import { SubscriptionGuard } from "../../packages/guards/subscription.guard";
+import { RequirePermission } from "../../permissions/decorators/require-permission.decorator";
 import { PermissionGuard } from "../../permissions/guards/permission.guard";
 import {
   CreateProductDto,
@@ -28,6 +31,8 @@ import {
   UpdateProductDto,
 } from "./dto/product.dto";
 import { ProductService } from "./product.service";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @ApiTags("Products")
 @ApiBearerAuth()

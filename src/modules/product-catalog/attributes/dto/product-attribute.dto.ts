@@ -1,5 +1,3 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { ProductSimpleStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
@@ -10,6 +8,9 @@ import {
   MaxLength,
   ValidateNested,
 } from "class-validator";
+
+import { ProductSimpleStatus } from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 
 import { SortedPaginationQueryDto } from "../../../../common/http/query.dto";
 import { SortOrder } from "../../../../common/http/sort.util";

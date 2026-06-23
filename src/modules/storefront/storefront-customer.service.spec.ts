@@ -1,14 +1,14 @@
 import Decimal from "decimal.js";
-import { describe, expect, it, jest } from "@jest/globals";
 
 import {
   orderCart,
-  OrderCartStatus,
   orderCartItem,
+  OrderCartStatus,
   OrderStatus,
   productReview,
   ProductReviewStatus,
 } from "@/database/schema";
+import { describe, expect, it, jest } from "@jest/globals";
 
 import { StorefrontCustomerService } from "./storefront-customer.service";
 
@@ -194,7 +194,6 @@ describe("StorefrontCustomerService", () => {
       .mockResolvedValue(placedOrder as never);
 
     const result = await service.placeOrder(currentCustomer, "website-1", {
-      taxId: "tax-1",
       shippingCharge: 50,
     });
 
@@ -214,7 +213,6 @@ describe("StorefrontCustomerService", () => {
       note: undefined,
       shippingAddressSnapshot: undefined,
       shippingCharge: 50,
-      taxId: "tax-1",
       warehouseId: undefined,
     });
     expect(updates).toContainEqual({

@@ -100,7 +100,6 @@ export class CreateOrderService {
       customerPhone: dto.customerPhone,
       customerEmail: dto.customerEmail,
       warehouseId: dto.warehouseId,
-      taxId: dto.taxId,
       customerId: dto.customerId,
       items: dto.items,
       payment: dto.payment,
@@ -132,17 +131,13 @@ export class CreateOrderService {
       await this.assertCustomerExists(businessId, params.customerId);
     }
 
-    const [orderNo, invoiceNo, tax] = await Promise.all([
+    const [orderNo, invoiceNo] = await Promise.all([
       this.orderCodeRepository.generateUniqueOrderNo(businessId),
       this.orderCodeRepository.generateUniqueInvoiceNo(businessId),
-      this.financeLedgerService.assertActiveTax(
-        this.db,
-        businessId,
-        params.taxId,
-      ),
     ]);
-    const items = await this.buildItems(businessId, params.items, tax.rate);
+    const items = await this.buildItems(businessId, params.items);
     const totals = calculateOrderTotals(items, params.shippingCharge ?? 0);
+    const taxSnapshot = this.deriveTaxSnapshot(items, totals);
 
     const createdOrder = await this.db.transaction(async (tx) => {
       const [createdOrder] = await tx
@@ -151,7 +146,7 @@ export class CreateOrderService {
           businessId,
           customerId: params.customerId,
           warehouseId: params.warehouseId,
-          taxId: tax.id,
+          taxId: taxSnapshot.taxId,
           orderNo,
           orderType: params.orderType,
           orderSource: params.orderSource,
@@ -166,7 +161,7 @@ export class CreateOrderService {
           subtotal: totals.subtotal,
           discountTotal: totals.discountTotal,
           taxTotal: totals.taxTotal,
-          taxRate: tax.rate,
+          taxRate: taxSnapshot.taxRate,
           shippingCharge: totals.shippingCharge,
           totalAmount: totals.totalAmount,
           note: this.normalizeNullableText(params.note),
@@ -190,10 +185,12 @@ export class CreateOrderService {
             orderId: createdOrder.id,
             productId: item.productId,
             variantId: item.variantId ?? null,
+            taxId: item.taxId,
             quantity: new Decimal(item.quantity),
             unitPrice: item.unitPrice,
             discountAmount: new Decimal(item.discountAmount ?? 0),
             taxAmount: item.taxAmount,
+            taxRate: item.taxRate,
             lineTotal: item.lineTotal,
           })
           .returning();
@@ -228,8 +225,6 @@ export class CreateOrderService {
         order: createdOrder,
         items: createdItems,
         invoiceNo,
-        taxId: tax.id,
-        taxRate: tax.rate,
         currentUserId: currentUser?.id,
       });
 
@@ -277,8 +272,6 @@ export class CreateOrderService {
       order: Order;
       items: OrderItem[];
       invoiceNo: string;
-      taxId: string;
-      taxRate: Decimal.Value;
       currentUserId?: string;
     },
   ) {
@@ -288,7 +281,7 @@ export class CreateOrderService {
         businessId: params.businessId,
         orderId: params.order.id,
         customerId: params.order.customerId,
-        taxId: params.taxId,
+        taxId: params.order.taxId,
         invoiceNo: params.invoiceNo,
         invoiceDate: new Date(),
         status: InvoiceStatus.ISSUED,
@@ -300,7 +293,7 @@ export class CreateOrderService {
         subtotal: params.order.subtotal,
         discountTotal: params.order.discountTotal,
         taxTotal: params.order.taxTotal,
-        taxRate: new Decimal(params.taxRate),
+        taxRate: params.order.taxRate,
         shippingCharge: params.order.shippingCharge,
         totalAmount: params.order.totalAmount,
         paidAmount: params.order.paidAmount,
@@ -315,10 +308,12 @@ export class CreateOrderService {
         orderItemId: item.id,
         productId: item.productId,
         variantId: item.variantId,
+        taxId: item.taxId,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         discountAmount: item.discountAmount,
         taxAmount: item.taxAmount,
+        taxRate: item.taxRate,
         lineTotal: item.lineTotal,
       })),
     );
@@ -378,19 +373,15 @@ export class CreateOrderService {
     );
   }
 
-  private async buildItems(
-    businessId: string,
-    items: OrderItemInputDto[],
-    taxRate: Decimal.Value,
-  ) {
+  private async buildItems(businessId: string, items: OrderItemInputDto[]) {
     const builtItems: OrderItemWithPrice[] = [];
-    const rate = new Decimal(taxRate);
 
     for (const item of items) {
       const [productRow] = await this.db
         .select({
           id: product.id,
           price: product.price,
+          taxId: product.taxId,
         })
         .from(product)
         .where(
@@ -405,6 +396,13 @@ export class CreateOrderService {
       if (!productRow) {
         throw new BadRequestException("One or more order items are invalid");
       }
+
+      const tax = await this.financeLedgerService.assertActiveTax(
+        this.db,
+        businessId,
+        productRow.taxId,
+      );
+      const rate = new Decimal(tax.rate);
 
       const [{ value: variantCount }] = await this.db
         .select({ value: count() })
@@ -464,12 +462,30 @@ export class CreateOrderService {
         ...item,
         variantId: item.variantId ?? null,
         unitPrice,
+        taxId: tax.id,
+        taxRate: rate,
         taxAmount,
         lineTotal,
       });
     }
 
     return builtItems;
+  }
+
+  private deriveTaxSnapshot(
+    items: OrderItemWithPrice[],
+    totals: ReturnType<typeof calculateOrderTotals>,
+  ) {
+    const uniqueTaxIds = new Set(items.map((item) => item.taxId));
+    const taxableBase = totals.subtotal.minus(totals.discountTotal);
+    const taxRate = taxableBase.equals(0)
+      ? new Decimal(0)
+      : totals.taxTotal.mul(100).div(taxableBase).toDecimalPlaces(2);
+
+    return {
+      taxId: uniqueTaxIds.size === 1 ? items[0]?.taxId : null,
+      taxRate,
+    };
   }
 
   private async assertCustomerExists(businessId: string, customerId: string) {

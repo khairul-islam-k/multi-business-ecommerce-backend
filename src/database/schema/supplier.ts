@@ -200,9 +200,9 @@ export const supplierPurchaseOrder = pgTable(
       .notNull()
       .references((): AnyPgColumn => supplier.id, { onDelete: "restrict" }),
     warehouseId: uuid("warehouse_id").notNull(),
-    taxId: uuid("tax_id")
-      .notNull()
-      .references((): AnyPgColumn => financeTax.id, { onDelete: "restrict" }),
+    taxId: uuid("tax_id").references((): AnyPgColumn => financeTax.id, {
+      onDelete: "restrict",
+    }),
     purchaseOrderNo: varchar("purchase_order_no", { length: 100 }).notNull(),
     orderDate: timestamp("order_date", { mode: "date" }).notNull(),
     expectedDeliveryDate: timestamp("expected_delivery_date", { mode: "date" }),
@@ -273,6 +273,9 @@ export const supplierPurchaseOrderItem = pgTable(
       (): AnyPgColumn => productVariant.id,
       { onDelete: "set null" },
     ),
+    taxId: uuid("tax_id")
+      .notNull()
+      .references((): AnyPgColumn => financeTax.id, { onDelete: "restrict" }),
     quantityOrdered: decimal("quantity_ordered", {
       precision: 14,
       scale: 3,
@@ -287,6 +290,7 @@ export const supplierPurchaseOrderItem = pgTable(
       scale: 2,
     }).notNull(),
     taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).notNull(),
+    taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
     lineTotal: decimal("line_total", { precision: 12, scale: 2 }).notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
@@ -300,6 +304,7 @@ export const supplierPurchaseOrderItem = pgTable(
     ),
     index("supplier_purchase_order_items_product_id_idx").on(table.productId),
     index("supplier_purchase_order_items_variant_id_idx").on(table.variantId),
+    index("supplier_purchase_order_items_tax_id_idx").on(table.taxId),
   ],
 );
 export type SupplierPurchaseOrderItem =
@@ -384,6 +389,9 @@ export const supplierInvoiceItem = pgTable(
       }),
     productId: uuid("product_id").notNull(),
     variantId: uuid("variant_id"),
+    taxId: uuid("tax_id")
+      .notNull()
+      .references((): AnyPgColumn => financeTax.id, { onDelete: "restrict" }),
     quantity: decimal({ precision: 14, scale: 3 }).notNull(),
     unitCost: decimal("unit_cost", { precision: 12, scale: 2 }).notNull(),
     discountAmount: decimal("discount_amount", {
@@ -391,6 +399,7 @@ export const supplierInvoiceItem = pgTable(
       scale: 2,
     }).notNull(),
     taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).notNull(),
+    taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
     lineTotal: decimal("line_total", { precision: 12, scale: 2 }).notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
@@ -404,6 +413,7 @@ export const supplierInvoiceItem = pgTable(
     ),
     index("supplier_invoice_items_product_id_idx").on(table.productId),
     index("supplier_invoice_items_variant_id_idx").on(table.variantId),
+    index("supplier_invoice_items_tax_id_idx").on(table.taxId),
   ],
 );
 export type SupplierInvoiceItem = typeof supplierInvoiceItem.$inferSelect;
@@ -535,6 +545,9 @@ export const supplierPurchaseReturnItem = pgTable(
       }),
     productId: uuid("product_id").notNull(),
     variantId: uuid("variant_id"),
+    taxId: uuid("tax_id")
+      .notNull()
+      .references((): AnyPgColumn => financeTax.id, { onDelete: "restrict" }),
     quantity: decimal({ precision: 14, scale: 3 }).notNull(),
     unitCost: decimal("unit_cost", { precision: 12, scale: 2 }).notNull(),
     discountAmount: decimal("discount_amount", {
@@ -542,6 +555,7 @@ export const supplierPurchaseReturnItem = pgTable(
       scale: 2,
     }).notNull(),
     taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).notNull(),
+    taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
     lineTotal: decimal("line_total", { precision: 12, scale: 2 }).notNull(),
     reason: text(),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
@@ -556,6 +570,7 @@ export const supplierPurchaseReturnItem = pgTable(
     ),
     index("supplier_purchase_return_items_product_id_idx").on(table.productId),
     index("supplier_purchase_return_items_variant_id_idx").on(table.variantId),
+    index("supplier_purchase_return_items_tax_id_idx").on(table.taxId),
   ],
 );
 export type SupplierPurchaseReturnItem =

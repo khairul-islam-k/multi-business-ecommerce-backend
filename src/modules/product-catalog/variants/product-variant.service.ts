@@ -1,36 +1,3 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
-import {
-  type Product,
-  type ProductImage,
-  type ProductVariant,
-  type ProductVariantAttribute,
-  ProductVariantStatus,
-  courierShipmentItem,
-  inventoryOrderAllocation,
-  inventoryStock,
-  inventoryStockAdjustmentItem,
-  inventoryStockMovement,
-  inventoryStockTransferItem,
-  inventoryWarehouseStock,
-  invoiceItem,
-  orderCartItem,
-  orderItem,
-  orderReturnItem,
-  product,
-  productAttribute,
-  productAttributeValue,
-  productImage,
-  productVariant,
-  productVariantAttribute,
-  supplierInvoiceItem,
-  supplierProductMap,
-  supplierPurchaseOrderItem,
-  supplierPurchaseReturnItem,
-} from "@/database/schema";
 import Decimal from "decimal.js";
 import {
   and,
@@ -46,7 +13,53 @@ import {
   or,
 } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import {
+  courierShipmentItem,
+  inventoryOrderAllocation,
+  inventoryStock,
+  inventoryStockAdjustmentItem,
+  inventoryStockMovement,
+  inventoryStockTransferItem,
+  inventoryWarehouseStock,
+  invoiceItem,
+  orderCartItem,
+  orderItem,
+  orderReturnItem,
+  Product,
+  product,
+  productAttribute,
+  productAttributeValue,
+  ProductImage,
+  productImage,
+  ProductVariant,
+  productVariant,
+  ProductVariantAttribute,
+  productVariantAttribute,
+  ProductVariantStatus,
+  supplierInvoiceItem,
+  supplierProductMap,
+  supplierPurchaseOrderItem,
+  supplierPurchaseReturnItem,
+} from "@/database/schema";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+
+import { apiResponse } from "../../../common/utils/api-response.util";
+import {
+  DatabaseService,
+  DatabaseTransaction,
+} from "../../../database/database.service";
+import { buildStockItemKey } from "../../inventory/domain/stock-item-key";
+import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import {
+  assertBulkUpdateAttributeCombinations,
+  assertUniqueAttributeCombinations,
+  buildAttributeCombinationKey,
+  variantMatchesAttributes,
+} from "./domain/variant-combination.policy";
 import {
   BulkCreateProductVariantsDto,
   BulkUpdateProductVariantsDto,
@@ -56,19 +69,8 @@ import {
   QueryProductVariantDto,
   UpdateProductVariantDto,
 } from "./dto/product-variant.dto";
-import { buildStockItemKey } from "../../inventory/domain/stock-item-key";
-import {
-  assertBulkUpdateAttributeCombinations,
-  assertUniqueAttributeCombinations,
-  buildAttributeCombinationKey,
-  variantMatchesAttributes,
-} from "./domain/variant-combination.policy";
-import {
-  type DatabaseTransaction,
-  DatabaseService,
-} from "../../../database/database.service";
-import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
-import { apiResponse } from "../../../common/utils/api-response.util";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 type VariantAttributeWithDetails = ProductVariantAttribute & {
   attribute: typeof productAttribute.$inferSelect;

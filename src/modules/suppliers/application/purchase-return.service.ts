@@ -1,50 +1,52 @@
+import Decimal from "decimal.js";
+import { and, asc, count, desc, eq, ilike, ne, or } from "drizzle-orm";
+
+import {
+  financeReceivable,
+  FinanceReceivableStatus,
+  FinanceSourceType,
+  financeTax,
+  InventoryMovementType,
+  InventoryReferenceType,
+  supplier,
+  SupplierInvoice,
+  supplierInvoice,
+  SupplierInvoiceStatus,
+  SupplierPurchaseOrder,
+  supplierPurchaseOrder,
+  SupplierPurchaseOrderItem,
+  supplierPurchaseOrderItem,
+  SupplierPurchaseOrderStatus,
+  SupplierPurchaseReturn,
+  supplierPurchaseReturn,
+  supplierPurchaseReturnItem,
+  SupplierPurchaseReturnStatus,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  type SupplierInvoice,
-  type SupplierPurchaseOrder,
-  type SupplierPurchaseOrderItem,
-  type SupplierPurchaseReturn,
-  FinanceReceivableStatus,
-  FinanceSourceType,
-  InventoryMovementType,
-  InventoryReferenceType,
-  SupplierInvoiceStatus,
-  SupplierPurchaseOrderStatus,
-  SupplierPurchaseReturnStatus,
-  financeReceivable,
-  financeTax,
-  supplier,
-  supplierInvoice,
-  supplierPurchaseOrder,
-  supplierPurchaseOrderItem,
-  supplierPurchaseReturn,
-  supplierPurchaseReturnItem,
-} from "@/database/schema";
-import Decimal from "decimal.js";
-import { and, asc, count, desc, eq, ilike, ne, or } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import {
-  CreateSupplierPurchaseReturnDto,
-  QuerySupplierPurchaseReturnDto,
-} from "../dto/supplier.dto";
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import { FinanceLedgerService } from "../../finance/common/finance-ledger.service";
+import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
 import {
   assertPurchaseReturnItems,
   calculatePurchaseReturnTotals,
 } from "../domain/purchase-return.policy";
 import { normalizeNullableText } from "../domain/supplier-contact.policy";
-import { SupplierCodeRepository } from "../infrastructure/supplier-code.repository";
-import { DatabaseService } from "../../../database/database.service";
-import { FinanceLedgerService } from "../../finance/common/finance-ledger.service";
-import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
 import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
+  CreateSupplierPurchaseReturnDto,
+  QuerySupplierPurchaseReturnDto,
+} from "../dto/supplier.dto";
+import { SupplierCodeRepository } from "../infrastructure/supplier-code.repository";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 type PurchaseOrderForReturn = SupplierPurchaseOrder & {
   items: SupplierPurchaseOrderItem[];
@@ -90,6 +92,7 @@ export class PurchaseReturnService {
       dto.items,
     );
     const totals = calculatePurchaseReturnTotals(items);
+    const taxSnapshot = this.deriveTaxSnapshot(items, totals);
 
     const purchaseReturn = await this.db.transaction(async (tx) => {
       const [createdReturn] = await tx
@@ -100,7 +103,7 @@ export class PurchaseReturnService {
           purchaseOrderId: purchaseOrder.id,
           supplierInvoiceId: supplierInvoiceRow.id,
           warehouseId: purchaseOrder.warehouseId,
-          taxId: purchaseOrder.taxId,
+          taxId: taxSnapshot.taxId,
           returnNo: await this.codes.generateUniqueReturnNo(businessId),
           returnDate: new Date(),
           status: SupplierPurchaseReturnStatus.PENDING,
@@ -108,7 +111,7 @@ export class PurchaseReturnService {
           subtotal: totals.subtotal,
           discountTotal: totals.discountTotal,
           taxTotal: totals.taxTotal,
-          taxRate: purchaseOrder.taxRate,
+          taxRate: taxSnapshot.taxRate,
           totalAmount: totals.totalAmount,
           createdBy: currentUser.id,
         })
@@ -119,10 +122,12 @@ export class PurchaseReturnService {
           purchaseReturnId: createdReturn.id,
           productId: item.productId,
           variantId: item.variantId,
+          taxId: item.taxId,
           quantity: item.quantity,
           unitCost: item.unitCost,
           discountAmount: item.discountAmount,
           taxAmount: item.taxAmount,
+          taxRate: item.taxRate,
           lineTotal: item.lineTotal,
           reason: normalizeNullableText(item.reason),
         })),
@@ -174,7 +179,9 @@ export class PurchaseReturnService {
       query.purchaseOrderId
         ? eq(supplierPurchaseReturn.purchaseOrderId, query.purchaseOrderId)
         : undefined,
-      query.status ? eq(supplierPurchaseReturn.status, query.status) : undefined,
+      query.status
+        ? eq(supplierPurchaseReturn.status, query.status)
+        : undefined,
       query.search
         ? or(
             ilike(supplierPurchaseReturn.returnNo, `%${query.search}%`),
@@ -319,7 +326,10 @@ export class PurchaseReturnService {
         and(
           eq(supplierPurchaseOrder.id, purchaseOrderId),
           eq(supplierPurchaseOrder.businessId, businessId),
-          eq(supplierPurchaseOrder.status, SupplierPurchaseOrderStatus.RECEIVED),
+          eq(
+            supplierPurchaseOrder.status,
+            SupplierPurchaseOrderStatus.RECEIVED,
+          ),
         ),
       );
 
@@ -347,10 +357,7 @@ export class PurchaseReturnService {
     return { ...purchaseOrder, items, invoices };
   }
 
-  private async getPendingReturn(
-    businessId: string,
-    purchaseReturnId: string,
-  ) {
+  private async getPendingReturn(businessId: string, purchaseReturnId: string) {
     const purchaseReturn = await this.findReturnRow(
       businessId,
       purchaseReturnId,
@@ -364,7 +371,9 @@ export class PurchaseReturnService {
     const items = await this.db
       .select()
       .from(supplierPurchaseReturnItem)
-      .where(eq(supplierPurchaseReturnItem.purchaseReturnId, purchaseReturn.id));
+      .where(
+        eq(supplierPurchaseReturnItem.purchaseReturnId, purchaseReturn.id),
+      );
 
     return { ...purchaseReturn, items };
   }
@@ -400,7 +409,9 @@ export class PurchaseReturnService {
           ? this.db
               .select()
               .from(supplierPurchaseOrder)
-              .where(eq(supplierPurchaseOrder.id, purchaseReturn.purchaseOrderId))
+              .where(
+                eq(supplierPurchaseOrder.id, purchaseReturn.purchaseOrderId),
+              )
               .then(([row]) => row ?? null)
           : Promise.resolve(null),
         purchaseReturn.supplierInvoiceId
@@ -420,7 +431,9 @@ export class PurchaseReturnService {
         this.db
           .select()
           .from(supplierPurchaseReturnItem)
-          .where(eq(supplierPurchaseReturnItem.purchaseReturnId, purchaseReturn.id))
+          .where(
+            eq(supplierPurchaseReturnItem.purchaseReturnId, purchaseReturn.id),
+          )
           .orderBy(asc(supplierPurchaseReturnItem.createdAt)),
       ]);
 
@@ -459,13 +472,19 @@ export class PurchaseReturnService {
       .from(supplierPurchaseReturnItem)
       .innerJoin(
         supplierPurchaseReturn,
-        eq(supplierPurchaseReturn.id, supplierPurchaseReturnItem.purchaseReturnId),
+        eq(
+          supplierPurchaseReturn.id,
+          supplierPurchaseReturnItem.purchaseReturnId,
+        ),
       )
       .where(
         and(
           eq(supplierPurchaseReturn.businessId, businessId),
           eq(supplierPurchaseReturn.purchaseOrderId, purchaseOrder.id),
-          ne(supplierPurchaseReturn.status, SupplierPurchaseReturnStatus.CANCELLED),
+          ne(
+            supplierPurchaseReturn.status,
+            SupplierPurchaseReturnStatus.CANCELLED,
+          ),
         ),
       );
     const returnedQuantityByItem = new Map<string, Decimal>();
@@ -510,27 +529,45 @@ export class PurchaseReturnService {
       }
 
       const orderedQuantity = new Decimal(purchaseOrderItem.quantityOrdered);
-      const discountPerUnit = new Decimal(
-        purchaseOrderItem.discountAmount,
-      ).div(orderedQuantity);
+      const discountPerUnit = new Decimal(purchaseOrderItem.discountAmount).div(
+        orderedQuantity,
+      );
       const subtotal = quantity.mul(purchaseOrderItem.unitCost);
       const discountAmount = discountPerUnit.mul(quantity).toDecimalPlaces(2);
       const taxableAmount = subtotal.minus(discountAmount);
       const taxAmount = taxableAmount
-        .mul(purchaseOrder.taxRate)
+        .mul(purchaseOrderItem.taxRate)
         .div(100)
         .toDecimalPlaces(2);
 
       return {
         productId: requestedItem.productId,
         variantId: requestedItem.variantId ?? null,
+        taxId: purchaseOrderItem.taxId,
         quantity,
         unitCost: purchaseOrderItem.unitCost,
         discountAmount,
+        taxRate: purchaseOrderItem.taxRate,
         taxAmount,
         lineTotal: taxableAmount.plus(taxAmount),
         reason: requestedItem.reason,
       };
     });
+  }
+
+  private deriveTaxSnapshot(
+    items: { taxId: string }[],
+    totals: ReturnType<typeof calculatePurchaseReturnTotals>,
+  ) {
+    const uniqueTaxIds = new Set(items.map((item) => item.taxId));
+    const taxableBase = totals.subtotal.minus(totals.discountTotal);
+    const taxRate = taxableBase.equals(0)
+      ? new Decimal(0)
+      : totals.taxTotal.mul(100).div(taxableBase).toDecimalPlaces(2);
+
+    return {
+      taxId: uniqueTaxIds.size === 1 ? items[0]?.taxId : null,
+      taxRate,
+    };
   }
 }

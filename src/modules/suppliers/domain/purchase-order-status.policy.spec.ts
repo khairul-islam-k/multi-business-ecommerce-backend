@@ -1,6 +1,6 @@
+import { SupplierPurchaseOrderStatus } from "@/database/schema";
 import { describe, expect, it } from "@jest/globals";
 import { BadRequestException } from "@nestjs/common";
-import { SupplierPurchaseOrderStatus } from "@/database/schema";
 
 import {
   assertManualPurchaseOrderStatus,

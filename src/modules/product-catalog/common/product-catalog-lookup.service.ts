@@ -1,27 +1,30 @@
+import { and, count, eq, inArray, isNull, ne } from "drizzle-orm";
+
+import {
+  product,
+  productAttribute,
+  productAttributeValue,
+  productBrand,
+  productCategory,
+  FinanceTaxStatus,
+  financeTax,
+  ProductSimpleStatus,
+  productTag,
+  productUnit,
+  productVariant,
+} from "@/database/schema";
 import {
   BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  ProductSimpleStatus,
-  product,
-  productAttribute,
-  productAttributeValue,
-  productBrand,
-  productCategory,
-  productTag,
-  productUnit,
-  productVariant,
-} from "@/database/schema";
-import { and, count, eq, inArray, isNull, ne } from "drizzle-orm";
 
+import { BusinessCodePrefixService } from "../../../common/code/business-code-prefix.service";
 import { isUniqueConstraintError } from "../../../common/database/db-error.util";
 import { generateRandomCode } from "../../../common/utils/code-generator.util";
 import { generateRandomSlug } from "../../../common/utils/slug-generator.util";
 import { DatabaseService } from "../../../database/database.service";
-import { BusinessCodePrefixService } from "../../../common/code/business-code-prefix.service";
 
 const PRODUCT_SLUG_MAX_LENGTH = 220;
 const PRODUCT_SLUG_RETRY_LIMIT = 5;
@@ -118,6 +121,7 @@ export class ProductCatalogLookupService {
       categoryId?: string | null;
       brandId?: string | null;
       unitId?: string | null;
+      taxId?: string | null;
     },
   ) {
     const checks: Promise<unknown>[] = [];
@@ -132,6 +136,10 @@ export class ProductCatalogLookupService {
 
     if (params.unitId) {
       checks.push(this.assertUnitExists(businessId, params.unitId));
+    }
+
+    if (params.taxId) {
+      checks.push(this.assertTaxExists(businessId, params.taxId));
     }
 
     await Promise.all(checks);
@@ -181,6 +189,27 @@ export class ProductCatalogLookupService {
     }
 
     return item;
+  }
+
+  async assertTaxExists(businessId: string, taxId: string) {
+    const [tax] = await this.db
+      .select({ id: financeTax.id })
+      .from(financeTax)
+      .where(
+        and(
+          eq(financeTax.id, taxId),
+          eq(financeTax.businessId, businessId),
+          isNull(financeTax.deletedAt),
+          eq(financeTax.status, FinanceTaxStatus.ACTIVE),
+        ),
+      )
+      .limit(1);
+
+    if (!tax) {
+      throw new NotFoundException("Tax not found");
+    }
+
+    return tax;
   }
 
   async assertVariantExists(

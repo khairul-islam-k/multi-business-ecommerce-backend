@@ -1,28 +1,30 @@
-import { Injectable } from "@nestjs/common";
-import { SupplierStatus, supplier } from "@/database/schema";
 import { and, count, eq, ilike, isNull, or } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import { supplier, SupplierStatus } from "@/database/schema";
+import { Injectable } from "@nestjs/common";
+
+import {
+  buildOrderBy,
+  resolveSortColumn,
+} from "../../../common/http/sort.util";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import {
+  normalizeNullableText,
+  normalizeSupplierName,
+} from "../domain/supplier-contact.policy";
 import {
   CreateSupplierDto,
   QuerySupplierDto,
   SupplierSortBy,
   UpdateSupplierDto,
 } from "../dto/supplier.dto";
-import {
-  normalizeNullableText,
-  normalizeSupplierName,
-} from "../domain/supplier-contact.policy";
 import { SupplierRepository } from "../infrastructure/supplier.repository";
-import { DatabaseService } from "../../../database/database.service";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
-import {
-  buildOrderBy,
-  resolveSortColumn,
-} from "../../../common/http/sort.util";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class SupplierCrudService {

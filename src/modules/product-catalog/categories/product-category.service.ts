@@ -1,35 +1,37 @@
+import { and, asc, count, eq, ilike, isNull, or } from "drizzle-orm";
+
+import {
+  product,
+  ProductCategory,
+  productCategory,
+  ProductSimpleStatus,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  type ProductCategory,
-  ProductSimpleStatus,
-  product,
-  productCategory,
-} from "@/database/schema";
-import { and, asc, count, eq, ilike, isNull, or } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import {
-  CatalogSortBy,
-  QueryCatalogDto,
-} from "../common/dto/query-catalog.dto";
-import {
-  CreateProductCategoryDto,
-  UpdateProductCategoryDto,
-} from "./dto/product-category.dto";
-import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
-import { DatabaseService } from "../../../database/database.service";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
 import {
   buildOrderBy,
   resolveSortColumn,
 } from "../../../common/http/sort.util";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import {
+  CatalogSortBy,
+  QueryCatalogDto,
+} from "../common/dto/query-catalog.dto";
+import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import {
+  CreateProductCategoryDto,
+  UpdateProductCategoryDto,
+} from "./dto/product-category.dto";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 type CategoryWithDetails = ProductCategory & {
   parent: ProductCategory | null;

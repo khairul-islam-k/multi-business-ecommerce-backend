@@ -1,34 +1,35 @@
+import Decimal from "decimal.js";
+import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+
+import {
+  product,
+  productVariant,
+  supplier,
+  supplierProductMap,
+  SupplierProductMapStatus,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  SupplierProductMapStatus,
-  product,
-  productVariant,
-  supplier,
-  supplierProductMap,
-} from "@/database/schema";
-import Decimal from "decimal.js";
-import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
-import {
-  QuerySupplierProductMapDto,
-  QuerySupplierProductDto,
-  SupplierProductMapDto,
-  UpdateSupplierProductMapDto,
-} from "../dto/supplier.dto";
-import { normalizeNullableText } from "../domain/supplier-contact.policy";
-import { SupplierProductRepository } from "../infrastructure/supplier-product.repository";
-import { SupplierRepository } from "../infrastructure/supplier.repository";
-import { DatabaseService } from "../../../database/database.service";
 import { isUniqueConstraintError } from "../../../common/database/db-error.util";
-import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
+import { normalizeNullableText } from "../domain/supplier-contact.policy";
+import {
+  QuerySupplierProductDto,
+  QuerySupplierProductMapDto,
+  SupplierProductMapDto,
+  UpdateSupplierProductMapDto,
+} from "../dto/supplier.dto";
+import { SupplierProductRepository } from "../infrastructure/supplier-product.repository";
+import { SupplierRepository } from "../infrastructure/supplier.repository";
 
 @Injectable()
 export class SupplierProductService {

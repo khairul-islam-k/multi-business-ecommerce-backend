@@ -1,17 +1,4 @@
 import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
-import {
-  type ProductAttribute,
-  type ProductAttributeValue,
-  ProductSimpleStatus,
-  productAttribute,
-  productAttributeValue,
-  productVariantAttribute,
-} from "@/database/schema";
-import {
   and,
   asc,
   count,
@@ -23,7 +10,31 @@ import {
   or,
 } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import {
+  ProductAttribute,
+  productAttribute,
+  ProductAttributeValue,
+  productAttributeValue,
+  ProductSimpleStatus,
+  productVariantAttribute,
+} from "@/database/schema";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+
+import {
+  buildOrderBy,
+  resolveSortColumn,
+  SortOrder,
+} from "../../../common/http/sort.util";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
 import {
   CreateProductAttributeDto,
   CreateProductAttributeValueDto,
@@ -32,17 +43,8 @@ import {
   UpdateProductAttributeDto,
   UpdateProductAttributeValueDto,
 } from "./dto/product-attribute.dto";
-import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
-import { DatabaseService } from "../../../database/database.service";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
-import {
-  buildOrderBy,
-  resolveSortColumn,
-  SortOrder,
-} from "../../../common/http/sort.util";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 type AttributeWithValues = ProductAttribute & {
   values: ProductAttributeValue[];

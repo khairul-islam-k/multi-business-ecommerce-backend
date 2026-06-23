@@ -1,17 +1,18 @@
+import { and, count, eq, isNull } from "drizzle-orm";
+
+import {
+  Supplier,
+  supplier,
+  supplierInvoice,
+  supplierProductMap,
+  supplierPurchaseOrder,
+  SupplierStatus,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  type Supplier,
-  SupplierStatus,
-  supplier,
-  supplierInvoice,
-  supplierProductMap,
-  supplierPurchaseOrder,
-} from "@/database/schema";
-import { and, count, eq, isNull } from "drizzle-orm";
 
 import { DatabaseService } from "../../../database/database.service";
 
@@ -36,7 +37,9 @@ export class SupplierRepository {
           eq(supplier.id, supplierId),
           eq(supplier.businessId, businessId),
           isNull(supplier.deletedAt),
-          requireActive ? eq(supplier.status, SupplierStatus.ACTIVE) : undefined,
+          requireActive
+            ? eq(supplier.status, SupplierStatus.ACTIVE)
+            : undefined,
         ),
       );
 

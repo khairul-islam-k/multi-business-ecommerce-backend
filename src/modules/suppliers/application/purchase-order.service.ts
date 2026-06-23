@@ -1,19 +1,22 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
-import {
-  SupplierPurchaseOrderStatus,
-  supplierPurchaseOrder,
-  supplierPurchaseOrderItem,
-} from "@/database/schema";
 import Decimal from "decimal.js";
 import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import {
-  CancelPurchaseOrderDto,
-  CreatePurchaseOrderDto,
-  QueryPurchaseOrderDto,
-  UpdatePurchaseOrderDto,
-} from "../dto/supplier.dto";
+  product,
+  supplierPurchaseOrder,
+  supplierPurchaseOrderItem,
+  SupplierPurchaseOrderStatus,
+} from "@/database/schema";
+import { BadRequestException, Injectable } from "@nestjs/common";
+
+import { isUniqueConstraintError } from "../../../common/database/db-error.util";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import { FinanceLedgerService } from "../../finance/common/finance-ledger.service";
+import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
 import {
   assertManualPurchaseOrderStatus,
   assertPurchaseOrderCanCancel,
@@ -27,17 +30,18 @@ import {
 } from "../domain/purchase-order-totals.calculator";
 import { assertPurchaseOrderItems } from "../domain/purchase-return.policy";
 import { normalizeNullableText } from "../domain/supplier-contact.policy";
+import {
+  CancelPurchaseOrderDto,
+  CreatePurchaseOrderDto,
+  PurchaseOrderItemDto,
+  QueryPurchaseOrderDto,
+  UpdatePurchaseOrderDto,
+} from "../dto/supplier.dto";
 import { PurchaseOrderRepository } from "../infrastructure/purchase-order.repository";
 import { SupplierCodeRepository } from "../infrastructure/supplier-code.repository";
 import { SupplierRepository } from "../infrastructure/supplier.repository";
-import { DatabaseService } from "../../../database/database.service";
-import { isUniqueConstraintError } from "../../../common/database/db-error.util";
-import { FinanceLedgerService } from "../../finance/common/finance-ledger.service";
-import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class PurchaseOrderService {
@@ -76,16 +80,9 @@ export class PurchaseOrderService {
       ),
     ]);
 
-    const tax = await this.finance.assertActiveTax(
-      this.db,
-      businessId,
-      dto.taxId,
-    );
-    const totals = calculatePurchaseOrderTotals(
-      dto.items,
-      dto.shippingCost ?? 0,
-      tax.rate,
-    );
+    const items = await this.buildPurchaseOrderItems(businessId, dto.items);
+    const totals = calculatePurchaseOrderTotals(items, dto.shippingCost ?? 0);
+    const taxSnapshot = this.deriveTaxSnapshot(items, totals);
     const purchaseOrderNo =
       await this.codes.generateUniquePurchaseOrderNo(businessId);
 
@@ -97,7 +94,7 @@ export class PurchaseOrderService {
             businessId,
             supplierId: dto.supplierId,
             warehouseId: dto.warehouseId,
-            taxId: tax.id,
+            taxId: taxSnapshot.taxId,
             purchaseOrderNo,
             orderDate: new Date(),
             expectedDeliveryDate: dto.expectedDeliveryDate,
@@ -105,7 +102,7 @@ export class PurchaseOrderService {
             subtotal: new Decimal(totals.subtotal),
             discountTotal: new Decimal(totals.discountTotal),
             taxTotal: new Decimal(totals.taxTotal),
-            taxRate: new Decimal(tax.rate),
+            taxRate: taxSnapshot.taxRate,
             shippingCost: new Decimal(totals.shippingCost),
             totalAmount: new Decimal(totals.totalAmount),
             note: normalizeNullableText(dto.note),
@@ -114,15 +111,17 @@ export class PurchaseOrderService {
           .returning();
 
         await tx.insert(supplierPurchaseOrderItem).values(
-          dto.items.map((item) => ({
+          items.map((item) => ({
             purchaseOrderId: createdOrder.id,
             productId: item.productId,
             variantId: item.variantId ?? null,
+            taxId: item.taxId,
             quantityOrdered: new Decimal(item.quantityOrdered),
             unitCost: new Decimal(item.unitCost),
             discountAmount: new Decimal(item.discountAmount ?? 0),
-            taxAmount: calculateLineTax(item, tax.rate),
-            lineTotal: calculateLineTotal(item, tax.rate),
+            taxAmount: item.taxAmount,
+            taxRate: item.taxRate,
+            lineTotal: item.lineTotal,
             quantityReceived: new Decimal(0),
           })),
         );
@@ -308,5 +307,75 @@ export class PurchaseOrderService {
     }
 
     throw error;
+  }
+
+  private async buildPurchaseOrderItems(
+    businessId: string,
+    items: PurchaseOrderItemDto[],
+  ) {
+    const builtItems: (PurchaseOrderItemDto & {
+      taxId: string;
+      taxRate: Decimal;
+      taxAmount: Decimal;
+      lineTotal: Decimal;
+    })[] = [];
+
+    for (const item of items) {
+      const [productRow] = await this.db
+        .select({ taxId: product.taxId })
+        .from(product)
+        .where(
+          and(
+            eq(product.id, item.productId),
+            eq(product.businessId, businessId),
+            isNull(product.deletedAt),
+          ),
+        )
+        .limit(1);
+
+      if (!productRow) {
+        throw new BadRequestException("One or more purchase items are invalid");
+      }
+
+      const tax = await this.finance.assertActiveTax(
+        this.db,
+        businessId,
+        productRow.taxId,
+      );
+      const itemWithTax = {
+        ...item,
+        taxId: tax.id,
+        taxRate: new Decimal(tax.rate),
+      };
+
+      builtItems.push({
+        ...itemWithTax,
+        taxAmount: calculateLineTax(itemWithTax),
+        lineTotal: calculateLineTotal(itemWithTax),
+      });
+    }
+
+    return builtItems;
+  }
+
+  private deriveTaxSnapshot(
+    items: { taxId: string }[],
+    totals: ReturnType<typeof calculatePurchaseOrderTotals>,
+  ) {
+    const uniqueTaxIds = new Set(items.map((item) => item.taxId));
+    const taxableBase = new Decimal(totals.subtotal).minus(
+      totals.discountTotal,
+    );
+    const taxRate = taxableBase.equals(0)
+      ? new Decimal(0)
+      : new Decimal(totals.taxTotal)
+          .mul(100)
+          .div(taxableBase)
+          .toDecimalPlaces(2);
+
+    return {
+      taxId: uniqueTaxIds.size === 1 ? items[0]?.taxId : null,
+      taxRate,
+    };
   }
 }

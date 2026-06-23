@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { supplierProductMap } from "@/database/schema";
 import { and, eq } from "drizzle-orm";
+
+import { supplierProductMap } from "@/database/schema";
+import { Injectable, NotFoundException } from "@nestjs/common";
 
 import { DatabaseService } from "../../../database/database.service";
 

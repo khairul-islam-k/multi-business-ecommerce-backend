@@ -264,9 +264,9 @@ export const order = pgTable(
       onDelete: "set null",
     }),
     warehouseId: uuid("warehouse_id"),
-    taxId: uuid("tax_id")
-      .notNull()
-      .references((): AnyPgColumn => financeTax.id, { onDelete: "restrict" }),
+    taxId: uuid("tax_id").references((): AnyPgColumn => financeTax.id, {
+      onDelete: "restrict",
+    }),
     orderNo: varchar("order_no", { length: 100 }).notNull(),
     orderType: orderTypeEnum("order_type").notNull(),
     orderSource: orderSourceEnum("order_source").notNull(),
@@ -331,6 +331,9 @@ export const orderItem = pgTable(
       .references((): AnyPgColumn => order.id, { onDelete: "cascade" }),
     productId: uuid("product_id").notNull(),
     variantId: uuid("variant_id"),
+    taxId: uuid("tax_id")
+      .notNull()
+      .references((): AnyPgColumn => financeTax.id, { onDelete: "restrict" }),
     quantity: decimal({ precision: 14, scale: 3 }).notNull(),
     unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
     discountAmount: decimal("discount_amount", {
@@ -338,6 +341,7 @@ export const orderItem = pgTable(
       scale: 2,
     }).notNull(),
     taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).notNull(),
+    taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
     lineTotal: decimal("line_total", { precision: 12, scale: 2 }).notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
@@ -349,6 +353,7 @@ export const orderItem = pgTable(
     index("order_items_order_id_idx").on(table.orderId),
     index("order_items_product_id_idx").on(table.productId),
     index("order_items_variant_id_idx").on(table.variantId),
+    index("order_items_tax_id_idx").on(table.taxId),
   ],
 );
 export type OrderItem = typeof orderItem.$inferSelect;

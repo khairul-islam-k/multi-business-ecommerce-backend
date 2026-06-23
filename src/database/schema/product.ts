@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  AnyPgColumn,
   boolean,
   index,
   integer,
@@ -9,14 +11,13 @@ import {
   uniqueIndex,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
-import { decimal } from "./common";
 import { business } from "./business";
+import { decimal } from "./common";
 import { customer } from "./customer";
 import { systemUser } from "./system";
+import { financeTax } from "./finance";
 
 export const ProductSimpleStatus = {
   ACTIVE: "ACTIVE",
@@ -200,7 +201,7 @@ export const productTag = pgTable(
     name: varchar({ length: 100 }).notNull(),
     status: productSimpleStatusEnum().notNull(),
     // TODO: make it notNull
-    isFeatured: boolean("is_featured"),
+    isFeatured: boolean("is_featured").notNull(),
     createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
       onDelete: "set null",
     }),
@@ -236,16 +237,26 @@ export const product = pgTable(
     businessId: uuid("business_id")
       .notNull()
       .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
-    categoryId: uuid("category_id").references(
-      (): AnyPgColumn => productCategory.id,
-      { onDelete: "set null" },
-    ),
-    brandId: uuid("brand_id").references((): AnyPgColumn => productBrand.id, {
-      onDelete: "set null",
-    }),
-    unitId: uuid("unit_id").references((): AnyPgColumn => productUnit.id, {
-      onDelete: "set null",
-    }),
+    categoryId: uuid("category_id")
+      .notNull()
+      .references((): AnyPgColumn => productCategory.id, {
+        onDelete: "set null",
+      }),
+    brandId: uuid("brand_id")
+      .notNull()
+      .references((): AnyPgColumn => productBrand.id, {
+        onDelete: "set null",
+      }),
+    unitId: uuid("unit_id")
+      .notNull()
+      .references((): AnyPgColumn => productUnit.id, {
+        onDelete: "set null",
+      }),
+    taxId: uuid("tax_id")
+      .notNull()
+      .references((): AnyPgColumn => financeTax.id, {
+        onDelete: "restrict",
+      }),
     name: varchar({ length: 200 }).notNull(),
     slug: varchar({ length: 220 }).notNull(),
     description: text(),
@@ -286,6 +297,7 @@ export const product = pgTable(
     index("product_products_category_id_idx").on(table.categoryId),
     index("product_products_brand_id_idx").on(table.brandId),
     index("product_products_unit_id_idx").on(table.unitId),
+    index("product_products_tax_id_idx").on(table.taxId),
     index("product_products_status_idx").on(table.status),
     index("product_products_deleted_at_idx").on(table.deletedAt),
   ],

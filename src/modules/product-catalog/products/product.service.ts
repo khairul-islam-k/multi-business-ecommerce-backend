@@ -1,48 +1,3 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
-import {
-  type Product,
-  type ProductBrand,
-  type ProductCategory,
-  type ProductImage,
-  type ProductTag,
-  type ProductTagMap,
-  type ProductUnit,
-  type ProductVariant,
-  type ProductVariantAttribute,
-  CatalogProductStatus,
-  ProductReviewStatus,
-  courierShipmentItem,
-  inventoryOrderAllocation,
-  inventoryStock,
-  inventoryStockAdjustmentItem,
-  inventoryStockMovement,
-  inventoryStockTransferItem,
-  inventoryWarehouseStock,
-  invoiceItem,
-  orderCartItem,
-  orderItem,
-  orderReturnItem,
-  product,
-  productAttribute,
-  productAttributeValue,
-  productBrand,
-  productCategory,
-  productImage,
-  productReview,
-  productTag,
-  productTagMap,
-  productUnit,
-  productVariant,
-  productVariantAttribute,
-  supplierInvoiceItem,
-  supplierProductMap,
-  supplierPurchaseOrderItem,
-  supplierPurchaseReturnItem,
-} from "@/database/schema";
 import Decimal from "decimal.js";
 import {
   and,
@@ -58,25 +13,72 @@ import {
   or,
 } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import {
+  CatalogProductStatus,
+  courierShipmentItem,
+  inventoryOrderAllocation,
+  inventoryStock,
+  inventoryStockAdjustmentItem,
+  inventoryStockMovement,
+  inventoryStockTransferItem,
+  inventoryWarehouseStock,
+  invoiceItem,
+  orderCartItem,
+  orderItem,
+  orderReturnItem,
+  Product,
+  product,
+  productAttribute,
+  productAttributeValue,
+  ProductBrand,
+  productBrand,
+  ProductCategory,
+  productCategory,
+  ProductImage,
+  productImage,
+  productReview,
+  ProductReviewStatus,
+  ProductTag,
+  productTag,
+  ProductTagMap,
+  productTagMap,
+  ProductUnit,
+  productUnit,
+  ProductVariant,
+  productVariant,
+  ProductVariantAttribute,
+  productVariantAttribute,
+  supplierInvoiceItem,
+  supplierProductMap,
+  supplierPurchaseOrderItem,
+  supplierPurchaseReturnItem,
+} from "@/database/schema";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+
+import {
+  buildOrderBy,
+  resolveSortColumn,
+} from "../../../common/http/sort.util";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import { buildStockItemKey } from "../../inventory/domain/stock-item-key";
 import { ProductImageInputDto } from "../common/dto/product-media.dto";
+import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
 import {
   CreateProductDto,
   ProductSortBy,
   QueryProductDto,
   UpdateProductDto,
 } from "./dto/product.dto";
-import { buildStockItemKey } from "../../inventory/domain/stock-item-key";
-import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
-import { DatabaseService } from "../../../database/database.service";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
-import {
-  buildOrderBy,
-  resolveSortColumn,
-} from "../../../common/http/sort.util";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 type ProductTagWithTag = ProductTagMap & {
   tag: ProductTag;
@@ -146,9 +148,10 @@ export class ProductService {
           .insert(product)
           .values({
             businessId,
-            categoryId: dto.categoryId ?? null,
-            brandId: dto.brandId ?? null,
-            unitId: dto.unitId ?? null,
+            categoryId: dto.categoryId,
+            brandId: dto.brandId,
+            unitId: dto.unitId,
+            taxId: dto.taxId,
             name: this.lookup.normalizeName(dto.name),
             slug,
             description: this.lookup.normalizeNullableText(dto.description),
@@ -363,6 +366,7 @@ export class ProductService {
             }),
             ...(dto.brandId !== undefined && { brandId: dto.brandId ?? null }),
             ...(dto.unitId !== undefined && { unitId: dto.unitId ?? null }),
+            ...(dto.taxId !== undefined && { taxId: dto.taxId }),
             ...(dto.name !== undefined && {
               name: this.lookup.normalizeName(dto.name),
             }),

@@ -1,17 +1,18 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
+
 import {
-  type SupplierPurchaseOrder,
   financeTax,
   inventoryStock,
   product,
   productVariant,
   supplier,
   supplierInvoice,
+  SupplierPurchaseOrder,
   supplierPurchaseOrder,
   supplierPurchaseOrderItem,
   warehouse,
 } from "@/database/schema";
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { Injectable, NotFoundException } from "@nestjs/common";
 
 import { DatabaseService } from "../../../database/database.service";
 
@@ -50,11 +51,13 @@ export class PurchaseOrderRepository {
           .from(supplier)
           .where(eq(supplier.id, purchaseOrder.supplierId))
           .then(([row]) => row ?? null),
-        this.db
-          .select()
-          .from(financeTax)
-          .where(eq(financeTax.id, purchaseOrder.taxId))
-          .then(([row]) => row ?? null),
+        purchaseOrder.taxId
+          ? this.db
+              .select()
+              .from(financeTax)
+              .where(eq(financeTax.id, purchaseOrder.taxId))
+              .then(([row]) => row ?? null)
+          : Promise.resolve(null),
         this.db
           .select()
           .from(supplierPurchaseOrderItem)

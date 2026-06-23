@@ -1,8 +1,10 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
-import { ProductSimpleStatus } from "@/database/schema";
 import { IsEnum, IsIn, IsOptional } from "class-validator";
 
+import { ProductSimpleStatus } from "@/database/schema";
+import { ApiPropertyOptional } from "@nestjs/swagger";
+
 import { SortedPaginationQueryDto } from "../../../../common/http/query.dto";
+
 export { SortOrder as CatalogSortOrder } from "../../../../common/http/sort.util";
 
 export const CatalogSortBy = {

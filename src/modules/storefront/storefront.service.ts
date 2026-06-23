@@ -26,6 +26,7 @@ import {
 } from "@/database/schema";
 import { Injectable, NotFoundException } from "@nestjs/common";
 
+import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 import {
   apiResponse,
   paginatedResponse,
@@ -35,10 +36,9 @@ import { ProductReviewService } from "../product-catalog/reviews/product-review.
 import { WebsiteService } from "../website/website.service";
 import {
   ResolveStorefrontDto,
-  StorefrontProductSortBy,
   StorefrontProductQueryDto,
+  StorefrontProductSortBy,
 } from "./dto/storefront.dto";
-import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 
 type CategoryRow = typeof productCategory.$inferInsert;
 

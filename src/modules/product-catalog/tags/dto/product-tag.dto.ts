@@ -1,5 +1,3 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { ProductSimpleStatus } from "@/database/schema";
 import {
   IsBoolean,
   IsEnum,
@@ -7,6 +5,9 @@ import {
   IsString,
   MaxLength,
 } from "class-validator";
+
+import { ProductSimpleStatus } from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 
 export class CreateProductTagDto {
   @ApiProperty({ example: "summer" })

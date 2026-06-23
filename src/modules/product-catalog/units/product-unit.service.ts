@@ -1,35 +1,37 @@
+import { and, count, eq, ilike, isNull } from "drizzle-orm";
+
+import {
+  product,
+  ProductSimpleStatus,
+  ProductUnit,
+  productUnit,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  type ProductUnit,
-  ProductSimpleStatus,
-  product,
-  productUnit,
-} from "@/database/schema";
-import { and, count, eq, ilike, isNull } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import {
-  CatalogSortBy,
-  QueryCatalogDto,
-} from "../common/dto/query-catalog.dto";
-import {
-  CreateProductUnitDto,
-  UpdateProductUnitDto,
-} from "./dto/product-unit.dto";
-import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
-import { DatabaseService } from "../../../database/database.service";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
 import {
   buildOrderBy,
   resolveSortColumn,
 } from "../../../common/http/sort.util";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import {
+  CatalogSortBy,
+  QueryCatalogDto,
+} from "../common/dto/query-catalog.dto";
+import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import {
+  CreateProductUnitDto,
+  UpdateProductUnitDto,
+} from "./dto/product-unit.dto";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 type UnitWithCount = ProductUnit & {
   _count: { products: number };

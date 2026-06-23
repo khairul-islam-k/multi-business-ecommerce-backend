@@ -4,15 +4,15 @@ import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm";
 import {
   CatalogProductStatus,
   customer,
-  OrderCartStatus,
   order,
   orderCart,
   orderCartItem,
+  OrderCartStatus,
   orderItem,
   orderPayment,
-  OrderReturnStatus,
   orderReturn,
   orderReturnItem,
+  OrderReturnStatus,
   OrderStatus,
   orderStatusLog,
   product,
@@ -29,6 +29,7 @@ import {
 } from "@nestjs/common";
 
 import { isUniqueConstraintError } from "../../common/database/db-error.util";
+import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 import {
   normalizeOptionalText,
   normalizeRequiredText,
@@ -38,6 +39,9 @@ import {
   paginatedResponse,
 } from "../../common/utils/api-response.util";
 import { DatabaseService } from "../../database/database.service";
+import { OrderSortBy } from "../orders/dto/order.dto";
+import { OrderCodeRepository } from "../orders/infrastructure/order-code.repository";
+import { OrderService } from "../orders/order.service";
 import { WebsiteService } from "../website/website.service";
 import {
   AddStorefrontCartItemDto,
@@ -50,10 +54,6 @@ import {
   StorefrontReviewQueryDto,
   UpdateStorefrontCartItemDto,
 } from "./dto/storefront-customer.dto";
-import { OrderService } from "../orders/order.service";
-import { OrderCodeRepository } from "../orders/infrastructure/order-code.repository";
-import { OrderSortBy } from "../orders/dto/order.dto";
-import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 
 import type { CurrentCustomerPayload } from "../customer-auth/strategies/customer-jwt.strategy";
 
@@ -266,7 +266,6 @@ export class StorefrontCustomerService {
       {
         customerId: currentCustomer.customerId,
         warehouseId: dto.warehouseId,
-        taxId: dto.taxId,
         customerName: customerRow.name,
         customerPhone: customerRow.phone ?? undefined,
         customerEmail: currentCustomer.email,

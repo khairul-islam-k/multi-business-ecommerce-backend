@@ -14,6 +14,10 @@ import {
 } from "@nestjs/common";
 
 import {
+  buildOrderBy,
+  resolveSortColumn,
+} from "../../../common/http/sort.util";
+import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
@@ -29,10 +33,6 @@ import {
 } from "./dto/product-tag.dto";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import {
-  buildOrderBy,
-  resolveSortColumn,
-} from "../../../common/http/sort.util";
 
 type TagWithCount = ProductTag & {
   _count: { products: number };

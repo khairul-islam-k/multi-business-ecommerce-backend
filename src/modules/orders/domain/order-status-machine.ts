@@ -1,5 +1,5 @@
-import { BadRequestException } from "@nestjs/common";
 import { OrderStatus } from "@/database/schema";
+import { BadRequestException } from "@nestjs/common";
 
 export function assertCanShipOrder(status: OrderStatus) {
   const shippableStatuses: OrderStatus[] = [
