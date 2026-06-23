@@ -186,20 +186,83 @@ export class WebsiteService {
     await this.getWebsiteOrThrow(businessId, websiteId);
 
     try {
-      const [updated] = await this.db
-        .update(website)
-        .set({
-          ...(dto.template !== undefined && { template: dto.template }),
-          ...(dto.status !== undefined && { status: dto.status }),
-          updatedBy: currentUser.id,
-        })
-        .where(eq(website.id, websiteId))
-        .returning();
+      await this.db.transaction(async (tx) => {
+        if (dto.config) {
+          const configValues = {
+            ...(dto.config.headerConfig !== undefined && {
+              headerConfig: dto.config.headerConfig as JsonValue,
+            }),
+            ...(dto.config.footerConfig !== undefined && {
+              footerConfig: dto.config.footerConfig as JsonValue,
+            }),
+            ...(dto.config.navigationConfig !== undefined && {
+              navigationConfig: dto.config.navigationConfig as JsonValue,
+            }),
+            ...(dto.config.sectionConfig !== undefined && {
+              sectionConfig: dto.config.sectionConfig as JsonValue,
+            }),
+            ...(dto.config.generalConfig !== undefined && {
+              generalConfig: dto.config.generalConfig as JsonValue,
+            }),
+          };
 
-      return apiResponse(
-        await this.hydrateWebsite(updated),
-        "Website updated successfully",
-      );
+          if (this.hasFields(configValues)) {
+            await tx
+              .insert(websiteConfig)
+              .values({
+                websiteId,
+                ...configValues,
+              })
+              .onConflictDoUpdate({
+                target: websiteConfig.websiteId,
+                set: configValues,
+              });
+          }
+        }
+
+        if (dto.theme) {
+          const themeValues = this.buildThemeValues(dto.theme);
+
+          if (this.hasFields(themeValues)) {
+            await tx
+              .insert(websiteThemeSetting)
+              .values({ websiteId, ...themeValues })
+              .onConflictDoUpdate({
+                target: websiteThemeSetting.websiteId,
+                set: themeValues,
+              });
+          }
+        }
+
+        if (dto.seo) {
+          const seoValues = this.buildSeoValues(dto.seo);
+
+          if (this.hasFields(seoValues)) {
+            await tx
+              .insert(websiteSeoSetting)
+              .values({ websiteId, ...seoValues })
+              .onConflictDoUpdate({
+                target: websiteSeoSetting.websiteId,
+                set: seoValues,
+              });
+          }
+        }
+
+        await tx
+          .update(website)
+          .set({
+            ...(dto.template !== undefined && { template: dto.template }),
+            ...(dto.status !== undefined && { status: dto.status }),
+            updatedBy: currentUser.id,
+          })
+          .where(eq(website.id, websiteId))
+          .returning();
+
+        return apiResponse(
+          await this.findWebsiteDetails(businessId, websiteId),
+          "Website updated successfully",
+        );
+      });
     } catch (error) {
       this.handleUniqueError(error, "Website slug already exists");
     }

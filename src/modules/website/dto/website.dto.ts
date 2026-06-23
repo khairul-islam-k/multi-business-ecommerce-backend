@@ -129,7 +129,7 @@ export class WebsiteSeoDto {
 export class CreateWebsiteDto {
   @ApiPropertyOptional({
     enum: WebsiteTemplate,
-    example: WebsiteTemplate.ELECTRONIC,
+    example: WebsiteTemplate.FASHION,
   })
   @IsOptional()
   @IsEnum(WebsiteTemplate)
