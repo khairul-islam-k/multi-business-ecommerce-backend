@@ -8,10 +8,7 @@ import {
 } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 
-import {
-  ResolveStorefrontDto,
-  StorefrontProductQueryDto,
-} from "./dto/storefront.dto";
+import { StorefrontProductQueryDto } from "./dto/storefront.dto";
 import { StorefrontService } from "./storefront.service";
 
 @ApiTags("Storefront")
@@ -22,54 +19,81 @@ export class StorefrontController {
   @Get("resolve")
   @ApiOperation({ summary: "Resolve published storefront" })
   resolve(
-    @Query() query: ResolveStorefrontDto,
     @Headers("host") host?: string,
+    @Headers("x-forwarded-host") forwardedHost?: string,
   ) {
-    return this.storefront.resolve(query, host);
+    return this.storefront.resolve(this.getRequestHost(host, forwardedHost));
   }
 
-  @Get(":websiteId/categories")
+  @Get("categories")
   @ApiOperation({ summary: "Get storefront categories" })
-  findCategories(@Param("websiteId", ParseUUIDPipe) websiteId: string) {
-    return this.storefront.findCategories(websiteId);
+  findCategories(
+    @Headers("host") host?: string,
+    @Headers("x-forwarded-host") forwardedHost?: string,
+  ) {
+    return this.storefront.findCategories(
+      this.getRequestHost(host, forwardedHost),
+    );
   }
 
-  @Get(":websiteId/brands")
+  @Get("brands")
   @ApiOperation({ summary: "Get storefront brands" })
-  findBrands(@Param("websiteId", ParseUUIDPipe) websiteId: string) {
-    return this.storefront.findBrands(websiteId);
+  findBrands(
+    @Headers("host") host?: string,
+    @Headers("x-forwarded-host") forwardedHost?: string,
+  ) {
+    return this.storefront.findBrands(this.getRequestHost(host, forwardedHost));
   }
 
-  @Get(":websiteId/tags")
+  @Get("tags")
   @ApiOperation({ summary: "Get storefront featured tags" })
-  findTags(@Param("websiteId", ParseUUIDPipe) websiteId: string) {
-    return this.storefront.findTags(websiteId);
+  findTags(
+    @Headers("host") host?: string,
+    @Headers("x-forwarded-host") forwardedHost?: string,
+  ) {
+    return this.storefront.findTags(this.getRequestHost(host, forwardedHost));
   }
 
-  @Get(":websiteId/products")
+  @Get("products")
   @ApiOperation({ summary: "Get storefront products" })
   findProducts(
-    @Param("websiteId", ParseUUIDPipe) websiteId: string,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
     @Query() query: StorefrontProductQueryDto,
   ) {
-    return this.storefront.findProducts(websiteId, query);
+    return this.storefront.findProducts(
+      this.getRequestHost(host, forwardedHost),
+      query,
+    );
   }
 
-  @Get(":websiteId/products/:productId/reviews")
+  @Get("products/:productId/reviews")
   @ApiOperation({ summary: "Get storefront product reviews" })
   findProductReviews(
-    @Param("websiteId", ParseUUIDPipe) websiteId: string,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
     @Param("productId", ParseUUIDPipe) productId: string,
   ) {
-    return this.storefront.findProductReviews(websiteId, productId);
+    return this.storefront.findProductReviews(
+      this.getRequestHost(host, forwardedHost),
+      productId,
+    );
   }
 
-  @Get(":websiteId/products/:productSlug")
+  @Get("products/:productSlug")
   @ApiOperation({ summary: "Get storefront product" })
   findProduct(
-    @Param("websiteId", ParseUUIDPipe) websiteId: string,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
     @Param("productSlug") productSlug: string,
   ) {
-    return this.storefront.findProduct(websiteId, productSlug);
+    return this.storefront.findProduct(
+      this.getRequestHost(host, forwardedHost),
+      productSlug,
+    );
+  }
+
+  private getRequestHost(host?: string, forwardedHost?: string) {
+    return forwardedHost ?? host;
   }
 }

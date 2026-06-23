@@ -46,7 +46,7 @@ import type {
 import type { CurrentCustomerPayload } from "./strategies/customer-jwt.strategy";
 
 type PublishedWebsite = Awaited<
-  ReturnType<WebsiteService["findPublishedById"]>
+  ReturnType<WebsiteService["findPublishedByHostOrThrow"]>
 >;
 
 @Injectable()
@@ -66,8 +66,8 @@ export class CustomerAuthService {
     return this.database.db;
   }
 
-  async register(websiteId: string, dto: CustomerRegisterDto) {
-    const storefront = await this.getPublishedStorefrontOrThrow(websiteId);
+  async register(host: string | undefined, dto: CustomerRegisterDto) {
+    const storefront = await this.getPublishedStorefrontOrThrow(host);
     const email = normalizeEmail(dto.email);
     const phone = normalizeOptionalText(dto.phone);
     const passwordHash = await this.hashPassword(dto.password);
@@ -173,8 +173,8 @@ export class CustomerAuthService {
     }
   }
 
-  async login(websiteId: string, dto: CustomerLoginDto) {
-    const storefront = await this.getPublishedStorefrontOrThrow(websiteId);
+  async login(host: string | undefined, dto: CustomerLoginDto) {
+    const storefront = await this.getPublishedStorefrontOrThrow(host);
     const email = normalizeEmail(dto.email);
     const account = await this.findAccountByEmail(storefront.id, email);
 
@@ -220,8 +220,8 @@ export class CustomerAuthService {
     );
   }
 
-  async refresh(websiteId: string, dto: CustomerRefreshTokenDto) {
-    const storefront = await this.getPublishedStorefrontOrThrow(websiteId);
+  async refresh(host: string | undefined, dto: CustomerRefreshTokenDto) {
+    const storefront = await this.getPublishedStorefrontOrThrow(host);
     const session = await this.sessions.findByRefreshToken(dto.refreshToken);
 
     if (!session) {
@@ -283,7 +283,13 @@ export class CustomerAuthService {
     return apiResponse(null, "Customer logged out successfully");
   }
 
-  async me(currentCustomer: CurrentCustomerPayload) {
+  async me(currentCustomer: CurrentCustomerPayload, host?: string) {
+    const storefront = await this.getPublishedStorefrontOrThrow(host);
+
+    if (currentCustomer.websiteId !== storefront.id) {
+      throw new ForbiddenException("Customer cannot access this storefront");
+    }
+
     const [accountRow, customerRow] = await Promise.all([
       this.db
         .select()
@@ -308,10 +314,10 @@ export class CustomerAuthService {
   }
 
   async requestEmailVerification(
-    websiteId: string,
+    host: string | undefined,
     dto: CustomerRequestVerificationDto,
   ) {
-    const storefront = await this.getPublishedStorefrontOrThrow(websiteId);
+    const storefront = await this.getPublishedStorefrontOrThrow(host);
     const account = await this.findAccountByEmail(
       storefront.id,
       normalizeEmail(dto.email),
@@ -349,8 +355,8 @@ export class CustomerAuthService {
     return apiResponse(null, "A verification code has been sent");
   }
 
-  async verifyEmail(websiteId: string, dto: CustomerVerifyEmailDto) {
-    const storefront = await this.getPublishedStorefrontOrThrow(websiteId);
+  async verifyEmail(host: string | undefined, dto: CustomerVerifyEmailDto) {
+    const storefront = await this.getPublishedStorefrontOrThrow(host);
     const account = await this.findAccountByEmail(
       storefront.id,
       normalizeEmail(dto.email),
@@ -400,8 +406,8 @@ export class CustomerAuthService {
     return apiResponse(null, "Customer email verified successfully");
   }
 
-  async forgotPassword(websiteId: string, dto: CustomerForgotPasswordDto) {
-    const storefront = await this.getPublishedStorefrontOrThrow(websiteId);
+  async forgotPassword(host: string | undefined, dto: CustomerForgotPasswordDto) {
+    const storefront = await this.getPublishedStorefrontOrThrow(host);
     const account = await this.findAccountByEmail(
       storefront.id,
       normalizeEmail(dto.email),
@@ -434,8 +440,11 @@ export class CustomerAuthService {
     return apiResponse(null, "A password reset code has been sent");
   }
 
-  async verifyResetOtp(websiteId: string, dto: CustomerVerifyResetOtpDto) {
-    const storefront = await this.getPublishedStorefrontOrThrow(websiteId);
+  async verifyResetOtp(
+    host: string | undefined,
+    dto: CustomerVerifyResetOtpDto,
+  ) {
+    const storefront = await this.getPublishedStorefrontOrThrow(host);
     const account = await this.findAccountByEmail(
       storefront.id,
       normalizeEmail(dto.email),
@@ -470,8 +479,8 @@ export class CustomerAuthService {
     return apiResponse({ resetRequestId: reset.id }, "OTP verified");
   }
 
-  async resetPassword(websiteId: string, dto: CustomerResetPasswordDto) {
-    const storefront = await this.getPublishedStorefrontOrThrow(websiteId);
+  async resetPassword(host: string | undefined, dto: CustomerResetPasswordDto) {
+    const storefront = await this.getPublishedStorefrontOrThrow(host);
     const account = await this.findAccountByEmail(
       storefront.id,
       normalizeEmail(dto.email),
@@ -535,14 +544,8 @@ export class CustomerAuthService {
     return apiResponse(null, "Customer password reset successfully");
   }
 
-  private async getPublishedStorefrontOrThrow(websiteId: string) {
-    const storefront = await this.websites.findPublishedById(websiteId);
-
-    if (!storefront) {
-      throw new NotFoundException("Published storefront not found");
-    }
-
-    return storefront as NonNullable<PublishedWebsite>;
+  private async getPublishedStorefrontOrThrow(host?: string) {
+    return this.websites.findPublishedByHostOrThrow(host);
   }
 
   private async findAccountByEmail(websiteId: string, email: string) {

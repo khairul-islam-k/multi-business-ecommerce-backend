@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, IsUUID } from "class-validator";
+import { IsIn, IsOptional, IsUUID } from "class-validator";
 
 import { ApiPropertyOptional } from "@nestjs/swagger";
 
@@ -11,23 +11,6 @@ export const StorefrontProductSortBy = {
 } as const;
 export type StorefrontProductSortBy =
   (typeof StorefrontProductSortBy)[keyof typeof StorefrontProductSortBy];
-
-export class ResolveStorefrontDto {
-  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
-  @IsOptional()
-  @IsUUID()
-  websiteId?: string;
-
-  @ApiPropertyOptional({ example: "acme-store" })
-  @IsOptional()
-  @IsString()
-  slug?: string;
-
-  @ApiPropertyOptional({ example: "shop.example.com" })
-  @IsOptional()
-  @IsString()
-  host?: string;
-}
 
 export class StorefrontProductQueryDto extends SortedPaginationQueryDto<StorefrontProductSortBy> {
   @ApiPropertyOptional({ example: 12, default: 12 })

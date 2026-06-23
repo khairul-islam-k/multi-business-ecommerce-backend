@@ -72,7 +72,7 @@ export class StorefrontCustomerService {
 
   async findCarts(
     currentCustomer: CurrentCustomerPayload,
-    websiteId: string,
+    websiteId: string | undefined,
     query: StorefrontCartQueryDto,
   ) {
     await this.assertStorefrontCustomer(currentCustomer, websiteId);
@@ -96,7 +96,7 @@ export class StorefrontCustomerService {
 
   async getActiveCart(
     currentCustomer: CurrentCustomerPayload,
-    websiteId: string,
+    websiteId: string | undefined,
   ) {
     await this.assertStorefrontCustomer(currentCustomer, websiteId);
     const cart = await this.findActiveCart(currentCustomer);
@@ -106,7 +106,7 @@ export class StorefrontCustomerService {
 
   async addCartItem(
     currentCustomer: CurrentCustomerPayload,
-    websiteId: string,
+    websiteId: string | undefined,
     dto: AddStorefrontCartItemDto,
   ) {
     await this.assertStorefrontCustomer(currentCustomer, websiteId);
@@ -148,7 +148,7 @@ export class StorefrontCustomerService {
 
   async updateCartItem(
     currentCustomer: CurrentCustomerPayload,
-    websiteId: string,
+    websiteId: string | undefined,
     itemId: string,
     dto: UpdateStorefrontCartItemDto,
   ) {
@@ -171,7 +171,7 @@ export class StorefrontCustomerService {
 
   async removeCartItem(
     currentCustomer: CurrentCustomerPayload,
-    websiteId: string,
+    websiteId: string | undefined,
     itemId: string,
   ) {
     await this.assertStorefrontCustomer(currentCustomer, websiteId);
@@ -192,7 +192,7 @@ export class StorefrontCustomerService {
 
   async clearActiveCart(
     currentCustomer: CurrentCustomerPayload,
-    websiteId: string,
+    websiteId: string | undefined,
   ) {
     await this.assertStorefrontCustomer(currentCustomer, websiteId);
     const cart = await this.findActiveCart(currentCustomer);
@@ -213,7 +213,7 @@ export class StorefrontCustomerService {
 
   async createReview(
     currentCustomer: CurrentCustomerPayload,
-    websiteId: string,
+    websiteId: string | undefined,
     dto: CreateStorefrontReviewDto,
   ) {
     await this.assertStorefrontCustomer(currentCustomer, websiteId);
@@ -242,7 +242,7 @@ export class StorefrontCustomerService {
 
   async placeOrder(
     currentCustomer: CurrentCustomerPayload,
-    websiteId: string,
+    websiteId: string | undefined,
     dto: PlaceStorefrontOrderDto,
   ) {
     await this.assertStorefrontCustomer(currentCustomer, websiteId);
@@ -297,7 +297,7 @@ export class StorefrontCustomerService {
 
   async findOrders(
     currentCustomer: CurrentCustomerPayload,
-    websiteId: string,
+    websiteId: string | undefined,
     query: StorefrontOrderQueryDto,
   ) {
     await this.assertStorefrontCustomer(currentCustomer, websiteId);
@@ -356,7 +356,7 @@ export class StorefrontCustomerService {
 
   async findOrder(
     currentCustomer: CurrentCustomerPayload,
-    websiteId: string,
+    websiteId: string | undefined,
     orderId: string,
   ) {
     await this.assertStorefrontCustomer(currentCustomer, websiteId);
@@ -368,7 +368,7 @@ export class StorefrontCustomerService {
 
   async cancelOrder(
     currentCustomer: CurrentCustomerPayload,
-    websiteId: string,
+    websiteId: string | undefined,
     orderId: string,
     dto: CancelStorefrontOrderDto,
   ) {
@@ -388,7 +388,7 @@ export class StorefrontCustomerService {
 
   async createOrderReturn(
     currentCustomer: CurrentCustomerPayload,
-    websiteId: string,
+    websiteId: string | undefined,
     orderId: string,
     dto: CreateStorefrontOrderReturnDto,
   ) {
@@ -497,7 +497,7 @@ export class StorefrontCustomerService {
 
   async findReviews(
     currentCustomer: CurrentCustomerPayload,
-    websiteId: string,
+    websiteId: string | undefined,
     query: StorefrontReviewQueryDto,
   ) {
     await this.assertStorefrontCustomer(currentCustomer, websiteId);
@@ -539,19 +539,14 @@ export class StorefrontCustomerService {
 
   private async assertStorefrontCustomer(
     currentCustomer: CurrentCustomerPayload,
-    websiteId: string,
+    host?: string,
   ) {
-    if (currentCustomer.websiteId !== websiteId) {
-      throw new ForbiddenException("Customer cannot access this storefront");
-    }
+    const storefront = await this.websites.findPublishedByHostOrThrow(host);
 
-    const storefront = await this.websites.findPublishedById(websiteId);
-
-    if (!storefront) {
-      throw new NotFoundException("Published storefront not found");
-    }
-
-    if (storefront.businessId !== currentCustomer.businessId) {
+    if (
+      currentCustomer.websiteId !== storefront.id ||
+      storefront.businessId !== currentCustomer.businessId
+    ) {
       throw new ForbiddenException("Customer cannot access this storefront");
     }
 

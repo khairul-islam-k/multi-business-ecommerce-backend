@@ -35,7 +35,6 @@ import { DatabaseService } from "../../database/database.service";
 import { ProductReviewService } from "../product-catalog/reviews/product-review.service";
 import { WebsiteService } from "../website/website.service";
 import {
-  ResolveStorefrontDto,
   StorefrontProductQueryDto,
   StorefrontProductSortBy,
 } from "./dto/storefront.dto";
@@ -59,24 +58,12 @@ export class StorefrontService {
     return this.database.db;
   }
 
-  async resolve(dto: ResolveStorefrontDto, fallbackHost?: string) {
-    const website = dto.websiteId
-      ? await this.websites.findPublishedById(dto.websiteId)
-      : dto.slug
-        ? await this.websites.findPublishedBySlug(dto.slug)
-        : await this.websites.findPublishedByHost(
-            dto.host ?? fallbackHost ?? "",
-          );
-
-    if (!website) {
-      throw new NotFoundException("Published storefront not found");
-    }
-
-    return apiResponse(website);
+  async resolve(host?: string) {
+    return apiResponse(await this.getPublishedWebsite(host));
   }
 
-  async findCategories(websiteId: string) {
-    const website = await this.getPublishedWebsite(websiteId);
+  async findCategories(host?: string) {
+    const website = await this.getPublishedWebsite(host);
     const rows = await this.db
       .select()
       .from(productCategory)
@@ -120,8 +107,8 @@ export class StorefrontService {
     return apiResponse(categories);
   }
 
-  async findBrands(websiteId: string) {
-    const website = await this.getPublishedWebsite(websiteId);
+  async findBrands(host?: string) {
+    const website = await this.getPublishedWebsite(host);
     const brands = await this.db
       .select()
       .from(productBrand)
@@ -136,8 +123,8 @@ export class StorefrontService {
     return apiResponse(brands);
   }
 
-  async findTags(websiteId: string) {
-    const website = await this.getPublishedWebsite(websiteId);
+  async findTags(host?: string) {
+    const website = await this.getPublishedWebsite(host);
     const tags = await this.db
       .select()
       .from(productTag)
@@ -153,8 +140,8 @@ export class StorefrontService {
     return apiResponse(tags);
   }
 
-  async findProducts(websiteId: string, query: StorefrontProductQueryDto) {
-    const website = await this.getPublishedWebsite(websiteId);
+  async findProducts(host: string | undefined, query: StorefrontProductQueryDto) {
+    const website = await this.getPublishedWebsite(host);
     const page = query.page ?? 1;
     const limit = query.limit ?? 12;
     const skip = (page - 1) * limit;
@@ -225,8 +212,8 @@ export class StorefrontService {
     });
   }
 
-  async findProduct(websiteId: string, productSlug: string) {
-    const website = await this.getPublishedWebsite(websiteId);
+  async findProduct(host: string | undefined, productSlug: string) {
+    const website = await this.getPublishedWebsite(host);
     const [item] = await this.db
       .select()
       .from(product)
@@ -247,8 +234,8 @@ export class StorefrontService {
     return apiResponse(await this.hydrateProduct(item));
   }
 
-  async findProductReviews(websiteId: string, productId: string) {
-    const website = await this.getPublishedWebsite(websiteId);
+  async findProductReviews(host: string | undefined, productId: string) {
+    const website = await this.getPublishedWebsite(host);
     const reviews = await this.reviews.findApprovedForProduct(
       website.businessId,
       productId,
@@ -257,14 +244,8 @@ export class StorefrontService {
     return apiResponse(reviews);
   }
 
-  private async getPublishedWebsite(websiteId: string) {
-    const website = await this.websites.findPublishedById(websiteId);
-
-    if (!website) {
-      throw new NotFoundException("Published storefront not found");
-    }
-
-    return website;
+  private async getPublishedWebsite(host?: string) {
+    return this.websites.findPublishedByHostOrThrow(host);
   }
 
   private async hydrateProduct(item: typeof product.$inferSelect) {

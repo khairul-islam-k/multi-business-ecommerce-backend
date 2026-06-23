@@ -357,6 +357,7 @@ export class WebsiteService {
   ) {
     await this.getWebsiteOrThrow(businessId, websiteId);
     this.assertDomainInput(dto);
+    await this.assertDomainAvailable(dto);
 
     try {
       const domainRow = await this.db.transaction(async (tx) => {
@@ -508,6 +509,10 @@ export class WebsiteService {
 
   async findPublishedByHost(host: string) {
     const normalizedHost = this.normalizeHost(host);
+    if (!normalizedHost) {
+      return null;
+    }
+
     const [row] = await this.db
       .select({ site: website })
       .from(websiteDomain)
@@ -525,6 +530,16 @@ export class WebsiteService {
       .limit(1);
 
     return row ? this.hydrateWebsite(row.site) : null;
+  }
+
+  async findPublishedByHostOrThrow(host?: string | null) {
+    const storefront = await this.findPublishedByHost(host ?? "");
+
+    if (!storefront) {
+      throw new NotFoundException("Published storefront not found");
+    }
+
+    return storefront;
   }
 
   private async findWebsiteDetails(businessId: string, websiteId: string) {
@@ -663,7 +678,15 @@ export class WebsiteService {
   }
 
   private normalizeHost(value?: string | null) {
-    return value?.trim().toLowerCase().replace(/:\d+$/, "") || "";
+    return (
+      value
+        ?.split(",")[0]
+        ?.trim()
+        .toLowerCase()
+        .replace(/^https?:\/\//, "")
+        .replace(/\/.*$/, "")
+        .replace(/:\d+$/, "") || ""
+    );
   }
 
   private assertDomainInput(dto: CreateWebsiteDomainDto) {
@@ -679,6 +702,28 @@ export class WebsiteService {
       !this.normalizeHost(dto.subdomain)
     ) {
       throw new BadRequestException("Subdomain is required");
+    }
+  }
+
+  private async assertDomainAvailable(dto: CreateWebsiteDomainDto) {
+    const normalizedHost =
+      dto.domainType === WebsiteDomainType.CUSTOM_DOMAIN
+        ? this.normalizeHost(dto.domain)
+        : this.normalizeHost(dto.subdomain);
+
+    const [existing] = await this.db
+      .select({ id: websiteDomain.id })
+      .from(websiteDomain)
+      .where(
+        or(
+          eq(websiteDomain.domain, normalizedHost),
+          eq(websiteDomain.subdomain, normalizedHost),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      throw new BadRequestException("Website domain already exists");
     }
   }
 

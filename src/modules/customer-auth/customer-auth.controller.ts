@@ -2,8 +2,7 @@ import {
   Body,
   Controller,
   Get,
-  Param,
-  ParseUUIDPipe,
+  Headers,
   Post,
   UseGuards,
 } from "@nestjs/common";
@@ -27,35 +26,38 @@ import { CustomerAuthGuard } from "./guards/customer-auth.guard";
 import type { CurrentCustomerPayload } from "./strategies/customer-jwt.strategy";
 
 @ApiTags("Storefront Customer Auth")
-@Controller("storefront/:websiteId/auth")
+@Controller("storefront/auth")
 export class CustomerAuthController {
   constructor(private readonly auth: CustomerAuthService) {}
 
   @Post("register")
   @ApiOperation({ summary: "Register storefront customer" })
   register(
-    @Param("websiteId", ParseUUIDPipe) websiteId: string,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
     @Body() dto: CustomerRegisterDto,
   ) {
-    return this.auth.register(websiteId, dto);
+    return this.auth.register(this.getRequestHost(host, forwardedHost), dto);
   }
 
   @Post("login")
   @ApiOperation({ summary: "Login storefront customer" })
   login(
-    @Param("websiteId", ParseUUIDPipe) websiteId: string,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
     @Body() dto: CustomerLoginDto,
   ) {
-    return this.auth.login(websiteId, dto);
+    return this.auth.login(this.getRequestHost(host, forwardedHost), dto);
   }
 
   @Post("refresh")
   @ApiOperation({ summary: "Refresh storefront customer session" })
   refresh(
-    @Param("websiteId", ParseUUIDPipe) websiteId: string,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
     @Body() dto: CustomerRefreshTokenDto,
   ) {
-    return this.auth.refresh(websiteId, dto);
+    return this.auth.refresh(this.getRequestHost(host, forwardedHost), dto);
   }
 
   @Post("logout")
@@ -67,53 +69,78 @@ export class CustomerAuthController {
   @Post("request-verification")
   @ApiOperation({ summary: "Request storefront customer email verification" })
   requestEmailVerification(
-    @Param("websiteId", ParseUUIDPipe) websiteId: string,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
     @Body() dto: CustomerRequestVerificationDto,
   ) {
-    return this.auth.requestEmailVerification(websiteId, dto);
+    return this.auth.requestEmailVerification(
+      this.getRequestHost(host, forwardedHost),
+      dto,
+    );
   }
 
   @Post("verify-email")
   @ApiOperation({ summary: "Verify storefront customer email" })
   verifyEmail(
-    @Param("websiteId", ParseUUIDPipe) websiteId: string,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
     @Body() dto: CustomerVerifyEmailDto,
   ) {
-    return this.auth.verifyEmail(websiteId, dto);
+    return this.auth.verifyEmail(this.getRequestHost(host, forwardedHost), dto);
   }
 
   @Post("forgot-password")
   @ApiOperation({ summary: "Request storefront customer password reset" })
   forgotPassword(
-    @Param("websiteId", ParseUUIDPipe) websiteId: string,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
     @Body() dto: CustomerForgotPasswordDto,
   ) {
-    return this.auth.forgotPassword(websiteId, dto);
+    return this.auth.forgotPassword(
+      this.getRequestHost(host, forwardedHost),
+      dto,
+    );
   }
 
   @Post("verify-reset")
   @ApiOperation({ summary: "Verify storefront customer password reset OTP" })
   verifyResetOtp(
-    @Param("websiteId", ParseUUIDPipe) websiteId: string,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
     @Body() dto: CustomerVerifyResetOtpDto,
   ) {
-    return this.auth.verifyResetOtp(websiteId, dto);
+    return this.auth.verifyResetOtp(
+      this.getRequestHost(host, forwardedHost),
+      dto,
+    );
   }
 
   @Post("reset-password")
   @ApiOperation({ summary: "Reset storefront customer password" })
   resetPassword(
-    @Param("websiteId", ParseUUIDPipe) websiteId: string,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
     @Body() dto: CustomerResetPasswordDto,
   ) {
-    return this.auth.resetPassword(websiteId, dto);
+    return this.auth.resetPassword(
+      this.getRequestHost(host, forwardedHost),
+      dto,
+    );
   }
 
   @Get("me")
   @ApiBearerAuth()
   @UseGuards(CustomerAuthGuard)
   @ApiOperation({ summary: "Get storefront customer profile" })
-  me(@CurrentCustomer() customer: CurrentCustomerPayload) {
-    return this.auth.me(customer);
+  me(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+  ) {
+    return this.auth.me(customer, this.getRequestHost(host, forwardedHost));
+  }
+
+  private getRequestHost(host?: string, forwardedHost?: string) {
+    return forwardedHost ?? host;
   }
 }
