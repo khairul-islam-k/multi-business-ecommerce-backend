@@ -285,7 +285,7 @@ export class ProductCategoryService {
     }
   }
 
-  private findCategoryRow(businessId: string, categoryId: string) {
+  private async findCategoryRow(businessId: string, categoryId: string) {
     return this.db
       .select()
       .from(productCategory)

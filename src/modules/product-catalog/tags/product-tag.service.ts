@@ -194,7 +194,7 @@ export class ProductTagService {
     }
   }
 
-  private findTagRow(businessId: string, tagId: string) {
+  private async findTagRow(businessId: string, tagId: string) {
     return this.db
       .select()
       .from(productTag)

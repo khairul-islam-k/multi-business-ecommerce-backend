@@ -16,6 +16,7 @@ import {
   inventoryStock,
   product,
   productBrand,
+  ProductCategory,
   productCategory,
   productImage,
   ProductSimpleStatus,
@@ -38,6 +39,15 @@ import {
   StorefrontProductQueryDto,
   StorefrontProductSortBy,
 } from "./dto/storefront.dto";
+
+type CategoryWithDetails = ProductCategory & {
+  parent: ProductCategory | null;
+  children: ProductCategory[];
+  _count: {
+    children: number;
+    products: number;
+  };
+};
 
 type CategoryRow = typeof productCategory.$inferInsert;
 
@@ -74,7 +84,8 @@ export class StorefrontService {
           isNull(productCategory.deletedAt),
         ),
       )
-      .orderBy(asc(productCategory.sortOrder), asc(productCategory.name));
+      .orderBy(asc(productCategory.sortOrder), asc(productCategory.name))
+      .then((rows) => this.withCategoriesDetails(rows));
 
     const categoryMap = new Map<string, CategoryTreeNode>();
 
@@ -356,6 +367,60 @@ export class StorefrontService {
       stockSummary: this.buildStockSummary(stocks, variants.length > 0),
       reviewSummary,
       reviews,
+    };
+  }
+
+  private async withCategoriesDetails(categories: ProductCategory[]) {
+    return Promise.all(
+      categories.map((category) => this.withCategoryDetails(category)),
+    );
+  }
+
+  private async withCategoryDetails(
+    category: ProductCategory,
+    options: { onlyActiveChildren?: boolean } = {},
+  ): Promise<CategoryWithDetails> {
+    const [parent, children, childCount, productCount] = await Promise.all([
+      category.parentId
+        ? this.db
+            .select()
+            .from(productCategory)
+            .where(eq(productCategory.id, category.parentId))
+            .limit(1)
+            .then(([row]) => row ?? null)
+        : Promise.resolve(null),
+      this.db
+        .select()
+        .from(productCategory)
+        .where(
+          and(
+            eq(productCategory.parentId, category.id),
+            options.onlyActiveChildren
+              ? isNull(productCategory.deletedAt)
+              : undefined,
+          ),
+        )
+        .orderBy(asc(productCategory.sortOrder)),
+      this.db
+        .select({ value: count() })
+        .from(productCategory)
+        .where(eq(productCategory.parentId, category.id))
+        .then(([row]) => row?.value ?? 0),
+      this.db
+        .select({ value: count() })
+        .from(product)
+        .where(eq(product.categoryId, category.id))
+        .then(([row]) => row?.value ?? 0),
+    ]);
+
+    return {
+      ...category,
+      parent,
+      children,
+      _count: {
+        children: childCount,
+        products: productCount,
+      },
     };
   }
 
