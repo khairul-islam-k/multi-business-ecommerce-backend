@@ -22,4 +22,13 @@ describe("order status machine", () => {
       BadRequestException,
     );
   });
+
+  it("explains why an invalid transition is blocked", () => {
+    expect(() => assertCanShipOrder(OrderStatus.PENDING)).toThrow(
+      "This order cannot be marked as shipped because it is currently pending. Only confirmed, processing orders can be shipped.",
+    );
+    expect(() => assertCanCancelOrder(OrderStatus.DELIVERED)).toThrow(
+      "This order cannot be cancelled because it is already delivered.",
+    );
+  });
 });

@@ -14,6 +14,7 @@ import {
 } from "@/database/schema";
 import Decimal from "decimal.js";
 import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+import { isUUID } from "class-validator";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import {
@@ -45,17 +46,24 @@ export class FinancePayableService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = query.search?.trim();
+    const searchUuid = search && isUUID(search) ? search : undefined;
     const where = and(
       eq(financePayable.businessId, businessId),
       query.partyType ? eq(financePayable.partyType, query.partyType) : undefined,
+      query.partyId ? eq(financePayable.partyId, query.partyId) : undefined,
       query.sourceType
         ? eq(financePayable.sourceType, query.sourceType)
         : undefined,
+      query.sourceId ? eq(financePayable.sourceId, query.sourceId) : undefined,
       query.status ? eq(financePayable.status, query.status) : undefined,
-      query.search
+      search
         ? or(
-            ilike(financePayable.payableNo, `%${query.search}%`),
-            ilike(financePayable.note, `%${query.search}%`),
+            ilike(financePayable.payableNo, `%${search}%`),
+            ilike(financePayable.note, `%${search}%`),
+            searchUuid ? eq(financePayable.id, searchUuid) : undefined,
+            searchUuid ? eq(financePayable.partyId, searchUuid) : undefined,
+            searchUuid ? eq(financePayable.sourceId, searchUuid) : undefined,
           )
         : undefined,
     );
@@ -98,7 +106,9 @@ export class FinancePayableService {
     const payable = await this.getPayableOrThrow(businessId, payableId);
 
     if (payable.status === FinancePayableStatus.CANCELLED) {
-      throw new BadRequestException("Cancelled payable cannot be paid");
+      throw new BadRequestException(
+        "This payable cannot be paid because it has been cancelled. Cancelled payables are locked so the financial record does not change after cancellation.",
+      );
     }
 
     const dueAmount = new Decimal(payable.totalAmount).minus(
@@ -106,18 +116,24 @@ export class FinancePayableService {
     );
 
     if (dueAmount.lessThanOrEqualTo(0)) {
-      throw new BadRequestException("Finance payable is already paid");
+      throw new BadRequestException(
+        "This payable is already fully paid. There is no remaining due amount to record another payment against.",
+      );
     }
 
     const paymentAmount =
       dto.amount !== undefined ? new Decimal(dto.amount) : dueAmount;
 
     if (paymentAmount.lessThanOrEqualTo(0)) {
-      throw new BadRequestException("Payment amount must be greater than 0");
+      throw new BadRequestException(
+        "Payment amount must be greater than 0. Enter a positive amount, or leave the amount empty to pay the remaining balance.",
+      );
     }
 
     if (paymentAmount.greaterThan(dueAmount)) {
-      throw new BadRequestException("Payment cannot exceed payable due amount");
+      throw new BadRequestException(
+        `Payment cannot exceed the payable due amount. The remaining payable balance is ${dueAmount.toString()}, but the requested payment is ${paymentAmount.toString()}.`,
+      );
     }
 
     const updatedPayable = await this.db.transaction(async (tx) => {
@@ -165,7 +181,10 @@ export class FinancePayableService {
       return updated;
     });
 
-    return apiResponse(updatedPayable, "Finance payable paid");
+    return apiResponse(
+      updatedPayable,
+      "Payable payment recorded successfully. The payable balance and status were updated, and the selected finance account was debited.",
+    );
   }
 
   private async paySupplierInvoicePayable(
@@ -180,12 +199,14 @@ export class FinancePayableService {
   ) {
     if (!params.dto.paymentMethod) {
       throw new BadRequestException(
-        "Payment method is required for supplier invoice payable",
+        "Payment method is required because this payable came from a supplier invoice. Choose how the supplier was paid before recording the payment.",
       );
     }
 
     if (!params.payable.sourceId) {
-      throw new BadRequestException("Supplier invoice payable has no source");
+      throw new BadRequestException(
+        "This supplier invoice payable cannot be paid because it is missing the linked supplier invoice ID. Please review the payable record before trying again.",
+      );
     }
 
     const [invoice] = await tx
@@ -200,12 +221,14 @@ export class FinancePayableService {
       );
 
     if (!invoice) {
-      throw new NotFoundException("Supplier invoice not found");
+      throw new NotFoundException(
+        "The supplier invoice linked to this payable could not be found. It may have been deleted or may belong to another business.",
+      );
     }
 
     if (invoice.status === SupplierInvoiceStatus.CANCELLED) {
       throw new BadRequestException(
-        "Cancelled supplier invoice cannot be paid",
+        "This supplier invoice cannot be paid because the invoice has been cancelled. Reopen or recreate the invoice before paying it.",
       );
     }
 
@@ -256,7 +279,9 @@ export class FinancePayableService {
       );
 
     if (!payable) {
-      throw new NotFoundException("Finance payable not found");
+      throw new NotFoundException(
+        "Finance payable not found. It may have been deleted, or it may belong to a different business.",
+      );
     }
 
     return payable;

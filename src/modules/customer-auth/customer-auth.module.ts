@@ -1,8 +1,8 @@
 import { Module } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { JwtModule, JwtSignOptions } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
 
+import { AppConfigService } from "@/common/config/app-config.service";
 import { OtpPolicy } from "../auth/domain/otp.policy";
 import { MailModule } from "../mail/mail.module";
 import { WebsiteModule } from "../website/website.module";
@@ -16,17 +16,13 @@ import { CustomerJwtStrategy } from "./strategies/customer-jwt.strategy";
   imports: [
     PassportModule,
     JwtModule.registerAsync({
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => {
-        const secret = configService.getOrThrow<string>("JWT_ACCESS_SECRET");
-        const expiresIn = configService.getOrThrow<string>(
-          "JWT_ACCESS_EXPIRES_IN",
-        );
-
+      inject: [AppConfigService],
+      useFactory: (appConfig: AppConfigService) => {
         return {
-          secret,
+          secret: appConfig.jwtAccessSecret,
           signOptions: {
-            expiresIn: expiresIn as JwtSignOptions["expiresIn"],
+            expiresIn:
+              appConfig.jwtAccessExpiresIn as JwtSignOptions["expiresIn"],
           },
         };
       },

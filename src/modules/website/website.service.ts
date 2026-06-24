@@ -3,7 +3,6 @@ import { and, count, desc, eq, ilike, isNull, max, or } from "drizzle-orm";
 import {
   business,
   JsonValue,
-  PackageLimitKey,
   website,
   websiteConfig,
   websiteDomain,
@@ -32,7 +31,6 @@ import {
   slugify,
 } from "../../common/utils/slug-generator.util";
 import { DatabaseService } from "../../database/database.service";
-import { PackageLimitService } from "../packages/package-limit.service";
 import {
   CreateWebsiteDomainDto,
   CreateWebsiteDto,
@@ -49,10 +47,7 @@ const WEBSITE_SUBDOMAIN_MAX_LENGTH = 255;
 
 @Injectable()
 export class WebsiteService {
-  constructor(
-    private readonly database: DatabaseService,
-    private readonly packageLimits: PackageLimitService,
-  ) {}
+  constructor(private readonly database: DatabaseService) {}
 
   private get db() {
     return this.database.db;
@@ -74,11 +69,6 @@ export class WebsiteService {
   ) {
     const businessRow = await this.getBusinessOrThrow(businessId);
     await this.assertBusinessHasNoWebsite(businessId);
-
-    await this.packageLimits.assertWithinLimit(
-      currentUser,
-      PackageLimitKey.MAX_WEBSITES,
-    );
 
     const slug = await this.generateUniqueSlug(businessRow.name);
     const subdomain = await this.generateUniqueSubdomain(businessRow.name);

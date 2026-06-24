@@ -65,10 +65,7 @@ function createService(rows: unknown[][] = []) {
       callback(tx),
     ),
   };
-  const packageLimits = {
-    assertWithinLimit: jest.fn(async () => undefined),
-  };
-  const service = new WebsiteService({ db } as never, packageLimits as never);
+  const service = new WebsiteService({ db } as never);
 
   jest.spyOn(service as any, "findWebsiteDetails").mockImplementation(() => ({
     id: "website-1",
@@ -79,7 +76,7 @@ function createService(rows: unknown[][] = []) {
       .map((item) => item.values),
   }));
 
-  return { db, insertedValues, packageLimits, service, tx };
+  return { db, insertedValues, service, tx };
 }
 
 describe("WebsiteService", () => {
@@ -168,7 +165,7 @@ describe("WebsiteService", () => {
   });
 
   it("rejects a second active website for the same business", async () => {
-    const { db, packageLimits, service, tx } = createService([
+    const { db, service, tx } = createService([
       [{ id: "business-1", name: "Acme Store" }],
       [{ id: "website-existing" }],
     ]);
@@ -178,7 +175,6 @@ describe("WebsiteService", () => {
         template: WebsiteTemplate.ELECTRONIC,
       }),
     ).rejects.toThrow(BadRequestException);
-    expect(packageLimits.assertWithinLimit).not.toHaveBeenCalled();
     expect(db.transaction).not.toHaveBeenCalled();
     expect(tx.insert).not.toHaveBeenCalled();
   });

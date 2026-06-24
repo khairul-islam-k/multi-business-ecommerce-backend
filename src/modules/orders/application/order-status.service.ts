@@ -83,7 +83,10 @@ export class OrderStatusService {
       return this.orders.hydrate(updated, tx);
     });
 
-    return apiResponse(updatedOrder, "Order shipped successfully");
+    return apiResponse(
+      updatedOrder,
+      "Order status updated to shipped. If this order had a pending courier shipment, the shipment was also marked as booked.",
+    );
   }
 
   async deliver(
@@ -176,7 +179,10 @@ export class OrderStatusService {
       return this.orders.hydrate(updated, tx);
     });
 
-    return apiResponse(updatedOrder, "Order delivered successfully");
+    return apiResponse(
+      updatedOrder,
+      "Order status updated to delivered. Reserved stock was fulfilled, and any courier collection receivable was prepared when cash on delivery was due.",
+    );
   }
 
   async cancel(
@@ -283,6 +289,9 @@ export class OrderStatusService {
       return this.orders.hydrate(updated, tx);
     });
 
-    return apiResponse(updatedOrder, "Order cancelled successfully");
+    return apiResponse(
+      updatedOrder,
+      "Order cancelled successfully. Reserved stock was released, the related invoice and courier shipment were cancelled when present, and the order receivable was cancelled.",
+    );
   }
 }
