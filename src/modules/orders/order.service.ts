@@ -4,11 +4,14 @@ import { CreatePosSaleDto } from "../pos/dto/pos-sale.dto";
 import { CreateOrderService } from "./application/create-order.service";
 import { OrderPaymentService } from "./application/order-payment.service";
 import { OrderQueryService } from "./application/order-query.service";
+import { OrderReturnService } from "./application/order-return.service";
 import { OrderStatusService } from "./application/order-status.service";
 import {
   AddOrderPaymentDto,
   CreateOrderDto,
   QueryOrderDto,
+  QueryOrderReturnDto,
+  UpdateOrderReturnStatusDto,
 } from "./dto/order.dto";
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
@@ -20,6 +23,7 @@ export class OrderService {
     private readonly orderQueryService: OrderQueryService,
     private readonly orderPaymentService: OrderPaymentService,
     private readonly orderStatusService: OrderStatusService,
+    private readonly orderReturnService: OrderReturnService,
   ) {}
 
   async create(
@@ -48,6 +52,28 @@ export class OrderService {
 
   async findOne(businessId: string, orderId: string) {
     return this.orderQueryService.findOne(businessId, orderId);
+  }
+
+  async findReturns(businessId: string, query: QueryOrderReturnDto) {
+    return this.orderReturnService.findAll(businessId, query);
+  }
+
+  async findReturn(businessId: string, returnId: string) {
+    return this.orderReturnService.findOne(businessId, returnId);
+  }
+
+  async updateReturnStatus(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    returnId: string,
+    dto: UpdateOrderReturnStatusDto,
+  ) {
+    return this.orderReturnService.updateStatus(
+      currentUser,
+      businessId,
+      returnId,
+      dto,
+    );
   }
 
   async addPayment(

@@ -4,6 +4,7 @@ import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm";
 import {
   CatalogProductStatus,
   customer,
+  customerAddress,
   order,
   orderCart,
   orderCartItem,
@@ -46,12 +47,15 @@ import { WebsiteService } from "../website/website.service";
 import {
   AddStorefrontCartItemDto,
   CancelStorefrontOrderDto,
+  CreateStorefrontCustomerAddressDto,
   CreateStorefrontOrderReturnDto,
   CreateStorefrontReviewDto,
   PlaceStorefrontOrderDto,
   StorefrontCartQueryDto,
   StorefrontOrderQueryDto,
+  StorefrontOrderReturnQueryDto,
   StorefrontReviewQueryDto,
+  UpdateStorefrontCustomerAddressDto,
   UpdateStorefrontCartItemDto,
 } from "./dto/storefront-customer.dto";
 
@@ -68,6 +72,134 @@ export class StorefrontCustomerService {
 
   private get db() {
     return this.database.db;
+  }
+
+  async findAddresses(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string | undefined,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+    const addresses = await this.db
+      .select()
+      .from(customerAddress)
+      .where(
+        and(
+          eq(customerAddress.customerId, currentCustomer.customerId),
+          isNull(customerAddress.deletedAt),
+        ),
+      )
+      .orderBy(desc(customerAddress.isDefault), desc(customerAddress.updatedAt));
+
+    return apiResponse(addresses);
+  }
+
+  async createAddress(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string | undefined,
+    dto: CreateStorefrontCustomerAddressDto,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+    await this.getCustomerOrThrow(currentCustomer);
+    const shouldSetDefault =
+      dto.isDefault ?? !(await this.customerHasAddress(currentCustomer));
+
+    const [created] = await this.db.transaction(async (tx) => {
+      if (shouldSetDefault) {
+        await tx
+          .update(customerAddress)
+          .set({ isDefault: false })
+          .where(
+            and(
+              eq(customerAddress.customerId, currentCustomer.customerId),
+              isNull(customerAddress.deletedAt),
+            ),
+          );
+      }
+
+      return tx
+        .insert(customerAddress)
+        .values({
+          customerId: currentCustomer.customerId,
+          addressType: dto.addressType,
+          name: normalizeOptionalText(dto.name),
+          address: normalizeRequiredText(dto.address),
+          city: normalizeOptionalText(dto.city),
+          country: normalizeOptionalText(dto.country),
+          isDefault: shouldSetDefault,
+        })
+        .returning();
+    });
+
+    return apiResponse(created, "Customer address created successfully");
+  }
+
+  async updateAddress(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string | undefined,
+    addressId: string,
+    dto: UpdateStorefrontCustomerAddressDto,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+    await this.getCustomerAddressOrThrow(currentCustomer, addressId);
+
+    const [updated] = await this.db.transaction(async (tx) => {
+      if (dto.isDefault === true) {
+        await tx
+          .update(customerAddress)
+          .set({ isDefault: false })
+          .where(
+            and(
+              eq(customerAddress.customerId, currentCustomer.customerId),
+              isNull(customerAddress.deletedAt),
+            ),
+          );
+      }
+
+      return tx
+        .update(customerAddress)
+        .set({
+          addressType: dto.addressType,
+          name:
+            dto.name === undefined ? undefined : normalizeOptionalText(dto.name),
+          address:
+            dto.address === undefined
+              ? undefined
+              : normalizeRequiredText(dto.address),
+          city:
+            dto.city === undefined ? undefined : normalizeOptionalText(dto.city),
+          country:
+            dto.country === undefined
+              ? undefined
+              : normalizeOptionalText(dto.country),
+          isDefault: dto.isDefault,
+        })
+        .where(eq(customerAddress.id, addressId))
+        .returning();
+    });
+
+    return apiResponse(updated, "Customer address updated successfully");
+  }
+
+  async deleteAddress(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string | undefined,
+    addressId: string,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+    const address = await this.getCustomerAddressOrThrow(
+      currentCustomer,
+      addressId,
+    );
+
+    await this.db
+      .update(customerAddress)
+      .set({
+        isDefault: false,
+        deletedAt: new Date(),
+      })
+      .where(eq(customerAddress.id, address.id));
+
+    return apiResponse(null, "Customer address deleted successfully");
   }
 
   async findCarts(
@@ -261,6 +393,15 @@ export class StorefrontCustomerService {
       throw new BadRequestException("Active cart is empty");
     }
 
+    const shippingAddressSnapshot = dto.shippingAddressId
+      ? this.buildAddressSnapshot(
+          await this.getCustomerAddressOrThrow(
+            currentCustomer,
+            dto.shippingAddressId,
+          ),
+        )
+      : dto.shippingAddressSnapshot;
+
     const createdOrderResponse = await this.orders.createStorefrontOrder(
       currentCustomer.businessId,
       {
@@ -269,7 +410,7 @@ export class StorefrontCustomerService {
         customerName: customerRow.name,
         customerPhone: customerRow.phone ?? undefined,
         customerEmail: currentCustomer.email,
-        shippingAddressSnapshot: dto.shippingAddressSnapshot,
+        shippingAddressSnapshot,
         shippingCharge: dto.shippingCharge,
         note: dto.note,
         items: cartItems.map((row) => ({
@@ -492,6 +633,105 @@ export class StorefrontCustomerService {
     return apiResponse(
       await this.hydrateOrderReturn(createdReturn),
       "Order return requested successfully",
+    );
+  }
+
+  async findOrderReturns(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string | undefined,
+    query: StorefrontOrderReturnQueryDto,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const skip = (page - 1) * limit;
+    const where = and(
+      eq(orderReturn.businessId, currentCustomer.businessId),
+      eq(order.customerId, currentCustomer.customerId),
+      isNull(orderReturn.deletedAt),
+      isNull(order.deletedAt),
+      query.status ? eq(orderReturn.status, query.status) : undefined,
+    );
+
+    const [rows, total] = await Promise.all([
+      this.db
+        .select({
+          return: orderReturn,
+          order,
+        })
+        .from(orderReturn)
+        .innerJoin(order, eq(order.id, orderReturn.orderId))
+        .where(where)
+        .orderBy(desc(orderReturn.createdAt))
+        .limit(limit)
+        .offset(skip),
+      this.db
+        .select({ value: count() })
+        .from(orderReturn)
+        .innerJoin(order, eq(order.id, orderReturn.orderId))
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
+    ]);
+
+    return paginatedResponse(
+      await Promise.all(
+        rows.map(async (row) => ({
+          ...(await this.hydrateOrderReturn(row.return)),
+          order: row.order,
+        })),
+      ),
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    );
+  }
+
+  async findOrderReturn(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string | undefined,
+    returnId: string,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+    const row = await this.getCustomerOrderReturnOrThrow(
+      currentCustomer,
+      returnId,
+    );
+
+    return apiResponse({
+      ...(await this.hydrateOrderReturn(row.return)),
+      order: row.order,
+    });
+  }
+
+  async cancelOrderReturn(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string | undefined,
+    returnId: string,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+    const row = await this.getCustomerOrderReturnOrThrow(
+      currentCustomer,
+      returnId,
+    );
+
+    if (row.return.status !== OrderReturnStatus.REQUESTED) {
+      throw new BadRequestException(
+        "This return request can no longer be cancelled because the store has already reviewed it.",
+      );
+    }
+
+    const [updated] = await this.db
+      .update(orderReturn)
+      .set({ status: OrderReturnStatus.CANCELLED })
+      .where(eq(orderReturn.id, row.return.id))
+      .returning();
+
+    return apiResponse(
+      await this.hydrateOrderReturn(updated),
+      "Order return request cancelled successfully",
     );
   }
 
@@ -727,6 +967,84 @@ export class StorefrontCustomerService {
       ...returnRow,
       items,
     };
+  }
+
+  private async customerHasAddress(currentCustomer: CurrentCustomerPayload) {
+    const [row] = await this.db
+      .select({ id: customerAddress.id })
+      .from(customerAddress)
+      .where(
+        and(
+          eq(customerAddress.customerId, currentCustomer.customerId),
+          isNull(customerAddress.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    return Boolean(row);
+  }
+
+  private async getCustomerAddressOrThrow(
+    currentCustomer: CurrentCustomerPayload,
+    addressId: string,
+  ) {
+    const [address] = await this.db
+      .select()
+      .from(customerAddress)
+      .where(
+        and(
+          eq(customerAddress.id, addressId),
+          eq(customerAddress.customerId, currentCustomer.customerId),
+          isNull(customerAddress.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!address) {
+      throw new NotFoundException("Customer address not found");
+    }
+
+    return address;
+  }
+
+  private buildAddressSnapshot(address: typeof customerAddress.$inferSelect) {
+    return {
+      addressId: address.id,
+      addressType: address.addressType,
+      name: address.name,
+      address: address.address,
+      city: address.city,
+      country: address.country,
+    };
+  }
+
+  private async getCustomerOrderReturnOrThrow(
+    currentCustomer: CurrentCustomerPayload,
+    returnId: string,
+  ) {
+    const [row] = await this.db
+      .select({
+        return: orderReturn,
+        order,
+      })
+      .from(orderReturn)
+      .innerJoin(order, eq(order.id, orderReturn.orderId))
+      .where(
+        and(
+          eq(orderReturn.id, returnId),
+          eq(orderReturn.businessId, currentCustomer.businessId),
+          eq(order.customerId, currentCustomer.customerId),
+          isNull(orderReturn.deletedAt),
+          isNull(order.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!row) {
+      throw new NotFoundException("Order return not found");
+    }
+
+    return row;
   }
 
   private async findCartItemByProduct(

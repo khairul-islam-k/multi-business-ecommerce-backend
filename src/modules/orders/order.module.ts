@@ -9,6 +9,7 @@ import { PermissionModule } from "../permissions/permission.module";
 import { CreateOrderService } from "./application/create-order.service";
 import { OrderPaymentService } from "./application/order-payment.service";
 import { OrderQueryService } from "./application/order-query.service";
+import { OrderReturnService } from "./application/order-return.service";
 import { OrderStatusService } from "./application/order-status.service";
 import { OrderCodeRepository } from "./infrastructure/order-code.repository";
 import { OrderRepository } from "./infrastructure/order.repository";
@@ -31,6 +32,7 @@ import { OrderService } from "./order.service";
     OrderQueryService,
     OrderPaymentService,
     OrderStatusService,
+    OrderReturnService,
     OrderRepository,
     OrderCodeRepository,
   ],

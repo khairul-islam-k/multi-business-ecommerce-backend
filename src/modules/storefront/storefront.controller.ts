@@ -1,14 +1,19 @@
 import {
+  Body,
   Controller,
   Get,
   Headers,
   Param,
   ParseUUIDPipe,
+  Post,
   Query,
 } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 
-import { StorefrontProductQueryDto } from "./dto/storefront.dto";
+import {
+  ResolveStorefrontVariantDto,
+  StorefrontProductQueryDto,
+} from "./dto/storefront.dto";
 import { StorefrontService } from "./storefront.service";
 
 @ApiTags("Storefront")
@@ -77,6 +82,34 @@ export class StorefrontController {
     return this.storefront.findProductReviews(
       this.getRequestHost(host, forwardedHost),
       productId,
+    );
+  }
+
+  @Get("products/:productSlug/attributes")
+  @ApiOperation({ summary: "Get available storefront product attributes" })
+  findProductAttributes(
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+    @Param("productSlug") productSlug: string,
+  ) {
+    return this.storefront.findProductAttributes(
+      this.getRequestHost(host, forwardedHost),
+      productSlug,
+    );
+  }
+
+  @Post("products/:productSlug/variants/resolve")
+  @ApiOperation({ summary: "Resolve a storefront product variant" })
+  resolveProductVariant(
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+    @Param("productSlug") productSlug: string,
+    @Body() dto: ResolveStorefrontVariantDto,
+  ) {
+    return this.storefront.resolveProductVariant(
+      this.getRequestHost(host, forwardedHost),
+      productSlug,
+      dto,
     );
   }
 

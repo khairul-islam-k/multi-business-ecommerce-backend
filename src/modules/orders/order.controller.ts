@@ -22,6 +22,8 @@ import {
   AddOrderPaymentDto,
   CreateOrderDto,
   QueryOrderDto,
+  QueryOrderReturnDto,
+  UpdateOrderReturnStatusDto,
 } from "./dto/order.dto";
 import { OrderService } from "./order.service";
 
@@ -61,6 +63,50 @@ export class OrderController {
     @Query() query: QueryOrderDto,
   ) {
     return this.orders.findAll(businessId, query);
+  }
+
+  @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.READ)
+  @Get("returns")
+  @ApiOperation({
+    summary: "Get order returns",
+    description:
+      "Shows return requests for this business so staff can review what customers sent back or asked to send back.",
+  })
+  findReturns(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Query() query: QueryOrderReturnDto,
+  ) {
+    return this.orders.findReturns(businessId, query);
+  }
+
+  @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.READ)
+  @Get("returns/:returnId")
+  @ApiOperation({
+    summary: "Get order return",
+    description:
+      "Shows a single return request with its order and item details so staff can decide the next step.",
+  })
+  findReturn(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("returnId", ParseUUIDPipe) returnId: string,
+  ) {
+    return this.orders.findReturn(businessId, returnId);
+  }
+
+  @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.UPDATE)
+  @Patch("returns/:returnId/status")
+  @ApiOperation({
+    summary: "Update order return status",
+    description:
+      "Moves a return request through review. Requested returns can be approved, rejected, or cancelled; approved returns can be completed or cancelled.",
+  })
+  updateReturnStatus(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("returnId", ParseUUIDPipe) returnId: string,
+    @Body() dto: UpdateOrderReturnStatusDto,
+  ) {
+    return this.orders.updateReturnStatus(user, businessId, returnId, dto);
   }
 
   @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.READ)

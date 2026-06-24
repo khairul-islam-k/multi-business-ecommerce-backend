@@ -1,6 +1,7 @@
 import { Type } from "class-transformer";
 import {
   IsArray,
+  IsBoolean,
   IsEnum,
   IsIn,
   IsInt,
@@ -15,8 +16,10 @@ import {
 } from "class-validator";
 
 import {
+  CustomerAddressType,
   OrderCartStatus,
   OrderPaymentStatus,
+  OrderReturnStatus,
   OrderStatus,
   ProductReviewStatus,
 } from "@/database/schema";
@@ -112,11 +115,84 @@ export class StorefrontReviewQueryDto {
   status?: ProductReviewStatus;
 }
 
+export class CreateStorefrontCustomerAddressDto {
+  @ApiProperty({ enum: CustomerAddressType })
+  @IsEnum(CustomerAddressType)
+  addressType!: CustomerAddressType;
+
+  @ApiPropertyOptional({ example: "Home" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  name?: string;
+
+  @ApiProperty({ example: "House 42, Road 7, Dhanmondi" })
+  @IsString()
+  address!: string;
+
+  @ApiPropertyOptional({ example: "Dhaka" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  city?: string;
+
+  @ApiPropertyOptional({ example: "Bangladesh" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  country?: string;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @IsBoolean()
+  isDefault?: boolean;
+}
+
+export class UpdateStorefrontCustomerAddressDto {
+  @ApiPropertyOptional({ enum: CustomerAddressType })
+  @IsOptional()
+  @IsEnum(CustomerAddressType)
+  addressType?: CustomerAddressType;
+
+  @ApiPropertyOptional({ example: "Home" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  name?: string;
+
+  @ApiPropertyOptional({ example: "House 42, Road 7, Dhanmondi" })
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @ApiPropertyOptional({ example: "Dhaka" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  city?: string;
+
+  @ApiPropertyOptional({ example: "Bangladesh" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  country?: string;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  isDefault?: boolean;
+}
+
 export class PlaceStorefrontOrderDto {
   @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsOptional()
   @IsUUID()
   warehouseId?: string;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  shippingAddressId?: string;
 
   @ApiPropertyOptional({ example: { address: "House 42, Dhaka" } })
   @IsOptional()
@@ -190,4 +266,16 @@ export class CreateStorefrontOrderReturnDto {
   @ValidateNested({ each: true })
   @Type(() => StorefrontReturnItemDto)
   items!: StorefrontReturnItemDto[];
+}
+
+export class StorefrontOrderReturnQueryDto extends SortedPaginationQueryDto<"createdAt"> {
+  @ApiPropertyOptional({ enum: OrderReturnStatus })
+  @IsOptional()
+  @IsEnum(OrderReturnStatus)
+  status?: OrderReturnStatus;
+
+  @ApiPropertyOptional({ example: "createdAt", enum: ["createdAt"] })
+  @IsOptional()
+  @IsIn(["createdAt"])
+  sortBy?: "createdAt" = "createdAt";
 }

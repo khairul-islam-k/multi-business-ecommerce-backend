@@ -16,6 +16,7 @@ import {
 import {
   OrderPaymentMethod,
   OrderPaymentStatus,
+  OrderReturnStatus,
   OrderSource,
   OrderStatus,
   OrderType,
@@ -206,3 +207,26 @@ export class QueryOrderDto extends SortedPaginationQueryDto<OrderSortBy> {
 }
 
 export class AddOrderPaymentDto extends OrderPaymentInputDto {}
+
+export class QueryOrderReturnDto extends SortedPaginationQueryDto<"createdAt"> {
+  @ApiPropertyOptional({ enum: OrderReturnStatus })
+  @IsOptional()
+  @IsEnum(OrderReturnStatus)
+  status?: OrderReturnStatus;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  orderId?: string;
+
+  @ApiPropertyOptional({ example: "createdAt", enum: ["createdAt"] })
+  @IsOptional()
+  @IsIn(["createdAt"])
+  sortBy?: "createdAt" = "createdAt";
+}
+
+export class UpdateOrderReturnStatusDto {
+  @ApiProperty({ enum: OrderReturnStatus })
+  @IsEnum(OrderReturnStatus)
+  status!: OrderReturnStatus;
+}

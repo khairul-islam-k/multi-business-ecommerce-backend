@@ -222,4 +222,65 @@ describe("StorefrontCustomerService", () => {
       },
     });
   });
+
+  it("uses a saved customer address snapshot when placing an order", async () => {
+    const { orders, service } = createService();
+    const cart = {
+      id: "cart-1",
+      businessId: "business-1",
+      customerId: "customer-1",
+    };
+
+    orders.createStorefrontOrder.mockResolvedValue({
+      data: { id: "order-1" },
+    } as never);
+
+    jest
+      .spyOn(service as any, "assertStorefrontCustomer")
+      .mockResolvedValue({ id: "website-1" } as never);
+    jest.spyOn(service as any, "getCustomerOrThrow").mockResolvedValue({
+      id: "customer-1",
+      name: "Buyer One",
+      phone: "+8801700000000",
+    } as never);
+    jest
+      .spyOn(service as any, "findActiveCart")
+      .mockResolvedValue(cart as never);
+    jest.spyOn(service as any, "getCartItems").mockResolvedValue([
+      {
+        productId: "product-1",
+        variantId: "variant-1",
+        quantity: new Decimal(1),
+      },
+    ] as never);
+    jest.spyOn(service as any, "getCustomerAddressOrThrow").mockResolvedValue({
+      id: "address-1",
+      addressType: "HOME",
+      name: "Home",
+      address: "House 42",
+      city: "Dhaka",
+      country: "Bangladesh",
+    } as never);
+    jest.spyOn(service as any, "findCustomerOrderOrThrow").mockResolvedValue({
+      id: "order-1",
+    } as never);
+
+    await service.placeOrder(currentCustomer, "website-1", {
+      shippingAddressId: "address-1",
+    });
+
+    expect(orders.createStorefrontOrder).toHaveBeenCalledWith(
+      "business-1",
+      expect.objectContaining({
+        shippingAddressSnapshot: {
+          addressId: "address-1",
+          addressType: "HOME",
+          name: "Home",
+          address: "House 42",
+          city: "Dhaka",
+          country: "Bangladesh",
+        },
+      }),
+    );
+  });
 });

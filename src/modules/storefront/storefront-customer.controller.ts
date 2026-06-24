@@ -18,12 +18,15 @@ import { CustomerAuthGuard } from "../customer-auth/guards/customer-auth.guard";
 import {
   AddStorefrontCartItemDto,
   CancelStorefrontOrderDto,
+  CreateStorefrontCustomerAddressDto,
   CreateStorefrontOrderReturnDto,
   CreateStorefrontReviewDto,
   PlaceStorefrontOrderDto,
+  StorefrontOrderReturnQueryDto,
   StorefrontCartQueryDto,
   StorefrontOrderQueryDto,
   StorefrontReviewQueryDto,
+  UpdateStorefrontCustomerAddressDto,
   UpdateStorefrontCartItemDto,
 } from "./dto/storefront-customer.dto";
 import { StorefrontCustomerService } from "./storefront-customer.service";
@@ -38,6 +41,66 @@ export class StorefrontCustomerController {
   constructor(
     private readonly storefrontCustomers: StorefrontCustomerService,
   ) {}
+
+  @Get("addresses")
+  @ApiOperation({ summary: "Get customer addresses" })
+  findAddresses(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+  ) {
+    return this.storefrontCustomers.findAddresses(
+      customer,
+      this.getRequestHost(host, forwardedHost),
+    );
+  }
+
+  @Post("addresses")
+  @ApiOperation({ summary: "Create customer address" })
+  createAddress(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+    @Body() dto: CreateStorefrontCustomerAddressDto,
+  ) {
+    return this.storefrontCustomers.createAddress(
+      customer,
+      this.getRequestHost(host, forwardedHost),
+      dto,
+    );
+  }
+
+  @Patch("addresses/:addressId")
+  @ApiOperation({ summary: "Update customer address" })
+  updateAddress(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+    @Param("addressId", ParseUUIDPipe) addressId: string,
+    @Body() dto: UpdateStorefrontCustomerAddressDto,
+  ) {
+    return this.storefrontCustomers.updateAddress(
+      customer,
+      this.getRequestHost(host, forwardedHost),
+      addressId,
+      dto,
+    );
+  }
+
+  @Delete("addresses/:addressId")
+  @ApiOperation({ summary: "Delete customer address" })
+  deleteAddress(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+    @Param("addressId", ParseUUIDPipe) addressId: string,
+  ) {
+    return this.storefrontCustomers.deleteAddress(
+      customer,
+      this.getRequestHost(host, forwardedHost),
+      addressId,
+    );
+  }
 
   @Get("carts")
   @ApiOperation({ summary: "Get customer carts" })
@@ -203,6 +266,51 @@ export class StorefrontCustomerController {
       this.getRequestHost(host, forwardedHost),
       orderId,
       dto,
+    );
+  }
+
+  @Get("returns")
+  @ApiOperation({ summary: "Get customer order returns" })
+  findOrderReturns(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+    @Query() query: StorefrontOrderReturnQueryDto,
+  ) {
+    return this.storefrontCustomers.findOrderReturns(
+      customer,
+      this.getRequestHost(host, forwardedHost),
+      query,
+    );
+  }
+
+  @Get("returns/:returnId")
+  @ApiOperation({ summary: "Get customer order return details" })
+  findOrderReturn(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+    @Param("returnId", ParseUUIDPipe) returnId: string,
+  ) {
+    return this.storefrontCustomers.findOrderReturn(
+      customer,
+      this.getRequestHost(host, forwardedHost),
+      returnId,
+    );
+  }
+
+  @Post("returns/:returnId/cancel")
+  @ApiOperation({ summary: "Cancel customer order return request" })
+  cancelOrderReturn(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+    @Param("returnId", ParseUUIDPipe) returnId: string,
+  ) {
+    return this.storefrontCustomers.cancelOrderReturn(
+      customer,
+      this.getRequestHost(host, forwardedHost),
+      returnId,
     );
   }
 

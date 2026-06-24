@@ -1,6 +1,14 @@
-import { IsIn, IsOptional, IsUUID } from "class-validator";
+import { Type } from "class-transformer";
+import {
+  ArrayMinSize,
+  IsArray,
+  IsIn,
+  IsOptional,
+  IsUUID,
+  ValidateNested,
+} from "class-validator";
 
-import { ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 import { SortedPaginationQueryDto } from "../../../common/http/query.dto";
 
@@ -38,4 +46,23 @@ export class StorefrontProductQueryDto extends SortedPaginationQueryDto<Storefro
   @IsOptional()
   @IsIn(Object.values(StorefrontProductSortBy))
   sortBy?: StorefrontProductSortBy = StorefrontProductSortBy.CREATED_AT;
+}
+
+export class StorefrontVariantAttributeSelectionDto {
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsUUID()
+  attributeId!: string;
+
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsUUID()
+  attributeValueId!: string;
+}
+
+export class ResolveStorefrontVariantDto {
+  @ApiProperty({ type: [StorefrontVariantAttributeSelectionDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => StorefrontVariantAttributeSelectionDto)
+  attributes!: StorefrontVariantAttributeSelectionDto[];
 }
