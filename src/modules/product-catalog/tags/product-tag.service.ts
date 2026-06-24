@@ -149,6 +149,7 @@ export class ProductTagService {
           ...(dto.name !== undefined && {
             name: this.lookup.normalizeName(dto.name),
           }),
+          ...(dto.isFeatured !== undefined && { isFeatured: dto.isFeatured }),
           ...(dto.status !== undefined && { status: dto.status }),
           updatedBy: currentUser.id,
         })
