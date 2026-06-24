@@ -28,6 +28,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:integration": "jest --runTestsByPath test/integration --passWithNoTests",
+    "check": "bun run typecheck && bun run test",
     "dev": "bun --watch ./src/main.ts",
     "dev:all": "concurrently \"bun run dev\" \"bun run db:studio\""
   },
