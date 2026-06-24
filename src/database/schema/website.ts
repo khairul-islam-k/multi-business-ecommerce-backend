@@ -130,7 +130,6 @@ export const websiteConfig = pgTable(
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
     websiteId: uuid("website_id")
-      .unique()
       .notNull()
       .references((): AnyPgColumn => website.id, { onDelete: "cascade" }),
     headerConfig: jsonb("header_config").$type<JsonValue>(),

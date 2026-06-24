@@ -45,6 +45,7 @@ import type { CurrentUserPayload } from "../auth/decorators/current-user.decorat
 
 const WEBSITE_SLUG_MAX_LENGTH = 180;
 const WEBSITE_SLUG_RETRY_LIMIT = 5;
+const WEBSITE_SUBDOMAIN_MAX_LENGTH = 255;
 
 @Injectable()
 export class WebsiteService {
@@ -80,6 +81,7 @@ export class WebsiteService {
     );
 
     const slug = await this.generateUniqueSlug(businessRow.name);
+    const subdomain = await this.generateUniqueSubdomain(businessRow.name);
 
     try {
       const created = await this.db.transaction(async (tx) => {
@@ -95,6 +97,17 @@ export class WebsiteService {
             updatedBy: currentUser.id,
           })
           .returning();
+
+        await tx.insert(websiteDomain).values({
+          websiteId: item.id,
+          domain: null,
+          subdomain,
+          domainType: WebsiteDomainType.SUBDOMAIN,
+          isPrimary: true,
+          verificationStatus: WebsiteDomainVerificationStatus.VERIFIED,
+          sslStatus: WebsiteDomainSslStatus.ACTIVE,
+          verifiedAt: new Date(),
+        });
 
         await tx.insert(websiteConfig).values({
           websiteId: item.id,
@@ -522,6 +535,7 @@ export class WebsiteService {
           or(
             eq(websiteDomain.domain, normalizedHost),
             eq(websiteDomain.subdomain, normalizedHost),
+            eq(websiteDomain.subdomain, normalizedHost.split(".")[0]),
           ),
           eq(website.status, WebsiteStatus.PUBLISHED),
           isNull(website.deletedAt),
@@ -659,6 +673,36 @@ export class WebsiteService {
     }
 
     throw new BadRequestException("Could not generate a unique website slug");
+  }
+
+  private async generateUniqueSubdomain(name: string) {
+    const base = slugify(name, {
+      fallback: "store",
+      maxLength: WEBSITE_SUBDOMAIN_MAX_LENGTH,
+    });
+
+    for (let attempt = 1; attempt <= WEBSITE_SUBDOMAIN_MAX_LENGTH; attempt++) {
+      const suffix = attempt === 1 ? "" : `-${attempt}`;
+      const candidateBaseMaxLength = Math.max(
+        1,
+        WEBSITE_SUBDOMAIN_MAX_LENGTH - suffix.length,
+      );
+      const candidate = `${base.slice(0, candidateBaseMaxLength).replace(/-+$/g, "")}${suffix}`;
+
+      const [existing] = await this.db
+        .select({ id: websiteDomain.id })
+        .from(websiteDomain)
+        .where(eq(websiteDomain.subdomain, candidate))
+        .limit(1);
+
+      if (!existing) {
+        return candidate;
+      }
+    }
+
+    throw new BadRequestException(
+      "Could not generate a unique website subdomain",
+    );
   }
 
   private async getNextVersionNo(websiteId: string) {

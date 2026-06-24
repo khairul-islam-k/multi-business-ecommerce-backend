@@ -6,6 +6,10 @@ import {
   WebsiteTemplate,
   website,
   websiteConfig,
+  websiteDomain,
+  WebsiteDomainSslStatus,
+  WebsiteDomainType,
+  WebsiteDomainVerificationStatus,
   websiteSeoSetting,
   websiteThemeSetting,
 } from "@/database/schema";
@@ -19,8 +23,10 @@ function createSelectQueue(rows: unknown[][]) {
     const result = rows.shift() ?? [];
     const builder = {
       from: () => builder,
+      innerJoin: () => builder,
       where: () => builder,
       limit: () => result,
+      orderBy: () => builder,
       then: (
         resolve: (value: unknown[]) => unknown,
         reject?: (error: unknown) => unknown,
@@ -64,19 +70,23 @@ function createService(rows: unknown[][] = []) {
   };
   const service = new WebsiteService({ db } as never, packageLimits as never);
 
-  jest.spyOn(service as any, "findWebsiteDetails").mockResolvedValue({
+  jest.spyOn(service as any, "findWebsiteDetails").mockImplementation(() => ({
     id: "website-1",
     businessId: "business-1",
     name: "Acme Store",
-  });
+    domains: insertedValues
+      .filter((item) => item.table === websiteDomain)
+      .map((item) => item.values),
+  }));
 
   return { db, insertedValues, packageLimits, service, tx };
 }
 
 describe("WebsiteService", () => {
-  it("creates a manual website using the business name", async () => {
+  it("creates a manual website using the business name and a default subdomain", async () => {
     const { insertedValues, service } = createService([
       [{ id: "business-1", name: "Acme Store" }],
+      [],
       [],
       [],
     ]);
@@ -89,6 +99,18 @@ describe("WebsiteService", () => {
       id: "website-1",
       name: "Acme Store",
     });
+    expect(result.data.domains).toContainEqual(
+      expect.objectContaining({
+        websiteId: "website-1",
+        domain: null,
+        subdomain: "acme-store",
+        domainType: WebsiteDomainType.SUBDOMAIN,
+        isPrimary: true,
+        verificationStatus: WebsiteDomainVerificationStatus.VERIFIED,
+        sslStatus: WebsiteDomainSslStatus.ACTIVE,
+        verifiedAt: expect.any(Date),
+      }),
+    );
     expect(insertedValues).toContainEqual({
       table: website,
       values: expect.objectContaining({
@@ -107,6 +129,42 @@ describe("WebsiteService", () => {
     expect(
       insertedValues.some((item) => item.table === websiteSeoSetting),
     ).toBe(true);
+  });
+
+  it("uses a readable numeric suffix when the default subdomain is taken", async () => {
+    const { insertedValues, service } = createService([
+      [{ id: "business-1", name: "Acme Store Ltd." }],
+      [],
+      [],
+      [{ id: "domain-existing" }],
+      [],
+    ]);
+
+    await service.create(currentUser, "business-1", {
+      template: WebsiteTemplate.ELECTRONIC,
+    });
+
+    expect(insertedValues).toContainEqual({
+      table: websiteDomain,
+      values: expect.objectContaining({
+        subdomain: "acme-store-ltd-2",
+      }),
+    });
+  });
+
+  it("resolves storefronts by exact subdomain only", async () => {
+    const { service } = createService([[{ site: { id: "website-1" } }], []]);
+
+    jest
+      .spyOn(service as any, "hydrateWebsite")
+      .mockImplementation(async (item) => item);
+
+    await expect(service.findPublishedByHost("acme")).resolves.toEqual({
+      id: "website-1",
+    });
+    await expect(
+      service.findPublishedByHost("acme.example.com"),
+    ).resolves.toBeNull();
   });
 
   it("rejects a second active website for the same business", async () => {
