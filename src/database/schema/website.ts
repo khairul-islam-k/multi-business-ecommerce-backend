@@ -153,7 +153,6 @@ export const websiteDomain = pgTable(
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
     websiteId: uuid("website_id")
-      .unique()
       .notNull()
       .references((): AnyPgColumn => website.id, { onDelete: "cascade" }),
     domain: varchar({ length: 255 }),

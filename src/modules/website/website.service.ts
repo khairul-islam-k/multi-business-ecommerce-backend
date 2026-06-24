@@ -535,7 +535,6 @@ export class WebsiteService {
           or(
             eq(websiteDomain.domain, normalizedHost),
             eq(websiteDomain.subdomain, normalizedHost),
-            eq(websiteDomain.subdomain, normalizedHost.split(".")[0]),
           ),
           eq(website.status, WebsiteStatus.PUBLISHED),
           isNull(website.deletedAt),

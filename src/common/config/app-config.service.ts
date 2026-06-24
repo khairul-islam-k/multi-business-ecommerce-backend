@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
-import { parseCorsOrigins } from "./cors.config";
+import { parseCorsDomainBases, parseCorsOrigins } from "./cors.config";
 
 @Injectable()
 export class AppConfigService {
@@ -30,6 +30,12 @@ export class AppConfigService {
   get corsOrigins() {
     return parseCorsOrigins(
       `http://${this.appIp}:${this.appPort},${this.configService.getOrThrow<string>("APP_CORS_ORIGINS")}`,
+    );
+  }
+
+  get corsSubdomainBases() {
+    return parseCorsDomainBases(
+      this.configService.getOrThrow<string>("APP_CORS_SUBDOMAIN_BASES"),
     );
   }
 

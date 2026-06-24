@@ -42,6 +42,13 @@ type CategoryWithDetails = ProductCategory & {
   };
 };
 
+type CategoryRow = typeof productCategory.$inferInsert;
+
+export type CategoryTreeNode = {
+  category: CategoryRow;
+  children: CategoryTreeNode[];
+};
+
 @Injectable()
 export class ProductCategoryService {
   constructor(
@@ -109,8 +116,8 @@ export class ProductCategoryService {
         : undefined,
     );
 
-    const [items, total] = await Promise.all([
-      this.db
+    const [rows, total] = await Promise.all([
+      await this.db
         .select()
         .from(productCategory)
         .where(where)
@@ -132,14 +139,41 @@ export class ProductCategoryService {
         .limit(limit)
         .offset(skip)
         .then((rows) => this.withCategoriesDetails(rows)),
-      this.db
+      await this.db
         .select({ value: count() })
         .from(productCategory)
         .where(where)
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
+    const categoryMap = new Map<string, CategoryTreeNode>();
+
+    for (const row of rows) {
+      categoryMap.set(row.id, {
+        category: row,
+        children: [],
+      });
+    }
+
+    const categories: CategoryTreeNode[] = [];
+
+    for (const row of rows) {
+      const node = categoryMap.get(row.id)!;
+
+      if (row.parentId) {
+        const parentNode = categoryMap.get(row.parentId);
+
+        if (parentNode) {
+          parentNode.children.push(node);
+        } else {
+          // TODO: if parent is missing/deleted/inactive, treat as root
+          categories.push(node);
+        }
+      } else {
+        categories.push(node);
+      }
+    }
+    return paginatedResponse(categories, {
       page,
       limit,
       total,

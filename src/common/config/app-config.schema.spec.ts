@@ -36,6 +36,15 @@ describe("validateAppConfig", () => {
     ).toThrow("APP_CORS_ORIGINS cannot include *");
   });
 
+  it("rejects wildcard CORS subdomain bases", () => {
+    expect(() =>
+      validateAppConfig({
+        ...baseConfig,
+        APP_CORS_SUBDOMAIN_BASES: "*",
+      }),
+    ).toThrow("APP_CORS_SUBDOMAIN_BASES cannot include *");
+  });
+
   it("validates app port and public upload prefix", () => {
     expect(() =>
       validateAppConfig({ ...baseConfig, APP_PORT: "99999" }),
