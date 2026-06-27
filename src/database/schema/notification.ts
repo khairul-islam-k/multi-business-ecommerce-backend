@@ -10,6 +10,7 @@ import {
   varchar,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 import { business } from "./business";
 import { type JsonValue } from "./common";
@@ -120,11 +121,9 @@ export const notificationTemplate = pgTable(
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
-    uniqueIndex("notification_templates_business_id_code_channel_unique").on(
-      table.businessId,
-      table.code,
-      table.channel,
-    ),
+    uniqueIndex("notification_templates_business_code_channel_active_unique")
+      .on(table.businessId, table.code, table.channel)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("notification_templates_business_id_idx").on(table.businessId),
     index("notification_templates_code_idx").on(table.code),
     index("notification_templates_channel_idx").on(table.channel),

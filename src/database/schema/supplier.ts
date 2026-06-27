@@ -362,10 +362,9 @@ export const supplierInvoice = pgTable(
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
-    uniqueIndex("supplier_invoices_business_id_invoice_no_unique").on(
-      table.businessId,
-      table.invoiceNo,
-    ),
+    uniqueIndex("supplier_invoices_business_id_invoice_no_active_unique")
+      .on(table.businessId, table.invoiceNo)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("supplier_invoices_business_id_idx").on(table.businessId),
     index("supplier_invoices_supplier_id_idx").on(table.supplierId),
     index("supplier_invoices_purchase_order_id_idx").on(table.purchaseOrderId),
@@ -454,10 +453,9 @@ export const supplierPayment = pgTable(
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
-    uniqueIndex("supplier_payments_business_id_payment_no_unique").on(
-      table.businessId,
-      table.paymentNo,
-    ),
+    uniqueIndex("supplier_payments_business_id_payment_no_active_unique")
+      .on(table.businessId, table.paymentNo)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("supplier_payments_business_id_idx").on(table.businessId),
     index("supplier_payments_supplier_id_idx").on(table.supplierId),
     index("supplier_payments_supplier_invoice_id_idx").on(

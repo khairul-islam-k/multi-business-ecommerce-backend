@@ -11,6 +11,7 @@ import {
   varchar,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 import { business } from "./business";
 import { type JsonValue } from "./common";
@@ -191,11 +192,9 @@ export const smsProviderConfig = pgTable(
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
-    uniqueIndex("sms_provider_configs_business_id_provider_id_mode_unique").on(
-      table.businessId,
-      table.providerId,
-      table.mode,
-    ),
+    uniqueIndex("sms_provider_configs_business_provider_mode_active_unique")
+      .on(table.businessId, table.providerId, table.mode)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("sms_provider_configs_business_id_idx").on(table.businessId),
     index("sms_provider_configs_provider_id_idx").on(table.providerId),
     index("sms_provider_configs_status_idx").on(table.status),
@@ -233,10 +232,9 @@ export const smsTemplate = pgTable(
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
-    uniqueIndex("sms_templates_business_id_name_unique").on(
-      table.businessId,
-      table.name,
-    ),
+    uniqueIndex("sms_templates_business_id_name_active_unique")
+      .on(table.businessId, table.name)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("sms_templates_business_id_idx").on(table.businessId),
     index("sms_templates_template_type_idx").on(table.templateType),
     index("sms_templates_status_idx").on(table.status),

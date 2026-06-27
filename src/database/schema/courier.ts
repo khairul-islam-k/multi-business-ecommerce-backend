@@ -1,4 +1,5 @@
 import Decimal from "decimal.js";
+import { sql } from "drizzle-orm";
 import {
   AnyPgColumn,
   index,
@@ -174,11 +175,9 @@ export const courierConfig = pgTable(
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
-    uniqueIndex("courier_configs_business_id_courier_id_mode_unique").on(
-      table.businessId,
-      table.courierId,
-      table.mode,
-    ),
+    uniqueIndex("courier_configs_business_courier_mode_active_unique")
+      .on(table.businessId, table.courierId, table.mode)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("courier_configs_business_id_idx").on(table.businessId),
     index("courier_configs_courier_id_idx").on(table.courierId),
     index("courier_configs_status_idx").on(table.status),
@@ -209,10 +208,9 @@ export const courierDeliveryZone = pgTable(
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
-    uniqueIndex("courier_delivery_zones_business_id_name_unique").on(
-      table.businessId,
-      table.name,
-    ),
+    uniqueIndex("courier_delivery_zones_business_id_name_active_unique")
+      .on(table.businessId, table.name)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("courier_delivery_zones_business_id_idx").on(table.businessId),
     index("courier_delivery_zones_status_idx").on(table.status),
   ],
@@ -342,13 +340,14 @@ export const courierShipment = pgTable(
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
-    uniqueIndex("courier_shipments_business_id_shipment_no_unique").on(
-      table.businessId,
-      table.shipmentNo,
-    ),
-    uniqueIndex("courier_shipments_consignment_id_unique").on(
-      table.consignmentId,
-    ),
+    uniqueIndex("courier_shipments_business_id_shipment_no_active_unique")
+      .on(table.businessId, table.shipmentNo)
+      .where(sql`${table.deletedAt} IS NULL`),
+    uniqueIndex("courier_shipments_consignment_id_active_unique")
+      .on(table.consignmentId)
+      .where(
+        sql`${table.consignmentId} IS NOT NULL AND ${table.deletedAt} IS NULL`,
+      ),
     index("courier_shipments_business_id_idx").on(table.businessId),
     index("courier_shipments_order_id_idx").on(table.orderId),
     index("courier_shipments_courier_id_idx").on(table.courierId),
@@ -480,10 +479,9 @@ export const courierSettlement = pgTable(
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
-    uniqueIndex("courier_settlements_business_id_settlement_no_unique").on(
-      table.businessId,
-      table.settlementNo,
-    ),
+    uniqueIndex("courier_settlements_business_settlement_no_active_unique")
+      .on(table.businessId, table.settlementNo)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("courier_settlements_business_id_idx").on(table.businessId),
     index("courier_settlements_courier_id_idx").on(table.courierId),
     index("courier_settlements_settlement_date_idx").on(table.settlementDate),

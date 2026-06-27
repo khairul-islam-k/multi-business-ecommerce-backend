@@ -2,7 +2,6 @@ import Decimal from "decimal.js";
 import { sql } from "drizzle-orm";
 import {
   AnyPgColumn,
-  boolean,
   index,
   jsonb,
   pgEnum,
@@ -18,6 +17,7 @@ import { business } from "./business";
 import { decimal, JsonValue } from "./common";
 import { customer } from "./customer";
 import { financeAccount, financeTax } from "./finance";
+import { paymentGateway, paymentGatewayConfig } from "./payment_gateway";
 import { systemUser } from "./system";
 
 export const OrderCartStatus = {
@@ -78,6 +78,7 @@ export const orderStatusEnum = pgEnum("OrderStatus", [
 ]);
 
 export const OrderPaymentStatus = {
+  PENDING: "PENDING",
   UNPAID: "UNPAID",
   PARTIALLY_PAID: "PARTIALLY_PAID",
   PAID: "PAID",
@@ -88,6 +89,7 @@ export const OrderPaymentStatus = {
 export type OrderPaymentStatus =
   (typeof OrderPaymentStatus)[keyof typeof OrderPaymentStatus];
 export const orderPaymentStatusEnum = pgEnum("OrderPaymentStatus", [
+  "PENDING",
   "UNPAID",
   "PARTIALLY_PAID",
   "PAID",
@@ -306,10 +308,9 @@ export const order = pgTable(
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
-    uniqueIndex("orders_business_id_order_no_unique").on(
-      table.businessId,
-      table.orderNo,
-    ),
+    uniqueIndex("orders_business_id_order_no_active_unique")
+      .on(table.businessId, table.orderNo)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("orders_business_id_idx").on(table.businessId),
     index("orders_customer_id_idx").on(table.customerId),
     index("orders_warehouse_id_idx").on(table.warehouseId),
@@ -417,6 +418,14 @@ export const orderPayment = pgTable(
       (): AnyPgColumn => financeAccount.id,
       { onDelete: "restrict" },
     ),
+    gatewayId: uuid("gateway_id").references(
+      (): AnyPgColumn => paymentGateway.id,
+      { onDelete: "set null" },
+    ),
+    gatewayConfigId: uuid("gateway_config_id").references(
+      (): AnyPgColumn => paymentGatewayConfig.id,
+      { onDelete: "set null" },
+    ),
     paymentNo: varchar("payment_no", { length: 100 }).notNull(),
     amount: decimal({ precision: 12, scale: 2 }).notNull(),
     paymentMethod: orderPaymentMethodEnum("payment_method").notNull(),
@@ -424,6 +433,10 @@ export const orderPayment = pgTable(
       .default("UNPAID")
       .notNull(),
     transactionReference: varchar("transaction_reference", { length: 150 }),
+    gatewayTransactionId: varchar("gateway_transaction_id", { length: 150 }),
+    gatewaySessionId: varchar("gateway_session_id", { length: 150 }),
+    gatewayEventId: varchar("gateway_event_id", { length: 150 }),
+    gatewayPayload: jsonb("gateway_payload").$type<JsonValue>(),
     paidAt: timestamp("paid_at", { mode: "date" }),
     createdBy: uuid("created_by"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
@@ -440,8 +453,17 @@ export const orderPayment = pgTable(
     index("order_payments_business_id_idx").on(table.businessId),
     index("order_payments_order_id_idx").on(table.orderId),
     index("order_payments_finance_account_id_idx").on(table.financeAccountId),
+    index("order_payments_gateway_id_idx").on(table.gatewayId),
+    index("order_payments_gateway_config_id_idx").on(table.gatewayConfigId),
     index("order_payments_payment_method_idx").on(table.paymentMethod),
     index("order_payments_payment_status_idx").on(table.paymentStatus),
+    index("order_payments_gateway_session_id_idx").on(table.gatewaySessionId),
+    uniqueIndex("order_payments_business_id_gateway_transaction_unique")
+      .on(table.businessId, table.gatewayTransactionId)
+      .where(sql`${table.gatewayTransactionId} IS NOT NULL`),
+    uniqueIndex("order_payments_business_id_gateway_event_unique")
+      .on(table.businessId, table.gatewayEventId)
+      .where(sql`${table.gatewayEventId} IS NOT NULL`),
     index("order_payments_paid_at_idx").on(table.paidAt),
   ],
 );
@@ -483,10 +505,9 @@ export const orderReturn = pgTable(
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
-    uniqueIndex("order_returns_business_id_return_no_unique").on(
-      table.businessId,
-      table.returnNo,
-    ),
+    uniqueIndex("order_returns_business_id_return_no_active_unique")
+      .on(table.businessId, table.returnNo)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("order_returns_business_id_idx").on(table.businessId),
     index("order_returns_order_id_idx").on(table.orderId),
     index("order_returns_status_idx").on(table.status),

@@ -68,3 +68,11 @@ export function getOrderPaymentStatus(
       ? OrderPaymentStatus.PARTIALLY_PAID
       : OrderPaymentStatus.PAID;
 }
+
+export function calculatePaidAmount(
+  payments: { amount: Decimal.Value; paymentStatus: OrderPaymentStatus }[],
+) {
+  return payments
+    .filter((payment) => payment.paymentStatus === OrderPaymentStatus.PAID)
+    .reduce((total, payment) => total.plus(payment.amount), new Decimal(0));
+}

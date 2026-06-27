@@ -9,6 +9,7 @@ import { BadRequestException } from "@nestjs/common";
 import {
   assertOrderCanAcceptPayment,
   assertOrderPaymentInput,
+  calculatePaidAmount,
   getOrderPaymentStatus,
 } from "./order-payment.policy";
 
@@ -34,5 +35,15 @@ describe("order payment policy", () => {
       OrderPaymentStatus.PARTIALLY_PAID,
     );
     expect(getOrderPaymentStatus(100, 100)).toBe(OrderPaymentStatus.PAID);
+  });
+
+  it("counts only paid payment rows as received money", () => {
+    expect(
+      calculatePaidAmount([
+        { amount: 100, paymentStatus: OrderPaymentStatus.PAID },
+        { amount: 75, paymentStatus: OrderPaymentStatus.PENDING },
+        { amount: 50, paymentStatus: OrderPaymentStatus.FAILED },
+      ]).toString(),
+    ).toBe("100");
   });
 });

@@ -456,11 +456,10 @@ export class CreateBusinessBrandingDto {
   @MaxLength(100)
   fontFamily?: string;
 
-  @ApiPropertyOptional({ example: "8px" })
+  @ApiPropertyOptional({ example: 8 })
   @IsOptional()
-  @IsString()
-  @MaxLength(30)
-  borderRadius?: string;
+  @IsInt()
+  borderRadius?: number;
 
   @ApiPropertyOptional({
     enum: BusinessBrandingDensity,

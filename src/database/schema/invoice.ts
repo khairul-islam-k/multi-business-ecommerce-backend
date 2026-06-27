@@ -11,6 +11,7 @@ import {
   varchar,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 import { business } from "./business";
 import { decimal, type JsonValue } from "./common";
@@ -96,10 +97,9 @@ export const invoice = pgTable(
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
-    uniqueIndex("invoice_invoices_business_id_invoice_no_unique").on(
-      table.businessId,
-      table.invoiceNo,
-    ),
+    uniqueIndex("invoice_invoices_business_id_invoice_no_active_unique")
+      .on(table.businessId, table.invoiceNo)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("invoice_invoices_business_id_idx").on(table.businessId),
     index("invoice_invoices_order_id_idx").on(table.orderId),
     index("invoice_invoices_customer_id_idx").on(table.customerId),

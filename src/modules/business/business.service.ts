@@ -1,24 +1,8 @@
-import {
-  ConflictException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
-import {
-  and,
-  count,
-  eq,
-  ilike,
-  inArray,
-  isNull,
-  or,
-  sql,
-  type SQL,
-} from "drizzle-orm";
+import { and, count, eq, ilike, isNull, or, sql, SQL } from "drizzle-orm";
+
 import {
   business,
   businessBranding,
-  BusinessMemberStatus,
   businessMember,
   businessSetting,
   BusinessStatus,
@@ -28,25 +12,32 @@ import {
   WarehouseStatus,
   website,
 } from "@/database/schema";
-
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
-import { CreateBusinessDto } from "./dto/create-business.dto";
-import { BusinessSortBy, QueryBusinessDto } from "./dto/query-business.dto";
-import { UpdateBusinessDto } from "./dto/update-business.dto";
-import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 import {
-  DatabaseService,
-  type Database,
-  type DatabaseTransaction,
-} from "../../database/database.service";
-import { BusinessAccessService } from "../access/services/business-access.service";
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+
 import { throwConflictOnUnique } from "../../common/database/db-error.util";
+import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 import { BusinessAccessContext } from "../../common/request-context/request-context.types";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
 import { generateRandomSlug } from "../../common/utils/slug-generator.util";
+import {
+  Database,
+  DatabaseService,
+  DatabaseTransaction,
+} from "../../database/database.service";
+import { BusinessAccessService } from "../access/services/business-access.service";
+import { CreateBusinessDto } from "./dto/create-business.dto";
+import { BusinessSortBy, QueryBusinessDto } from "./dto/query-business.dto";
+import { UpdateBusinessDto } from "./dto/update-business.dto";
+
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 const BUSINESS_SLUG_MAX_LENGTH = 180;
 const BUSINESS_SLUG_RETRY_LIMIT = 5;
@@ -648,7 +639,7 @@ export class BusinessService {
 
     for (const field of BUSINESS_BRANDING_TEXT_FIELDS) {
       if (dto[field] !== undefined) {
-        data[field] = this.normalizeNullableText(dto[field]);
+        data[field] = this.normalizeNullableText(dto[field].toString());
       }
     }
 

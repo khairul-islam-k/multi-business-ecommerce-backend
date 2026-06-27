@@ -285,14 +285,12 @@ export const product = pgTable(
     uniqueIndex("products_business_id_name_deleted_unique")
       .on(table.businessId, table.name)
       .where(sql`${table.deletedAt} IS NULL`),
-    uniqueIndex("product_products_business_id_sku_unique").on(
-      table.businessId,
-      table.sku,
-    ),
-    uniqueIndex("product_products_business_id_barcode_unique").on(
-      table.businessId,
-      table.barcode,
-    ),
+    uniqueIndex("product_products_business_id_sku_active_unique")
+      .on(table.businessId, table.sku)
+      .where(sql`${table.deletedAt} IS NULL`),
+    uniqueIndex("product_products_business_id_barcode_active_unique")
+      .on(table.businessId, table.barcode)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("product_products_business_id_idx").on(table.businessId),
     index("product_products_category_id_idx").on(table.categoryId),
     index("product_products_brand_id_idx").on(table.brandId),
@@ -341,14 +339,12 @@ export const productVariant = pgTable(
     uniqueIndex("product_variants_business_id_product_id_deleted_unique")
       .on(table.businessId, table.productId, table.title)
       .where(sql`${table.deletedAt} IS NULL`),
-    uniqueIndex("product_variants_business_id_sku_unique").on(
-      table.businessId,
-      table.sku,
-    ),
-    uniqueIndex("product_variants_business_id_barcode_unique").on(
-      table.businessId,
-      table.barcode,
-    ),
+    uniqueIndex("product_variants_business_id_sku_active_unique")
+      .on(table.businessId, table.sku)
+      .where(sql`${table.deletedAt} IS NULL`),
+    uniqueIndex("product_variants_business_id_barcode_active_unique")
+      .on(table.businessId, table.barcode)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("product_variants_business_id_idx").on(table.businessId),
     index("product_variants_product_id_idx").on(table.productId),
     index("product_variants_status_idx").on(table.status),

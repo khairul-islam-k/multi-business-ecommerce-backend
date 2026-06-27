@@ -26,6 +26,7 @@ import {
   assertDirectOrderPayment,
   assertOrderCanAcceptPayment,
   assertSettlementPayment,
+  calculatePaidAmount,
   getOrderPaymentStatus,
 } from "../domain/order-payment.policy";
 import { OrderCodeRepository } from "../infrastructure/order-code.repository";
@@ -142,10 +143,7 @@ export class OrderPaymentService {
       .select()
       .from(orderPayment)
       .where(eq(orderPayment.orderId, order.id));
-    const paidAmount = payments.reduce(
-      (total, payment) => total.plus(payment.amount),
-      new Decimal(0),
-    );
+    const paidAmount = calculatePaidAmount(payments);
     const paymentStatus = getOrderPaymentStatus(order.totalAmount, paidAmount);
 
     await tx
