@@ -63,8 +63,6 @@ describe("OtpPolicy", () => {
       expiresInMinutes: 10,
     });
 
-    expect(policy.getExpiresAt()).toEqual(
-      new Date("2026-01-15T10:10:00.000Z"),
-    );
+    expect(policy.getExpiresAt()).toEqual(new Date("2026-01-15T10:10:00.000Z"));
   });
 });

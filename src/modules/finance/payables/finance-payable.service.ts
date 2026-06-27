@@ -1,35 +1,37 @@
+import { isUUID } from "class-validator";
+import Decimal from "decimal.js";
+import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+
+import {
+  FinancePayable,
+  financePayable,
+  FinancePayableStatus,
+  FinanceSourceType,
+  supplierInvoice,
+  SupplierInvoiceStatus,
+  supplierPayment,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  type FinancePayable,
-  FinancePayableStatus,
-  FinanceSourceType,
-  SupplierInvoiceStatus,
-  financePayable,
-  supplierInvoice,
-  supplierPayment,
-} from "@/database/schema";
-import Decimal from "decimal.js";
-import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
-import { isUUID } from "class-validator";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import {
-  PayFinancePayableDto,
-  QueryFinancePayableDto,
-} from "./dto/finance-payable.dto";
-import {
-  DatabaseService,
-  type DatabaseTransaction,
-} from "../../../database/database.service";
-import { FinanceLedgerService } from "../common/finance-ledger.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import {
+  DatabaseService,
+  DatabaseTransaction,
+} from "../../../database/database.service";
+import { FinanceLedgerService } from "../common/finance-ledger.service";
+import {
+  PayFinancePayableDto,
+  QueryFinancePayableDto,
+} from "./dto/finance-payable.dto";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class FinancePayableService {
@@ -50,7 +52,9 @@ export class FinancePayableService {
     const searchUuid = search && isUUID(search) ? search : undefined;
     const where = and(
       eq(financePayable.businessId, businessId),
-      query.partyType ? eq(financePayable.partyType, query.partyType) : undefined,
+      query.partyType
+        ? eq(financePayable.partyType, query.partyType)
+        : undefined,
       query.partyId ? eq(financePayable.partyId, query.partyId) : undefined,
       query.sourceType
         ? eq(financePayable.sourceType, query.sourceType)

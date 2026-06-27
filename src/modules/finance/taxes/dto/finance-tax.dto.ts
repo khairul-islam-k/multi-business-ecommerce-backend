@@ -1,5 +1,3 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { FinanceTaxStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsEnum,
@@ -10,6 +8,9 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
+
+import { FinanceTaxStatus } from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 
 export class CreateFinanceTaxDto {
   @ApiProperty({ example: "VAT 5%" })

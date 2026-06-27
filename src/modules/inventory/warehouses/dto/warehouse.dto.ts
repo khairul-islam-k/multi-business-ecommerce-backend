@@ -1,14 +1,7 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import { IsEnum, IsIn, IsOptional, IsString, MaxLength } from "class-validator";
+
 import { WarehouseStatus } from "@/database/schema";
-import { Type } from "class-transformer";
-import {
-  IsEnum,
-  IsIn,
-  IsOptional,
-  IsString,
-  MaxLength,
-  Min,
-} from "class-validator";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 
 import { SortedPaginationQueryDto } from "../../../../common/http/query.dto";
 

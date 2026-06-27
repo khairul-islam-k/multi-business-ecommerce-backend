@@ -1,35 +1,38 @@
+import { and, count, eq, ilike, isNull, or } from "drizzle-orm";
+
+import {
+  businessSetting,
+  inventoryStockMovement,
+  inventoryWarehouseStock,
+  supplierPurchaseOrder,
+  Warehouse,
+  warehouse,
+  WarehouseStatus,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  type Warehouse,
-  WarehouseStatus,
-  inventoryStockMovement,
-  inventoryWarehouseStock,
-  supplierPurchaseOrder,
-  warehouse,
-} from "@/database/schema";
-import { and, count, eq, ilike, isNull, or } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import {
-  CreateWarehouseDto,
-  QueryWarehouseDto,
-  WarehouseSortBy,
-  UpdateWarehouseDto,
-} from "./dto/warehouse.dto";
-import { DatabaseService } from "../../../database/database.service";
-import { InventoryLookupService } from "../common/inventory-lookup.service";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
 import {
   buildOrderBy,
   resolveSortColumn,
 } from "../../../common/http/sort.util";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import { InventoryLookupService } from "../common/inventory-lookup.service";
+import {
+  CreateWarehouseDto,
+  QueryWarehouseDto,
+  UpdateWarehouseDto,
+  WarehouseSortBy,
+} from "./dto/warehouse.dto";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class WarehouseService {
@@ -221,6 +224,22 @@ export class WarehouseService {
     businessId: string,
     warehouseId: string,
   ) {
+    const [{ value: defaultReferenceCount }] = await this.db
+      .select({ value: count() })
+      .from(businessSetting)
+      .where(
+        and(
+          eq(businessSetting.businessId, businessId),
+          eq(businessSetting.defaultWarehouseId, warehouseId),
+        ),
+      );
+
+    if (defaultReferenceCount > 0) {
+      throw new BadRequestException(
+        "Default warehouse cannot be deleted. Select another active default warehouse in business settings first.",
+      );
+    }
+
     const referenceCounts = await Promise.all([
       this.countRows(inventoryWarehouseStock, businessId, warehouseId),
       this.countRows(inventoryStockMovement, businessId, warehouseId),

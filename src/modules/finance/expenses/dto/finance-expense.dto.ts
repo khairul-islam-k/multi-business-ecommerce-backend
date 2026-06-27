@@ -1,8 +1,3 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import {
-  FinanceExpenseCategoryStatus,
-  FinanceExpenseStatus,
-} from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsDate,
@@ -15,6 +10,12 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
+
+import {
+  FinanceExpenseCategoryStatus,
+  FinanceExpenseStatus,
+} from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 
 export class CreateExpenseCategoryDto {
   @ApiProperty({ example: "Office Rent" })

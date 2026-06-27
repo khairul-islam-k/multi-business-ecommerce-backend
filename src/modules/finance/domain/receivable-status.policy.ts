@@ -1,4 +1,5 @@
 import Decimal from "decimal.js";
+
 import { FinanceReceivableStatus } from "@/database/schema";
 
 import { toMoney } from "./money";
@@ -18,4 +19,3 @@ export function getReceivableStatus(
     ? FinanceReceivableStatus.PENDING
     : FinanceReceivableStatus.PARTIALLY_RECEIVED;
 }
-

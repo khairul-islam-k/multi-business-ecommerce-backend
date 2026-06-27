@@ -6,12 +6,20 @@ import {
   businessMember,
   businessSetting,
   BusinessStatus,
+  financeAccount,
+  FinanceAccountStatus,
+  FinanceAccountType,
+  financeTax,
+  FinanceTaxStatus,
+  productUnit,
+  ProductSimpleStatus,
   systemUser,
   SystemUserType,
   warehouse,
   WarehouseStatus,
   website,
 } from "@/database/schema";
+import Decimal from "decimal.js";
 import {
   ConflictException,
   ForbiddenException,
@@ -102,6 +110,7 @@ const BUSINESS_BRANDING_TEXT_FIELDS = [
   "seoTitle",
   "seoDescription",
 ] as const;
+const DEFAULT_CURRENCY_CODE = "BDT";
 
 type BusinessClient = Database | DatabaseTransaction;
 
@@ -125,6 +134,7 @@ export class BusinessService {
       client,
     );
 
+    const currencyCode = this.normalizeCurrency(dto.currencyCode);
     const settingsData = dto.settings
       ? this.buildBusinessSettingData(dto.settings)
       : {};
@@ -143,7 +153,7 @@ export class BusinessService {
             email: dto.email ? this.normalizeEmail(dto.email) : null,
             phone: dto.phone?.trim() || null,
             country: dto.country?.trim() || null,
-            currencyCode: dto.currencyCode?.trim().toUpperCase(),
+            currencyCode,
             timezone: dto.timezone?.trim(),
             status: dto.status ?? BusinessStatus.ACTIVE,
             ownerUserId: userId,
@@ -151,17 +161,20 @@ export class BusinessService {
           })
           .returning();
 
-        if (dto.settings?.defaultWarehouseId) {
-          await this.assertActiveWarehouse(
-            transaction,
-            created.id,
-            dto.settings.defaultWarehouseId,
-          );
-        }
+        const defaults = await this.createDefaultBusinessResources(
+          transaction,
+          created.id,
+          userId,
+          currencyCode,
+        );
 
         await transaction.insert(businessSetting).values({
           businessId: created.id,
           ...settingsData,
+          defaultWarehouseId: defaults.defaultWarehouseId,
+          defaultFinanceAccountId: defaults.defaultFinanceAccountId,
+          defaultUnitId: defaults.defaultUnitId,
+          defaultTaxId: defaults.defaultTaxId,
         });
 
         await transaction.insert(businessBranding).values({
@@ -291,7 +304,7 @@ export class BusinessService {
                 country: dto.country?.trim() || null,
               }),
               ...(dto.currencyCode !== undefined && {
-                currencyCode: dto.currencyCode.trim().toUpperCase(),
+                currencyCode: this.normalizeCurrency(dto.currencyCode),
               }),
               ...(dto.timezone !== undefined && {
                 timezone: dto.timezone.trim(),
@@ -327,10 +340,35 @@ export class BusinessService {
               );
             }
 
+            if (dto.settings?.defaultFinanceAccountId) {
+              await this.assertActiveFinanceAccount(
+                transaction,
+                businessId,
+                dto.settings.defaultFinanceAccountId,
+              );
+            }
+
+            if (dto.settings?.defaultUnitId) {
+              await this.assertActiveUnit(
+                transaction,
+                businessId,
+                dto.settings.defaultUnitId,
+              );
+            }
+
+            if (dto.settings?.defaultTaxId) {
+              await this.assertActiveTax(
+                transaction,
+                businessId,
+                dto.settings.defaultTaxId,
+              );
+            }
+
             await this.upsertBusinessSettings(
               transaction,
               businessId,
               settingData,
+              currentUser.id,
             );
           }
 
@@ -547,6 +585,7 @@ export class BusinessService {
     transaction: DatabaseTransaction,
     businessId: string,
     data: ReturnType<BusinessService["buildBusinessSettingData"]>,
+    currentUserId: string,
   ) {
     const [existing] = await transaction
       .select({ id: businessSetting.id })
@@ -562,9 +601,25 @@ export class BusinessService {
       return;
     }
 
+    const [businessRow] = await transaction
+      .select({ currencyCode: business.currencyCode })
+      .from(business)
+      .where(eq(business.id, businessId))
+      .limit(1);
+    const defaults = await this.createDefaultBusinessResources(
+      transaction,
+      businessId,
+      currentUserId,
+      this.normalizeCurrency(businessRow?.currencyCode),
+    );
+
     await transaction.insert(businessSetting).values({
       businessId,
       ...data,
+      defaultWarehouseId: defaults.defaultWarehouseId,
+      defaultFinanceAccountId: defaults.defaultFinanceAccountId,
+      defaultUnitId: defaults.defaultUnitId,
+      defaultTaxId: defaults.defaultTaxId,
     });
   }
 
@@ -615,6 +670,15 @@ export class BusinessService {
       ...(dto.defaultWarehouseId !== undefined && {
         defaultWarehouseId: dto.defaultWarehouseId,
       }),
+      ...(dto.defaultFinanceAccountId !== undefined && {
+        defaultFinanceAccountId: dto.defaultFinanceAccountId,
+      }),
+      ...(dto.defaultUnitId !== undefined && {
+        defaultUnitId: dto.defaultUnitId,
+      }),
+      ...(dto.defaultTaxId !== undefined && {
+        defaultTaxId: dto.defaultTaxId,
+      }),
     };
 
     for (const field of BUSINESS_SETTING_PREFIX_FIELDS) {
@@ -624,6 +688,70 @@ export class BusinessService {
     }
 
     return data;
+  }
+
+  private async createDefaultBusinessResources(
+    transaction: DatabaseTransaction,
+    businessId: string,
+    userId: string,
+    currencyCode: string,
+  ) {
+    const [[defaultWarehouse], [defaultFinanceAccount], [defaultUnit], [tax]] =
+      await Promise.all([
+        transaction
+          .insert(warehouse)
+          .values({
+            businessId,
+            name: "Default Warehouse",
+            status: WarehouseStatus.ACTIVE,
+            createdBy: userId,
+            updatedBy: userId,
+          })
+          .returning({ id: warehouse.id }),
+        transaction
+          .insert(financeAccount)
+          .values({
+            businessId,
+            name: "Main Cash",
+            accountType: FinanceAccountType.CASH,
+            currencyCode,
+            openingBalance: new Decimal(0),
+            currentBalance: new Decimal(0),
+            status: FinanceAccountStatus.ACTIVE,
+            createdBy: userId,
+            updatedBy: userId,
+          })
+          .returning({ id: financeAccount.id }),
+        transaction
+          .insert(productUnit)
+          .values({
+            businessId,
+            name: "Piece",
+            status: ProductSimpleStatus.ACTIVE,
+            createdBy: userId,
+            updatedBy: userId,
+          })
+          .returning({ id: productUnit.id }),
+        transaction
+          .insert(financeTax)
+          .values({
+            businessId,
+            name: "No Tax",
+            rate: new Decimal(0),
+            description: "Default zero-percent tax",
+            status: FinanceTaxStatus.ACTIVE,
+            createdBy: userId,
+            updatedBy: userId,
+          })
+          .returning({ id: financeTax.id }),
+      ]);
+
+    return {
+      defaultWarehouseId: defaultWarehouse.id,
+      defaultFinanceAccountId: defaultFinanceAccount.id,
+      defaultUnitId: defaultUnit.id,
+      defaultTaxId: tax.id,
+    };
   }
 
   private buildBusinessBrandingData(
@@ -681,6 +809,10 @@ export class BusinessService {
     return email.trim().toLowerCase();
   }
 
+  private normalizeCurrency(currencyCode?: string | null) {
+    return currencyCode?.trim().toUpperCase() || DEFAULT_CURRENCY_CODE;
+  }
+
   private normalizeNullablePrefix(value?: string | null) {
     const normalized = value?.trim().toUpperCase();
 
@@ -718,6 +850,81 @@ export class BusinessService {
     if (!warehouseRow) {
       throw new NotFoundException(
         "Default warehouse must be an active warehouse for this business",
+      );
+    }
+  }
+
+  private async assertActiveFinanceAccount(
+    client: BusinessClient,
+    businessId: string,
+    accountId: string,
+  ) {
+    const [account] = await client
+      .select({ id: financeAccount.id })
+      .from(financeAccount)
+      .where(
+        and(
+          eq(financeAccount.id, accountId),
+          eq(financeAccount.businessId, businessId),
+          eq(financeAccount.status, FinanceAccountStatus.ACTIVE),
+          isNull(financeAccount.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!account) {
+      throw new NotFoundException(
+        "Default finance account must be an active account for this business",
+      );
+    }
+  }
+
+  private async assertActiveUnit(
+    client: BusinessClient,
+    businessId: string,
+    unitId: string,
+  ) {
+    const [unit] = await client
+      .select({ id: productUnit.id })
+      .from(productUnit)
+      .where(
+        and(
+          eq(productUnit.id, unitId),
+          eq(productUnit.businessId, businessId),
+          eq(productUnit.status, ProductSimpleStatus.ACTIVE),
+          isNull(productUnit.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!unit) {
+      throw new NotFoundException(
+        "Default product unit must be an active unit for this business",
+      );
+    }
+  }
+
+  private async assertActiveTax(
+    client: BusinessClient,
+    businessId: string,
+    taxId: string,
+  ) {
+    const [tax] = await client
+      .select({ id: financeTax.id })
+      .from(financeTax)
+      .where(
+        and(
+          eq(financeTax.id, taxId),
+          eq(financeTax.businessId, businessId),
+          eq(financeTax.status, FinanceTaxStatus.ACTIVE),
+          isNull(financeTax.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!tax) {
+      throw new NotFoundException(
+        "Default tax must be an active tax for this business",
       );
     }
   }

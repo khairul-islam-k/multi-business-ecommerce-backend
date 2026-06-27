@@ -1,9 +1,3 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import {
-  FinancePartyType,
-  FinanceReceivableStatus,
-  FinanceSourceType,
-} from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsEnum,
@@ -14,6 +8,13 @@ import {
   Max,
   Min,
 } from "class-validator";
+
+import {
+  FinancePartyType,
+  FinanceReceivableStatus,
+  FinanceSourceType,
+} from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class QueryFinanceReceivableDto {
   @ApiPropertyOptional({ example: 1 })

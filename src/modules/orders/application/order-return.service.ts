@@ -137,8 +137,6 @@ export class OrderReturnService {
         });
       }
 
-      console.log(updatedReturn.order?.warehouseId);
-
       if (dto.status === OrderReturnStatus.COMPLETED) {
         await Promise.all(
           updatedReturn.items.map(async (item) => {

@@ -1,7 +1,8 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
-import { CommonStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import { IsBoolean, IsEnum, IsIn, IsOptional } from "class-validator";
+
+import { CommonStatus } from "@/database/schema";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 
 import { SortedPaginationQueryDto } from "../../../common/http/query.dto";
 

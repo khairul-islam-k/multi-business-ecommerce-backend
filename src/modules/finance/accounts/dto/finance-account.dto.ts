@@ -1,5 +1,3 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { FinanceAccountStatus, FinanceAccountType } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsEnum,
@@ -10,6 +8,9 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
+
+import { FinanceAccountStatus, FinanceAccountType } from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 
 export class CreateFinanceAccountDto {
   @ApiProperty({ example: "Main Cash" })

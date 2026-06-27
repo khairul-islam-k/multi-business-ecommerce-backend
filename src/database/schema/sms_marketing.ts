@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  AnyPgColumn,
   index,
   integer,
   jsonb,
@@ -9,12 +11,10 @@ import {
   uniqueIndex,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
 import { business } from "./business";
-import { type JsonValue } from "./common";
+import { JsonValue } from "./common";
 import { systemUser } from "./system";
 
 export const SmsProviderStatus = {

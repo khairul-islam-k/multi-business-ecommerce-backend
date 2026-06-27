@@ -1,13 +1,13 @@
-import { describe, expect, it, jest } from "@jest/globals";
 import Decimal from "decimal.js";
 
 import {
   InventoryMovementType,
   InventoryReferenceType,
-  InventoryTransferStatus,
   inventoryStockTransfer,
   inventoryStockTransferItem,
+  InventoryTransferStatus,
 } from "@/database/schema";
+import { describe, expect, it, jest } from "@jest/globals";
 
 import { StockTransferService } from "./stock-transfer.service";
 

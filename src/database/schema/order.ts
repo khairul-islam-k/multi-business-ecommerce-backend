@@ -17,6 +17,7 @@ import { business } from "./business";
 import { decimal, JsonValue } from "./common";
 import { customer } from "./customer";
 import { financeAccount, financeTax } from "./finance";
+import { warehouse } from "./inventory";
 import { paymentGateway, paymentGatewayConfig } from "./payment_gateway";
 import { systemUser } from "./system";
 
@@ -265,7 +266,9 @@ export const order = pgTable(
     customerId: uuid("customer_id").references((): AnyPgColumn => customer.id, {
       onDelete: "set null",
     }),
-    warehouseId: uuid("warehouse_id"),
+    warehouseId: uuid("warehouse_id")
+      .notNull()
+      .references((): AnyPgColumn => warehouse.id, { onDelete: "restrict" }),
     taxId: uuid("tax_id").references((): AnyPgColumn => financeTax.id, {
       onDelete: "restrict",
     }),

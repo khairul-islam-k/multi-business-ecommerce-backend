@@ -766,6 +766,7 @@ export class StorefrontCustomerService {
         .from(productReview)
         .where(where)
         .orderBy(desc(productReview.createdAt))
+        .innerJoin(product, eq(product.id, productReview.productId))
         .limit(limit)
         .offset(skip),
       this.db

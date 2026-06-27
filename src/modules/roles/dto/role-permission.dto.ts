@@ -1,6 +1,7 @@
-import { ApiProperty } from "@nestjs/swagger";
-import { PermissionAction, RbacFeature } from "@/database/schema";
 import { IsEnum } from "class-validator";
+
+import { PermissionAction, RbacFeature } from "@/database/schema";
+import { ApiProperty } from "@nestjs/swagger";
 
 export class RolePermissionDto {
   @ApiProperty({

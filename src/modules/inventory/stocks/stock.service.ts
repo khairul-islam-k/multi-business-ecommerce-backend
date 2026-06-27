@@ -1,16 +1,3 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import {
-  type InventoryStock,
-  type InventoryStockMovement,
-  inventoryStock,
-  inventoryStockMovement,
-  inventoryWarehouseStock,
-  order as orderTable,
-  orderItem as orderItemTable,
-  product,
-  productVariant,
-  warehouse,
-} from "@/database/schema";
 import Decimal from "decimal.js";
 import {
   and,
@@ -22,10 +9,29 @@ import {
   isNull,
   or,
   sql,
-  type SQL,
+  SQL,
 } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import {
+  InventoryStock,
+  inventoryStock,
+  InventoryStockMovement,
+  inventoryStockMovement,
+  inventoryWarehouseStock,
+  order as orderTable,
+  orderItem as orderItemTable,
+  product,
+  productVariant,
+  warehouse,
+} from "@/database/schema";
+import { Injectable, NotFoundException } from "@nestjs/common";
+
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import { InventoryLookupService } from "../common/inventory-lookup.service";
 import {
   FulfillOrderAllocationDto,
   QueryStockDto,
@@ -33,12 +39,8 @@ import {
   ReserveOrderStockDto,
   UpdateStockAlertDto,
 } from "./dto/stock.dto";
-import { DatabaseService } from "../../../database/database.service";
-import { InventoryLookupService } from "../common/inventory-lookup.service";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class StockService {

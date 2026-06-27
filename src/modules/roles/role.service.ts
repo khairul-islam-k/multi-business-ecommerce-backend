@@ -1,31 +1,4 @@
 import {
-  BadRequestException,
-  ConflictException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
-import {
-  type PermissionAction,
-  type RbacFeature,
-  type RbacRole,
-  type RbacRolePermission,
-  type RbacUserRoleMap,
-  type SystemUser,
-  BusinessMemberStatus,
-  BusinessStatus,
-  CommonStatus,
-  SystemUserStatus,
-  SystemUserType,
-  UserRoleMapStatus,
-  business,
-  businessMember,
-  rbacRole,
-  rbacRolePermission,
-  rbacUserRoleMap,
-  systemUser,
-} from "@/database/schema";
-import {
   and,
   asc,
   count,
@@ -39,7 +12,39 @@ import {
   or,
 } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
+import {
+  business,
+  businessMember,
+  BusinessMemberStatus,
+  BusinessStatus,
+  CommonStatus,
+  RbacRole,
+  rbacRole,
+  RbacRolePermission,
+  rbacRolePermission,
+  RbacUserRoleMap,
+  rbacUserRoleMap,
+  SystemUser,
+  systemUser,
+  SystemUserStatus,
+  SystemUserType,
+  UserRoleMapStatus,
+} from "@/database/schema";
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+
+import { isUniqueConstraintError } from "../../common/database/db-error.util";
+import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../common/utils/api-response.util";
+import { DatabaseService } from "../../database/database.service";
 import { AssignRoleDto } from "./dto/assign-role.dto";
 import { CreateRoleDto } from "./dto/create-role.dto";
 import { QueryRoleAssignmentsDto } from "./dto/query-role-assignment.dto";
@@ -47,13 +52,8 @@ import { QueryRoleDto, RoleSortBy } from "./dto/query-role.dto";
 import { RolePermissionDto } from "./dto/role-permission.dto";
 import { UpdateRoleAssignmentDto } from "./dto/update-role-assignment.dto";
 import { UpdateRoleDto } from "./dto/update-role.dto";
-import { DatabaseService } from "../../database/database.service";
-import { isUniqueConstraintError } from "../../common/database/db-error.util";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../common/utils/api-response.util";
-import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
+
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 const ACCESSIBLE_BUSINESS_STATUSES = [
   BusinessStatus.ACTIVE,

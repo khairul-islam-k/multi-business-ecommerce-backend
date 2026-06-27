@@ -1,28 +1,30 @@
+import { isUUID } from "class-validator";
+import Decimal from "decimal.js";
+import { and, count, desc, eq, ilike, or } from "drizzle-orm";
+
+import {
+  financeReceivable,
+  FinanceReceivableStatus,
+  FinanceSourceType,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  FinanceReceivableStatus,
-  FinanceSourceType,
-  financeReceivable,
-} from "@/database/schema";
-import Decimal from "decimal.js";
-import { and, count, desc, eq, ilike, or } from "drizzle-orm";
-import { isUUID } from "class-validator";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import {
-  QueryFinanceReceivableDto,
-  ReceiveFinanceReceivableDto,
-} from "./dto/finance-receivable.dto";
-import { DatabaseService } from "../../../database/database.service";
-import { FinanceLedgerService } from "../common/finance-ledger.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import { FinanceLedgerService } from "../common/finance-ledger.service";
+import {
+  QueryFinanceReceivableDto,
+  ReceiveFinanceReceivableDto,
+} from "./dto/finance-receivable.dto";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class FinanceReceivableService {
@@ -188,10 +190,7 @@ export class FinanceReceivableService {
     );
   }
 
-  private async getReceivableOrThrow(
-    businessId: string,
-    receivableId: string,
-  ) {
+  private async getReceivableOrThrow(businessId: string, receivableId: string) {
     const [receivable] = await this.db
       .select()
       .from(financeReceivable)

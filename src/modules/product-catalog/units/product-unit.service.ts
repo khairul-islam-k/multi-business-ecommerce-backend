@@ -1,6 +1,7 @@
 import { and, count, eq, ilike, isNull } from "drizzle-orm";
 
 import {
+  businessSetting,
   product,
   ProductSimpleStatus,
   ProductUnit,
@@ -207,18 +208,37 @@ export class ProductUnitService {
   }
 
   private async assertUnitCanBeDeleted(businessId: string, unitId: string) {
-    const [{ value }] = await this.db
-      .select({ value: count() })
-      .from(product)
-      .where(
-        and(
-          eq(product.businessId, businessId),
-          eq(product.unitId, unitId),
-          isNull(product.deletedAt),
-        ),
-      );
+    const [defaultReference, productReference] = await Promise.all([
+      this.db
+        .select({ value: count() })
+        .from(businessSetting)
+        .where(
+          and(
+            eq(businessSetting.businessId, businessId),
+            eq(businessSetting.defaultUnitId, unitId),
+          ),
+        )
+        .then(([row]) => row?.value ?? 0),
+      this.db
+        .select({ value: count() })
+        .from(product)
+        .where(
+          and(
+            eq(product.businessId, businessId),
+            eq(product.unitId, unitId),
+            isNull(product.deletedAt),
+          ),
+        )
+        .then(([row]) => row?.value ?? 0),
+    ]);
 
-    if (value > 0) {
+    if (defaultReference > 0) {
+      throw new BadRequestException(
+        "Default unit cannot be deleted. Select another active default unit in business settings first.",
+      );
+    }
+
+    if (productReference > 0) {
       throw new BadRequestException(
         "Unit cannot be deleted while assigned to active products",
       );

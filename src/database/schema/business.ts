@@ -13,7 +13,9 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
+import { financeAccount, financeTax } from "./finance";
 import { warehouse } from "./inventory";
+import { productUnit } from "./product";
 import { systemUser } from "./system";
 
 export const BusinessStatus = {
@@ -144,10 +146,24 @@ export const businessSetting = pgTable(
     productBarcodePrefix: varchar("product_barcode_prefix", { length: 20 }),
     variantSkuPrefix: varchar("variant_sku_prefix", { length: 20 }),
     variantBarcodePrefix: varchar("variant_barcode_prefix", { length: 20 }),
-    defaultWarehouseId: uuid("default_warehouse_id").references(
-      (): AnyPgColumn => warehouse.id,
-      { onDelete: "set null" },
-    ),
+    defaultWarehouseId: uuid("default_warehouse_id")
+      .notNull()
+      .references((): AnyPgColumn => warehouse.id, { onDelete: "restrict" }),
+    defaultFinanceAccountId: uuid("default_finance_account_id")
+      .notNull()
+      .references((): AnyPgColumn => financeAccount.id, {
+        onDelete: "restrict",
+      }),
+    defaultUnitId: uuid("default_unit_id")
+      .notNull()
+      .references((): AnyPgColumn => productUnit.id, {
+        onDelete: "restrict",
+      }),
+    defaultTaxId: uuid("default_tax_id")
+      .notNull()
+      .references((): AnyPgColumn => financeTax.id, {
+        onDelete: "restrict",
+      }),
     lowStockThreshold: integer("low_stock_threshold"),
     allowBackorder: boolean("allow_backorder"),
     autoConfirmOrder: boolean("auto_confirm_order"),
@@ -173,6 +189,11 @@ export const businessSetting = pgTable(
     index("business_settings_default_warehouse_id_idx").on(
       table.defaultWarehouseId,
     ),
+    index("business_settings_default_finance_account_id_idx").on(
+      table.defaultFinanceAccountId,
+    ),
+    index("business_settings_default_unit_id_idx").on(table.defaultUnitId),
+    index("business_settings_default_tax_id_idx").on(table.defaultTaxId),
   ],
 );
 export type BusinessSetting = typeof businessSetting.$inferSelect;

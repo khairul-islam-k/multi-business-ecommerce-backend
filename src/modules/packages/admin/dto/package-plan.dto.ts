@@ -1,10 +1,3 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import {
-  PackageBillingCycle,
-  PackageLimitKey,
-  PackageResetCycle,
-  PackageStatus,
-} from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
@@ -19,6 +12,14 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
+
+import {
+  PackageBillingCycle,
+  PackageLimitKey,
+  PackageResetCycle,
+  PackageStatus,
+} from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 
 export class PackagePlanLimitDto {
   @ApiProperty({

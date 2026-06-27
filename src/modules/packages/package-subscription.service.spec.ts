@@ -1,4 +1,3 @@
-import { describe, expect, it } from "@jest/globals";
 import Decimal from "decimal.js";
 
 import {
@@ -9,6 +8,7 @@ import {
   packageSubscription,
   packageTenantCreditLedger,
 } from "@/database/schema";
+import { describe, expect, it } from "@jest/globals";
 
 import { PackageSubscriptionService } from "./package-subscription.service";
 

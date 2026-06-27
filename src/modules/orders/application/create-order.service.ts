@@ -142,6 +142,9 @@ export class CreateOrderService {
       this.orderCodeRepository.generateUniqueOrderNo(businessId),
       this.orderCodeRepository.generateUniqueInvoiceNo(businessId),
     ]);
+    const warehouseId =
+      params.warehouseId ??
+      (await this.resolveDefaultWarehouseIdOrThrow(businessId));
     const items = await this.buildItems(businessId, params.items);
     const totals = calculateOrderTotals(items, params.shippingCharge ?? 0);
     const taxSnapshot = this.deriveTaxSnapshot(items, totals);
@@ -152,7 +155,7 @@ export class CreateOrderService {
         .values({
           businessId,
           customerId: params.customerId,
-          warehouseId: params.warehouseId,
+          warehouseId,
           taxId: taxSnapshot.taxId,
           orderNo,
           orderType: params.orderType,
@@ -213,7 +216,7 @@ export class CreateOrderService {
             productId: item.productId,
             variantId: item.variantId ?? null,
             quantity: item.quantity,
-            warehouseId: params.warehouseId,
+            warehouseId,
             createdBy: currentUser?.id,
           },
         );

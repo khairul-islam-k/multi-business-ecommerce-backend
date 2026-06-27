@@ -1,5 +1,3 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { PackageSubscriptionStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsEnum,
@@ -11,6 +9,9 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
+
+import { PackageSubscriptionStatus } from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class QueryPackageSubscriptionDto {
   @ApiPropertyOptional({ example: 1 })
