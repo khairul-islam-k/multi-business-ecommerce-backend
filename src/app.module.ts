@@ -15,6 +15,7 @@ import { InventoryModule } from "./modules/inventory/inventory.module";
 import { MediaModule } from "./modules/media/media.module";
 import { OrderModule } from "./modules/orders/order.module";
 import { PackageModule } from "./modules/packages/package.module";
+import { PaymentGatewayModule } from "./modules/payment-gateways/payment-gateway.module";
 import { PermissionModule } from "./modules/permissions/permission.module";
 import { PosModule } from "./modules/pos/pos.module";
 import { ProductCatalogModule } from "./modules/product-catalog/product-catalog.module";
@@ -54,6 +55,7 @@ import { RequestContextMiddleware } from "./common/request-context/request-conte
     CustomerModule,
     CustomerAuthModule,
     OrderModule,
+    PaymentGatewayModule,
     PosModule,
     WebsiteModule,
     StorefrontModule,

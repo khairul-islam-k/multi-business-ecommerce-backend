@@ -35,6 +35,10 @@ export class EnvironmentVariables {
   @IsNotEmpty()
   APP_IP!: string;
 
+  @IsOptional()
+  @IsString()
+  APP_PUBLIC_API_URL?: string;
+
   @IsString()
   @IsNotEmpty()
   APP_CORS_ORIGINS!: string;
@@ -126,6 +130,10 @@ export class EnvironmentVariables {
   @IsString()
   @IsNotEmpty()
   OTP_SECRET!: string;
+
+  @IsOptional()
+  @IsString()
+  PAYMENT_CONFIG_ENCRYPTION_KEY?: string;
 
   @Type(() => Number)
   @IsInt()

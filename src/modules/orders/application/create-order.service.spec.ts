@@ -18,11 +18,14 @@ describe("CreateOrderService", () => {
     const service = createService();
     const createOrderFlow = jest
       .spyOn(service as any, "createOrderFlow")
-      .mockResolvedValue({ data: { id: "order-1" } } as never);
+      .mockResolvedValue({ data: { id: "order-1" } });
 
     jest
       .spyOn(service as any, "resolveDefaultWarehouseIdOrThrow")
-      .mockResolvedValue("warehouse-default" as never);
+      .mockResolvedValue("warehouse-default");
+    jest
+      .spyOn(service as any, "assertStorefrontPaymentSettings")
+      .mockResolvedValue(undefined);
 
     await service.createStorefrontOrder("business-1", {
       warehouseId: "warehouse-from-client",

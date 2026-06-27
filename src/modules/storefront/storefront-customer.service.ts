@@ -17,6 +17,7 @@ import {
   OrderStatus,
   orderStatusLog,
   product,
+  productImage,
   productReview,
   ProductReviewStatus,
   productVariant,
@@ -764,9 +765,9 @@ export class StorefrontCustomerService {
       this.db
         .select()
         .from(productReview)
+        .innerJoin(product, eq(product.id, productReview.productId))
         .where(where)
         .orderBy(desc(productReview.createdAt))
-        .innerJoin(product, eq(product.id, productReview.productId))
         .limit(limit)
         .offset(skip),
       this.db
@@ -776,12 +777,18 @@ export class StorefrontCustomerService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items.map((item) => ({
+        ...item.product_reviews,
+        product: item.products,
+      })),
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    );
   }
 
   private async assertStorefrontCustomer(
@@ -853,23 +860,22 @@ export class StorefrontCustomerService {
 
   private async hydrateCart(cart: typeof orderCart.$inferSelect) {
     const items = await this.db
-      .select({
-        item: orderCartItem,
-        product,
-        variant: productVariant,
-      })
+      .select()
       .from(orderCartItem)
       .innerJoin(product, eq(product.id, orderCartItem.productId))
       .leftJoin(productVariant, eq(productVariant.id, orderCartItem.variantId))
+      .leftJoin(productImage, eq(product.id, productImage.productId))
+      .leftJoin(productImage, eq(productVariant.id, productImage.variantId))
       .where(eq(orderCartItem.cartId, cart.id))
       .orderBy(orderCartItem.createdAt);
 
     return {
       ...cart,
       items: items.map((row) => ({
-        ...row.item,
-        product: row.product,
-        variant: row.variant,
+        ...row.order_cart_items,
+        product: row.products,
+        variant: row.product_variants,
+        images: row.product_images,
       })),
     };
   }

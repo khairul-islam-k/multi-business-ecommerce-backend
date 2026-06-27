@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  AnyPgColumn,
   index,
   integer,
   jsonb,
@@ -10,12 +11,12 @@ import {
   uniqueIndex,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 import { business } from "./business";
-import { type JsonValue } from "./common";
+import { JsonValue } from "./common";
 import { financeAccount } from "./finance";
+import { orderPayment } from "./order";
 import { systemUser } from "./system";
 
 export const PaymentGatewayProvider = {
@@ -139,8 +140,8 @@ export const paymentGatewayConfig = pgTable(
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
-    uniqueIndex("payment_gateway_configs_business_gateway_mode_active_unique")
-      .on(table.businessId, table.gatewayId, table.mode)
+    uniqueIndex("payment_gateway_configs_business_gateway_active_unique")
+      .on(table.businessId, table.gatewayId)
       .where(sql`${table.deletedAt} IS NULL`),
     index("payment_gateway_configs_business_id_idx").on(table.businessId),
     index("payment_gateway_configs_gateway_id_idx").on(table.gatewayId),
@@ -165,7 +166,10 @@ export const paymentWebhookEvent = pgTable(
       .references((): AnyPgColumn => paymentGateway.id, {
         onDelete: "restrict",
       }),
-    orderPaymentId: uuid("order_payment_id"),
+    orderPaymentId: uuid("order_payment_id").references(
+      (): AnyPgColumn => orderPayment.id,
+      { onDelete: "cascade" },
+    ),
     eventType: varchar("event_type", { length: 100 }).notNull(),
     eventId: varchar("event_id", { length: 150 }),
     payload: jsonb().$type<JsonValue>().notNull(),

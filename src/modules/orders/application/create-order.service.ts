@@ -80,6 +80,8 @@ export class CreateOrderService {
   }
 
   async createStorefrontOrder(businessId: string, dto: CreateOrderDto) {
+    await this.assertStorefrontPaymentSettings(businessId, dto);
+
     const defaultWarehouseId =
       await this.resolveDefaultWarehouseIdOrThrow(businessId);
 
@@ -548,6 +550,32 @@ export class CreateOrderService {
     }
 
     return warehouseRow.id;
+  }
+
+  private async assertStorefrontPaymentSettings(
+    businessId: string,
+    dto: CreateOrderDto,
+  ) {
+    const [settings] = await this.db
+      .select({
+        codEnabled: businessSetting.codEnabled,
+        onlinePaymentEnabled: businessSetting.onlinePaymentEnabled,
+      })
+      .from(businessSetting)
+      .where(eq(businessSetting.businessId, businessId))
+      .limit(1);
+
+    if (dto.isCod && !settings?.codEnabled) {
+      throw new BadRequestException(
+        "Cash on delivery is not enabled for this storefront",
+      );
+    }
+
+    if (dto.payment && !settings?.onlinePaymentEnabled) {
+      throw new BadRequestException(
+        "Online payment is not enabled for this storefront",
+      );
+    }
   }
 
   private normalizeNullableText(value?: string | null) {

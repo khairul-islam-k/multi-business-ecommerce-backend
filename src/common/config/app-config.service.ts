@@ -27,6 +27,15 @@ export class AppConfigService {
     return this.configService.getOrThrow<string>("APP_IP");
   }
 
+  get publicApiUrl() {
+    const configured = this.configService.get<string>("APP_PUBLIC_API_URL");
+
+    return (
+      configured?.replace(/\/+$/, "") ||
+      `http://${this.appIp}:${this.appPort}/api/v1`
+    );
+  }
+
   get corsOrigins() {
     return parseCorsOrigins(
       `http://${this.appIp}:${this.appPort},${this.configService.getOrThrow<string>("APP_CORS_ORIGINS")}`,
@@ -95,5 +104,12 @@ export class AppConfigService {
         "OTP_EXPIRES_IN_MINS",
       ),
     };
+  }
+
+  get paymentConfigEncryptionKey() {
+    return (
+      this.configService.get<string>("PAYMENT_CONFIG_ENCRYPTION_KEY") ||
+      this.jwtAccessSecret
+    );
   }
 }
