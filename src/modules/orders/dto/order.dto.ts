@@ -22,6 +22,7 @@ import {
   OrderType,
 } from "@/database/schema";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+
 import { SortedPaginationQueryDto } from "../../../common/http/query.dto";
 
 export const OrderSortBy = {

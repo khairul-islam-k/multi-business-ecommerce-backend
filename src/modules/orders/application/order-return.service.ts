@@ -2,12 +2,16 @@ import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
 import {
   customer,
+  InventoryMovementType,
+  InventoryReferenceType,
   order,
   orderItem,
   orderReturn,
   orderReturnItem,
   OrderReturnStatus,
 } from "@/database/schema";
+import { FinanceLedgerService } from "@/modules/finance/common/finance-ledger.service";
+import { InventoryLookupService } from "@/modules/inventory/common/inventory-lookup.service";
 import {
   BadRequestException,
   Injectable,
@@ -28,7 +32,11 @@ import type { CurrentUserPayload } from "../../auth/decorators/current-user.deco
 
 @Injectable()
 export class OrderReturnService {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly finance: FinanceLedgerService,
+    private readonly inventoryLookup: InventoryLookupService,
+  ) {}
 
   private get db() {
     return this.database.db;
@@ -99,24 +107,63 @@ export class OrderReturnService {
     const returnRow = await this.getReturnOrThrow(businessId, returnId);
     this.assertReturnStatusTransition(returnRow.status, dto.status);
 
-    const [updated] = await this.db
-      .update(orderReturn)
-      .set({
-        status: dto.status,
-        approvedBy:
-          dto.status === OrderReturnStatus.APPROVED
-            ? currentUser.id
-            : returnRow.approvedBy,
-        approvedAt:
-          dto.status === OrderReturnStatus.APPROVED
-            ? new Date()
-            : returnRow.approvedAt,
-      })
-      .where(eq(orderReturn.id, returnRow.id))
-      .returning();
+    const updatedReturn = await this.db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(orderReturn)
+        .set({
+          status: dto.status,
+          approvedBy:
+            dto.status === OrderReturnStatus.APPROVED
+              ? currentUser.id
+              : returnRow.approvedBy,
+          approvedAt:
+            dto.status === OrderReturnStatus.APPROVED
+              ? new Date()
+              : returnRow.approvedAt,
+        })
+        .where(eq(orderReturn.id, returnRow.id))
+        .returning();
+
+      const updatedReturn = await this.hydrateReturn(updated);
+
+      if (dto.status === OrderReturnStatus.APPROVED) {
+        await this.finance.createCustomerReturnPayable(tx, {
+          businessId,
+          // TODO: why so many baaaangs!!!!
+          customerId: updatedReturn.order!.customerId!,
+          returnId: updatedReturn.id,
+          totalAmount: updatedReturn.totalAmount,
+          // TODO: consider adding a note in here
+        });
+      }
+
+      console.log(updatedReturn.order?.warehouseId);
+
+      if (dto.status === OrderReturnStatus.COMPLETED) {
+        await Promise.all(
+          updatedReturn.items.map(async (item) => {
+            await this.inventoryLookup.applyStockDelta(tx, {
+              businessId,
+              movementType: InventoryMovementType.SALE_RETURN_IN,
+              productId: item.productId,
+              variantId: item.variantId,
+              quantityDelta: item.quantity,
+              // TODO: why so bang!!!
+              warehouseId: updatedReturn.order!.warehouseId!,
+              referenceId: updatedReturn.id,
+              referenceType: InventoryReferenceType.ORDER_RETURN,
+              createdBy: currentUser.id,
+              note: updatedReturn.reason,
+            });
+          }),
+        );
+      }
+
+      return updatedReturn;
+    });
 
     return apiResponse(
-      await this.hydrateReturn(updated),
+      updatedReturn,
       "Order return status updated successfully",
     );
   }

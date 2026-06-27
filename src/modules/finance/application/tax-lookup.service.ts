@@ -1,11 +1,12 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { FinanceTaxStatus, financeTax } from "@/database/schema";
 import { and, eq, isNull } from "drizzle-orm";
 
+import { financeTax, FinanceTaxStatus } from "@/database/schema";
+import { Injectable, NotFoundException } from "@nestjs/common";
+
 import {
-  type Database,
-  type DatabaseTransaction,
+  Database,
   DatabaseService,
+  DatabaseTransaction,
 } from "../../../database/database.service";
 
 @Injectable()

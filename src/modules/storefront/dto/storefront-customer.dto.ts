@@ -187,11 +187,6 @@ export class PlaceStorefrontOrderDto {
   @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsOptional()
   @IsUUID()
-  warehouseId?: string;
-
-  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
-  @IsOptional()
-  @IsUUID()
   shippingAddressId?: string;
 
   @ApiPropertyOptional({ example: { address: "House 42, Dhaka" } })

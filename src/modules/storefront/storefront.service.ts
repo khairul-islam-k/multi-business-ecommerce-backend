@@ -159,11 +159,7 @@ export class StorefrontService {
     return apiResponse(tags);
   }
 
-  async findProducts(
-    // TODO: fix the ordering to use `?` mark
-    host: string | undefined,
-    query: StorefrontProductQueryDto,
-  ) {
+  async findProducts(query: StorefrontProductQueryDto, host?: string) {
     const website = await this.getPublishedWebsite(host);
     const page = query.page ?? 1;
     const limit = query.limit ?? 12;

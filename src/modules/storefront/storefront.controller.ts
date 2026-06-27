@@ -67,8 +67,8 @@ export class StorefrontController {
     @Query() query: StorefrontProductQueryDto,
   ) {
     return this.storefront.findProducts(
-      this.getRequestHost(host, forwardedHost),
       query,
+      this.getRequestHost(host, forwardedHost),
     );
   }
 

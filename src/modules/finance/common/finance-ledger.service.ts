@@ -89,6 +89,19 @@ export class FinanceLedgerService {
     return this.payables.createSupplierInvoicePayable(tx, params);
   }
 
+  async createCustomerReturnPayable(
+    tx: DatabaseTransaction,
+    params: {
+      businessId: string;
+      customerId: string;
+      returnId: string;
+      totalAmount: Decimal.Value;
+      note?: string | null;
+    },
+  ) {
+    return this.payables.createOrderReturnPayable(tx, params);
+  }
+
   async createSupplierReturnReceivable(
     tx: DatabaseTransaction,
     params: {

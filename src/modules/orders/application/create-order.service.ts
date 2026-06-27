@@ -3,6 +3,7 @@ import { and, count, eq, isNull } from "drizzle-orm";
 
 import {
   CatalogProductStatus,
+  businessSetting,
   courierShipment,
   courierShipmentItem,
   customer,
@@ -23,6 +24,8 @@ import {
   product,
   productVariant,
   ProductVariantStatus,
+  warehouse,
+  WarehouseStatus,
 } from "@/database/schema";
 import {
   BadRequestException,
@@ -77,8 +80,12 @@ export class CreateOrderService {
   }
 
   async createStorefrontOrder(businessId: string, dto: CreateOrderDto) {
+    const defaultWarehouseId =
+      await this.resolveDefaultWarehouseIdOrThrow(businessId);
+
     return this.createOrderFlow(undefined, businessId, {
       ...dto,
+      warehouseId: defaultWarehouseId,
       orderType: OrderType.ONLINE,
       orderSource: OrderSource.WEBSITE,
       fulfillImmediately: false,
@@ -503,6 +510,41 @@ export class CreateOrderService {
     if (!existingCustomer) {
       throw new NotFoundException("Customer not found");
     }
+  }
+
+  private async resolveDefaultWarehouseIdOrThrow(businessId: string) {
+    const [settings] = await this.db
+      .select({ defaultWarehouseId: businessSetting.defaultWarehouseId })
+      .from(businessSetting)
+      .where(eq(businessSetting.businessId, businessId))
+      .limit(1);
+
+    if (!settings?.defaultWarehouseId) {
+      throw new BadRequestException(
+        "Storefront orders require a default warehouse. Please set an active default warehouse in business settings before accepting storefront orders.",
+      );
+    }
+
+    const [warehouseRow] = await this.db
+      .select({ id: warehouse.id })
+      .from(warehouse)
+      .where(
+        and(
+          eq(warehouse.id, settings.defaultWarehouseId),
+          eq(warehouse.businessId, businessId),
+          eq(warehouse.status, WarehouseStatus.ACTIVE),
+          isNull(warehouse.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!warehouseRow) {
+      throw new BadRequestException(
+        "Storefront orders require an active default warehouse. The configured default warehouse is missing, inactive, or deleted.",
+      );
+    }
+
+    return warehouseRow.id;
   }
 
   private normalizeNullableText(value?: string | null) {

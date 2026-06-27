@@ -55,8 +55,8 @@ import {
   StorefrontOrderQueryDto,
   StorefrontOrderReturnQueryDto,
   StorefrontReviewQueryDto,
-  UpdateStorefrontCustomerAddressDto,
   UpdateStorefrontCartItemDto,
+  UpdateStorefrontCustomerAddressDto,
 } from "./dto/storefront-customer.dto";
 
 import type { CurrentCustomerPayload } from "../customer-auth/strategies/customer-jwt.strategy";
@@ -88,7 +88,10 @@ export class StorefrontCustomerService {
           isNull(customerAddress.deletedAt),
         ),
       )
-      .orderBy(desc(customerAddress.isDefault), desc(customerAddress.updatedAt));
+      .orderBy(
+        desc(customerAddress.isDefault),
+        desc(customerAddress.updatedAt),
+      );
 
     return apiResponse(addresses);
   }
@@ -160,13 +163,17 @@ export class StorefrontCustomerService {
         .set({
           addressType: dto.addressType,
           name:
-            dto.name === undefined ? undefined : normalizeOptionalText(dto.name),
+            dto.name === undefined
+              ? undefined
+              : normalizeOptionalText(dto.name),
           address:
             dto.address === undefined
               ? undefined
               : normalizeRequiredText(dto.address),
           city:
-            dto.city === undefined ? undefined : normalizeOptionalText(dto.city),
+            dto.city === undefined
+              ? undefined
+              : normalizeOptionalText(dto.city),
           country:
             dto.country === undefined
               ? undefined
@@ -406,7 +413,6 @@ export class StorefrontCustomerService {
       currentCustomer.businessId,
       {
         customerId: currentCustomer.customerId,
-        warehouseId: dto.warehouseId,
         customerName: customerRow.name,
         customerPhone: customerRow.phone ?? undefined,
         customerEmail: currentCustomer.email,

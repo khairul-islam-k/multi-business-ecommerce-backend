@@ -24,6 +24,8 @@ import {
   BusinessStatus,
   systemUser,
   SystemUserType,
+  warehouse,
+  WarehouseStatus,
   website,
 } from "@/database/schema";
 
@@ -67,6 +69,47 @@ const BUSINESS_SETTING_PREFIX_FIELDS = [
   "productBarcodePrefix",
   "variantSkuPrefix",
   "variantBarcodePrefix",
+] as const;
+const BUSINESS_BRANDING_COLOR_FIELDS = [
+  "primaryColor",
+  "primaryHoverColor",
+  "primaryActiveColor",
+  "secondaryColor",
+  "accentColor",
+  "successColor",
+  "warningColor",
+  "errorColor",
+  "infoColor",
+  "dashboardBackgroundColor",
+  "sidebarBackgroundColor",
+  "sidebarTextColor",
+  "sidebarMutedTextColor",
+  "sidebarActiveBackgroundColor",
+  "sidebarActiveTextColor",
+  "sidebarHoverBackgroundColor",
+  "headerBackgroundColor",
+  "headerTextColor",
+  "cardBackgroundColor",
+  "elevatedBackgroundColor",
+  "tableHeaderBackgroundColor",
+  "tableRowHoverColor",
+  "inputBackgroundColor",
+  "disabledBackgroundColor",
+  "textPrimaryColor",
+  "textSecondaryColor",
+  "textMutedColor",
+  "textInverseColor",
+  "borderColor",
+  "borderSubtleColor",
+  "focusRingColor",
+] as const;
+const BUSINESS_BRANDING_TEXT_FIELDS = [
+  "logoUrl",
+  "faviconUrl",
+  "fontFamily",
+  "borderRadius",
+  "seoTitle",
+  "seoDescription",
 ] as const;
 
 type BusinessClient = Database | DatabaseTransaction;
@@ -116,6 +159,14 @@ export class BusinessService {
             createdById: userId,
           })
           .returning();
+
+        if (dto.settings?.defaultWarehouseId) {
+          await this.assertActiveWarehouse(
+            transaction,
+            created.id,
+            dto.settings.defaultWarehouseId,
+          );
+        }
 
         await transaction.insert(businessSetting).values({
           businessId: created.id,
@@ -277,6 +328,14 @@ export class BusinessService {
           }
 
           if (settingData && this.hasKeys(settingData)) {
+            if (dto.settings?.defaultWarehouseId) {
+              await this.assertActiveWarehouse(
+                transaction,
+                businessId,
+                dto.settings.defaultWarehouseId,
+              );
+            }
+
             await this.upsertBusinessSettings(
               transaction,
               businessId,
@@ -562,6 +621,9 @@ export class BusinessService {
       ...(dto.onlinePaymentEnabled !== undefined && {
         onlinePaymentEnabled: dto.onlinePaymentEnabled,
       }),
+      ...(dto.defaultWarehouseId !== undefined && {
+        defaultWarehouseId: dto.defaultWarehouseId,
+      }),
     };
 
     for (const field of BUSINESS_SETTING_PREFIX_FIELDS) {
@@ -576,32 +638,25 @@ export class BusinessService {
   private buildBusinessBrandingData(
     dto: NonNullable<CreateBusinessDto["branding"]>,
   ) {
-    return {
-      ...(dto.logoUrl !== undefined && {
-        logoUrl: dto.logoUrl || null,
-      }),
-      ...(dto.faviconUrl !== undefined && {
-        faviconUrl: dto.faviconUrl || null,
-      }),
-      ...(dto.primaryColor !== undefined && {
-        primaryColor: dto.primaryColor || null,
-      }),
-      ...(dto.secondaryColor !== undefined && {
-        secondaryColor: dto.secondaryColor || null,
-      }),
-      ...(dto.accentColor !== undefined && {
-        accentColor: dto.accentColor || null,
-      }),
-      ...(dto.fontFamily !== undefined && {
-        fontFamily: dto.fontFamily || null,
-      }),
-      ...(dto.seoTitle !== undefined && {
-        seoTitle: dto.seoTitle || null,
-      }),
-      ...(dto.seoDescription !== undefined && {
-        seoDescription: dto.seoDescription || null,
-      }),
-    };
+    const data: Record<string, unknown> = {};
+
+    for (const field of BUSINESS_BRANDING_COLOR_FIELDS) {
+      if (dto[field] !== undefined) {
+        data[field] = this.normalizeNullableText(dto[field]);
+      }
+    }
+
+    for (const field of BUSINESS_BRANDING_TEXT_FIELDS) {
+      if (dto[field] !== undefined) {
+        data[field] = this.normalizeNullableText(dto[field]);
+      }
+    }
+
+    if (dto.density !== undefined) {
+      data.density = dto.density;
+    }
+
+    return data;
   }
 
   private async generateUniqueBusinessSlug(
@@ -641,8 +696,39 @@ export class BusinessService {
     return normalized || null;
   }
 
+  private normalizeNullableText(value?: string | null) {
+    const normalized = value?.trim();
+
+    return normalized || null;
+  }
+
   private hasKeys(value: object) {
     return Object.keys(value).length > 0;
+  }
+
+  private async assertActiveWarehouse(
+    client: BusinessClient,
+    businessId: string,
+    warehouseId: string,
+  ) {
+    const [warehouseRow] = await client
+      .select({ id: warehouse.id })
+      .from(warehouse)
+      .where(
+        and(
+          eq(warehouse.id, warehouseId),
+          eq(warehouse.businessId, businessId),
+          eq(warehouse.status, WarehouseStatus.ACTIVE),
+          isNull(warehouse.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!warehouseRow) {
+      throw new NotFoundException(
+        "Default warehouse must be an active warehouse for this business",
+      );
+    }
   }
 
   private handleDatabaseError(error: unknown): never {

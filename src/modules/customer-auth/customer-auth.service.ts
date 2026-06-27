@@ -406,7 +406,10 @@ export class CustomerAuthService {
     return apiResponse(null, "Customer email verified successfully");
   }
 
-  async forgotPassword(host: string | undefined, dto: CustomerForgotPasswordDto) {
+  async forgotPassword(
+    host: string | undefined,
+    dto: CustomerForgotPasswordDto,
+  ) {
     const storefront = await this.getPublishedStorefrontOrThrow(host);
     const account = await this.findAccountByEmail(
       storefront.id,

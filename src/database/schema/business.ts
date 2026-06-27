@@ -13,6 +13,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
+import { warehouse } from "./inventory";
 import { systemUser } from "./system";
 
 export const BusinessStatus = {
@@ -39,6 +40,19 @@ export const businessMemberStatusEnum = pgEnum("BusinessMemberStatus", [
   "ACTIVE",
   "INACTIVE",
   "SUSPENDED",
+]);
+
+export const BusinessBrandingDensity = {
+  COMPACT: "COMPACT",
+  DEFAULT: "DEFAULT",
+  COMFORTABLE: "COMFORTABLE",
+} as const;
+export type BusinessBrandingDensity =
+  (typeof BusinessBrandingDensity)[keyof typeof BusinessBrandingDensity];
+export const businessBrandingDensityEnum = pgEnum("BusinessBrandingDensity", [
+  "COMPACT",
+  "DEFAULT",
+  "COMFORTABLE",
 ]);
 
 export const business = pgTable(
@@ -130,6 +144,10 @@ export const businessSetting = pgTable(
     productBarcodePrefix: varchar("product_barcode_prefix", { length: 20 }),
     variantSkuPrefix: varchar("variant_sku_prefix", { length: 20 }),
     variantBarcodePrefix: varchar("variant_barcode_prefix", { length: 20 }),
+    defaultWarehouseId: uuid("default_warehouse_id").references(
+      (): AnyPgColumn => warehouse.id,
+      { onDelete: "set null" },
+    ),
     lowStockThreshold: integer("low_stock_threshold"),
     allowBackorder: boolean("allow_backorder"),
     autoConfirmOrder: boolean("auto_confirm_order"),
@@ -151,7 +169,11 @@ export const businessSetting = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  () => [],
+  (table) => [
+    index("business_settings_default_warehouse_id_idx").on(
+      table.defaultWarehouseId,
+    ),
+  ],
 );
 export type BusinessSetting = typeof businessSetting.$inferSelect;
 export type NewBusinessSetting = typeof businessSetting.$inferInsert;
@@ -167,9 +189,55 @@ export const businessBranding = pgTable(
     logoUrl: text("logo_url"),
     faviconUrl: text("favicon_url"),
     primaryColor: varchar("primary_color", { length: 20 }),
+    primaryHoverColor: varchar("primary_hover_color", { length: 20 }),
+    primaryActiveColor: varchar("primary_active_color", { length: 20 }),
     secondaryColor: varchar("secondary_color", { length: 20 }),
     accentColor: varchar("accent_color", { length: 20 }),
+    successColor: varchar("success_color", { length: 20 }),
+    warningColor: varchar("warning_color", { length: 20 }),
+    errorColor: varchar("error_color", { length: 20 }),
+    infoColor: varchar("info_color", { length: 20 }),
+    dashboardBackgroundColor: varchar("dashboard_background_color", {
+      length: 20,
+    }),
+    sidebarBackgroundColor: varchar("sidebar_background_color", {
+      length: 20,
+    }),
+    sidebarTextColor: varchar("sidebar_text_color", { length: 20 }),
+    sidebarMutedTextColor: varchar("sidebar_muted_text_color", { length: 20 }),
+    sidebarActiveBackgroundColor: varchar("sidebar_active_background_color", {
+      length: 20,
+    }),
+    sidebarActiveTextColor: varchar("sidebar_active_text_color", {
+      length: 20,
+    }),
+    sidebarHoverBackgroundColor: varchar("sidebar_hover_background_color", {
+      length: 20,
+    }),
+    headerBackgroundColor: varchar("header_background_color", { length: 20 }),
+    headerTextColor: varchar("header_text_color", { length: 20 }),
+    cardBackgroundColor: varchar("card_background_color", { length: 20 }),
+    elevatedBackgroundColor: varchar("elevated_background_color", {
+      length: 20,
+    }),
+    tableHeaderBackgroundColor: varchar("table_header_background_color", {
+      length: 20,
+    }),
+    tableRowHoverColor: varchar("table_row_hover_color", { length: 20 }),
+    inputBackgroundColor: varchar("input_background_color", { length: 20 }),
+    disabledBackgroundColor: varchar("disabled_background_color", {
+      length: 20,
+    }),
+    textPrimaryColor: varchar("text_primary_color", { length: 20 }),
+    textSecondaryColor: varchar("text_secondary_color", { length: 20 }),
+    textMutedColor: varchar("text_muted_color", { length: 20 }),
+    textInverseColor: varchar("text_inverse_color", { length: 20 }),
+    borderColor: varchar("border_color", { length: 20 }),
+    borderSubtleColor: varchar("border_subtle_color", { length: 20 }),
+    focusRingColor: varchar("focus_ring_color", { length: 20 }),
     fontFamily: varchar("font_family", { length: 100 }),
+    borderRadius: varchar("border_radius", { length: 30 }),
+    density: businessBrandingDensityEnum(),
     seoTitle: varchar("seo_title", { length: 255 }),
     seoDescription: text("seo_description"),
     createdAt: timestamp("created_at", {
