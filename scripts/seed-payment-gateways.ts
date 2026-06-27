@@ -2,13 +2,13 @@ import "dotenv/config";
 
 import { Logger } from "@nestjs/common";
 
-import { createDrizzleScriptClient } from "./database-script-client";
 import {
   PaymentGateway,
   paymentGateway,
   PaymentGatewayProvider,
   PaymentGatewayStatus,
 } from "../src/database/schema";
+import { createDrizzleScriptClient } from "./database-script-client";
 
 const database = createDrizzleScriptClient();
 const logger = new Logger("PaymentGatewaySeedScript");

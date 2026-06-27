@@ -1,12 +1,11 @@
 import Decimal from "decimal.js";
 
+import { PaymentGatewayMode, PaymentGatewayProvider } from "@/database/schema";
 import {
   BadGatewayException,
   BadRequestException,
   Injectable,
 } from "@nestjs/common";
-
-import { PaymentGatewayMode, PaymentGatewayProvider } from "@/database/schema";
 
 import type { JsonValue } from "@/database/schema";
 

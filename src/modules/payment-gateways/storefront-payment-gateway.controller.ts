@@ -1,3 +1,4 @@
+import { PaymentGatewayProvider } from "@/database/schema";
 import {
   Body,
   Controller,
@@ -8,14 +9,11 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
+  UseGuards,
 } from "@nestjs/common";
-import { ApiOperation, ApiTags } from "@nestjs/swagger";
-
-import { PaymentGatewayProvider } from "@/database/schema";
+import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 
 import { CurrentCustomer } from "../customer-auth/decorators/current-customer.decorator";
-import { UseGuards } from "@nestjs/common";
-import { ApiBearerAuth } from "@nestjs/swagger";
 import { CustomerAuthGuard } from "../customer-auth/guards/customer-auth.guard";
 import {
   InitiateStorefrontPaymentDto,
