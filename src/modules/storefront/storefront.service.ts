@@ -223,12 +223,16 @@ export class StorefrontService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(rows, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      rows,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Storefront products were loaded successfully. The response includes the requested page of active storefront products and pagination metadata for browsing more results.",
+    );
   }
 
   async findProduct(host: string | undefined, productSlug: string) {
@@ -346,7 +350,6 @@ export class StorefrontService {
       .where(inArray(productVariantAttribute.variantId, variantIds));
 
     const requestedKey = this.buildAttributeSelectionKey(dto.attributes);
-    console.log("keys: ", requestedKey);
     const matchedVariant = variants.find((variant) => {
       const variantSelections = attributeRows
         .filter((row) => row.variantId === variant.id)
@@ -355,9 +358,9 @@ export class StorefrontService {
           attributeValueId: row.attributeValueId,
         }));
 
-      return this.buildAttributeSelectionKey(variantSelections)
-        .split("|")
-        .includes(requestedKey);
+      return (
+        this.buildAttributeSelectionKey(variantSelections) === requestedKey
+      );
     });
 
     if (!matchedVariant) {
@@ -401,7 +404,9 @@ export class StorefrontService {
       .limit(1);
 
     if (!item) {
-      throw new NotFoundException("Product not found");
+      throw new NotFoundException(
+        "Product could not be found. It may not exist, may have been deleted, or may not belong to the current business or storefront.",
+      );
     }
 
     return item;

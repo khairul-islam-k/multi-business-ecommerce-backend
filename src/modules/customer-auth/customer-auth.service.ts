@@ -122,7 +122,9 @@ export class CustomerAuthService {
             .then(([row]) => row));
 
         if (customerRow.status !== CustomerStatus.ACTIVE) {
-          throw new ForbiddenException("Customer is not active");
+          throw new ForbiddenException(
+            "Customer is not active. This customer profile cannot use the requested operation until it is restored to active status.",
+          );
         }
 
         const [account] = await tx
@@ -179,7 +181,9 @@ export class CustomerAuthService {
     const account = await this.findAccountByEmail(storefront.id, email);
 
     if (!account) {
-      throw new UnauthorizedException("Invalid email or password");
+      throw new UnauthorizedException(
+        "The email address or password is incorrect. Please check the credentials and try again. For security, this response does not reveal which field was wrong.",
+      );
     }
 
     const isPasswordMatched = await this.verifyPassword(
@@ -188,7 +192,9 @@ export class CustomerAuthService {
     );
 
     if (!isPasswordMatched) {
-      throw new UnauthorizedException("Invalid email or password");
+      throw new UnauthorizedException(
+        "The email address or password is incorrect. Please check the credentials and try again. For security, this response does not reveal which field was wrong.",
+      );
     }
 
     if (!account.emailVerifiedAt) {
@@ -216,7 +222,7 @@ export class CustomerAuthService {
         account: this.toSafeAccount(account),
         customer: customerRow,
       },
-      "Customer logged in successfully",
+      "Customer logged in successfully. The response includes access and refresh tokens plus the customer profile needed for authenticated storefront requests.",
     );
   }
 
@@ -225,7 +231,9 @@ export class CustomerAuthService {
     const session = await this.sessions.findByRefreshToken(dto.refreshToken);
 
     if (!session) {
-      throw new UnauthorizedException("Invalid customer refresh token");
+      throw new UnauthorizedException(
+        "The customer refresh token is missing, expired, malformed, revoked, or does not belong to this storefront session. Please sign in again to continue.",
+      );
     }
 
     this.sessions.assertRefreshSessionActive(session);
@@ -235,7 +243,9 @@ export class CustomerAuthService {
       session.account.websiteId !== storefront.id ||
       session.customer.businessId !== storefront.businessId
     ) {
-      throw new UnauthorizedException("Invalid customer refresh token");
+      throw new UnauthorizedException(
+        "The customer refresh token is missing, expired, malformed, revoked, or does not belong to this storefront session. Please sign in again to continue.",
+      );
     }
 
     if (
@@ -243,7 +253,9 @@ export class CustomerAuthService {
       session.customer.deletedAt ||
       session.customer.status !== CustomerStatus.ACTIVE
     ) {
-      throw new UnauthorizedException("Customer account is not active");
+      throw new UnauthorizedException(
+        "Customer account is not active. The account may be unverified, blocked, deleted, or unavailable for this storefront.",
+      );
     }
 
     const payload = {
@@ -280,7 +292,10 @@ export class CustomerAuthService {
       currentCustomer?.accountId,
     );
 
-    return apiResponse(null, "Customer logged out successfully");
+    return apiResponse(
+      null,
+      "Customer logged out successfully. The submitted refresh token has been revoked and can no longer be used for this storefront session.",
+    );
   }
 
   async me(currentCustomer: CurrentCustomerPayload, host?: string) {
@@ -304,7 +319,9 @@ export class CustomerAuthService {
     ]);
 
     if (!accountRow) {
-      throw new NotFoundException("Customer account not found");
+      throw new NotFoundException(
+        "Customer account could not be found for this storefront. Confirm the email address and storefront host, then try again.",
+      );
     }
 
     return apiResponse({
@@ -324,11 +341,16 @@ export class CustomerAuthService {
     );
 
     if (!account) {
-      throw new NotFoundException("Customer account not found");
+      throw new NotFoundException(
+        "Customer account could not be found for this storefront. Confirm the email address and storefront host, then try again.",
+      );
     }
 
     if (account.emailVerifiedAt) {
-      return apiResponse(null, "Customer email is already verified");
+      return apiResponse(
+        null,
+        "Customer email is already verified. No additional verification step is required for this storefront account.",
+      );
     }
 
     const otp = this.otpPolicy.generateOtp();
@@ -352,7 +374,10 @@ export class CustomerAuthService {
         );
       });
 
-    return apiResponse(null, "A verification code has been sent");
+    return apiResponse(
+      null,
+      "A verification code has been sent to the customer email address. Use the newest code before it expires to complete email verification.",
+    );
   }
 
   async verifyEmail(host: string | undefined, dto: CustomerVerifyEmailDto) {
@@ -363,11 +388,16 @@ export class CustomerAuthService {
     );
 
     if (!account) {
-      throw new NotFoundException("Customer account not found");
+      throw new NotFoundException(
+        "Customer account could not be found for this storefront. Confirm the email address and storefront host, then try again.",
+      );
     }
 
     if (account.emailVerifiedAt) {
-      return apiResponse(null, "Customer email is already verified");
+      return apiResponse(
+        null,
+        "Customer email is already verified. No additional verification step is required for this storefront account.",
+      );
     }
 
     const verification = await this.findLatestActiveVerification(
@@ -376,7 +406,9 @@ export class CustomerAuthService {
     );
 
     if (!verification) {
-      throw new BadRequestException("Verification code is invalid or expired");
+      throw new BadRequestException(
+        "Verification code is invalid or expired. Request a new verification code and use the latest code before it expires.",
+      );
     }
 
     this.otpPolicy.assertCanAttempt(verification.attemptCount);
@@ -388,7 +420,9 @@ export class CustomerAuthService {
 
     if (!isOtpMatched) {
       await this.incrementVerificationAttempts(verification.id);
-      throw new BadRequestException("Verification code is incorrect");
+      throw new BadRequestException(
+        "Verification code is incorrect. Check the latest code sent to the email address and try again before it expires.",
+      );
     }
 
     await this.db.transaction(async (tx) => {
@@ -403,7 +437,10 @@ export class CustomerAuthService {
         .where(eq(customerAccount.id, account.id));
     });
 
-    return apiResponse(null, "Customer email verified successfully");
+    return apiResponse(
+      null,
+      "Customer email was verified successfully. The storefront account can now use login and authenticated customer features.",
+    );
   }
 
   async forgotPassword(
@@ -417,7 +454,9 @@ export class CustomerAuthService {
     );
 
     if (!account) {
-      throw new NotFoundException("Customer account not found");
+      throw new NotFoundException(
+        "Customer account could not be found for this storefront. Confirm the email address and storefront host, then try again.",
+      );
     }
 
     const otp = this.otpPolicy.generateOtp();
@@ -440,7 +479,10 @@ export class CustomerAuthService {
         );
       });
 
-    return apiResponse(null, "A password reset code has been sent");
+    return apiResponse(
+      null,
+      "A password reset code has been sent to the customer email address. Use the newest code before it expires to continue resetting the password.",
+    );
   }
 
   async verifyResetOtp(
@@ -454,7 +496,9 @@ export class CustomerAuthService {
     );
 
     if (!account) {
-      throw new NotFoundException("Customer account not found");
+      throw new NotFoundException(
+        "Customer account could not be found for this storefront. Confirm the email address and storefront host, then try again.",
+      );
     }
 
     const reset = await this.findLatestActivePasswordReset(account.id);
@@ -471,7 +515,9 @@ export class CustomerAuthService {
 
     if (!isOtpMatched) {
       await this.incrementPasswordResetAttempts(reset.id);
-      throw new BadRequestException("Password reset code is incorrect");
+      throw new BadRequestException(
+        "Password reset code is incorrect. Check the latest password reset code sent to the email address and try again before it expires.",
+      );
     }
 
     await this.db
@@ -479,7 +525,10 @@ export class CustomerAuthService {
       .set({ verifiedAt: new Date() })
       .where(eq(customerPasswordReset.id, reset.id));
 
-    return apiResponse({ resetRequestId: reset.id }, "OTP verified");
+    return apiResponse(
+      { resetRequestId: reset.id },
+      "The one-time password was verified successfully. Use the returned reset request ID to complete the next step of this flow.",
+    );
   }
 
   async resetPassword(host: string | undefined, dto: CustomerResetPasswordDto) {
@@ -490,7 +539,9 @@ export class CustomerAuthService {
     );
 
     if (!account) {
-      throw new NotFoundException("Customer account not found");
+      throw new NotFoundException(
+        "Customer account could not be found for this storefront. Confirm the email address and storefront host, then try again.",
+      );
     }
 
     const [reset] = await this.db
@@ -508,7 +559,9 @@ export class CustomerAuthService {
       .limit(1);
 
     if (!reset) {
-      throw new BadRequestException("Password reset request is invalid");
+      throw new BadRequestException(
+        "Password reset request is invalid. Verify the reset code again or request a new password reset code before setting a new password.",
+      );
     }
 
     const isSamePassword = await this.verifyPassword(
@@ -517,7 +570,9 @@ export class CustomerAuthService {
     );
 
     if (isSamePassword) {
-      throw new BadRequestException("New password must be different");
+      throw new BadRequestException(
+        "New password must be different from the current password. Choose a password that has not just been used for this account.",
+      );
     }
 
     const passwordHash = await this.hashPassword(dto.password);
@@ -544,7 +599,10 @@ export class CustomerAuthService {
         );
     });
 
-    return apiResponse(null, "Customer password reset successfully");
+    return apiResponse(
+      null,
+      "Customer password was reset successfully. Existing customer sessions were revoked, so the customer must sign in again with the new password.",
+    );
   }
 
   private async getPublishedStorefrontOrThrow(host?: string) {
@@ -583,11 +641,15 @@ export class CustomerAuthService {
       .limit(1);
 
     if (!customerRow) {
-      throw new NotFoundException("Customer not found");
+      throw new NotFoundException(
+        "Customer could not be found. It may not exist, may have been deleted, or may not belong to the current business or storefront.",
+      );
     }
 
     if (customerRow.status !== CustomerStatus.ACTIVE) {
-      throw new ForbiddenException("Customer is not active");
+      throw new ForbiddenException(
+        "Customer is not active. This customer profile cannot use the requested operation until it is restored to active status.",
+      );
     }
 
     return customerRow;

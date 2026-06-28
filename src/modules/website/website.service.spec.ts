@@ -89,7 +89,7 @@ describe("WebsiteService", () => {
     ]);
 
     const result = await service.create(currentUser, "business-1", {
-      template: WebsiteTemplate.ELECTRONIC,
+      template: WebsiteTemplate.FASHION,
     });
 
     expect(result.data).toMatchObject({
@@ -114,7 +114,7 @@ describe("WebsiteService", () => {
         businessId: "business-1",
         name: "Acme Store",
         status: WebsiteStatus.DRAFT,
-        template: WebsiteTemplate.ELECTRONIC,
+        template: WebsiteTemplate.FASHION,
       }),
     });
     expect(insertedValues.some((item) => item.table === websiteConfig)).toBe(
@@ -138,7 +138,7 @@ describe("WebsiteService", () => {
     ]);
 
     await service.create(currentUser, "business-1", {
-      template: WebsiteTemplate.ELECTRONIC,
+      template: WebsiteTemplate.FASHION,
     });
 
     expect(insertedValues).toContainEqual({
@@ -150,18 +150,55 @@ describe("WebsiteService", () => {
   });
 
   it("resolves storefronts by exact subdomain only", async () => {
-    const { service } = createService([[{ site: { id: "website-1" } }], []]);
+    const { service } = createService([
+      [
+        {
+          site: {
+            id: "website-1",
+            status: WebsiteStatus.PUBLISHED,
+            deletedAt: null,
+          },
+          domain: {
+            verificationStatus: WebsiteDomainVerificationStatus.VERIFIED,
+            sslStatus: WebsiteDomainSslStatus.ACTIVE,
+          },
+        },
+      ],
+      [],
+    ]);
 
     jest
       .spyOn(service as any, "hydrateWebsite")
       .mockImplementation(async (item) => item);
 
-    await expect(service.findPublishedByHost("acme")).resolves.toEqual({
+    await expect(service.findPublishedByHost("acme")).resolves.toMatchObject({
       id: "website-1",
     });
     await expect(
       service.findPublishedByHost("acme.example.com"),
     ).resolves.toBeNull();
+  });
+
+  it("explains why a registered storefront domain is not ready", async () => {
+    const { service } = createService([
+      [
+        {
+          site: {
+            id: "website-1",
+            status: WebsiteStatus.PUBLISHED,
+            deletedAt: null,
+          },
+          domain: {
+            verificationStatus: WebsiteDomainVerificationStatus.PENDING,
+            sslStatus: WebsiteDomainSslStatus.ACTIVE,
+          },
+        },
+      ],
+    ]);
+
+    await expect(service.findPublishedByHostOrThrow("acme")).rejects.toThrow(
+      'The storefront domain "acme" is registered but cannot be used yet because its verification status is PENDING.',
+    );
   });
 
   it("rejects a second active website for the same business", async () => {
@@ -172,7 +209,7 @@ describe("WebsiteService", () => {
 
     await expect(
       service.create(currentUser, "business-1", {
-        template: WebsiteTemplate.ELECTRONIC,
+        template: WebsiteTemplate.FASHION,
       }),
     ).rejects.toThrow(BadRequestException);
     expect(db.transaction).not.toHaveBeenCalled();
@@ -184,8 +221,10 @@ describe("WebsiteService", () => {
 
     await expect(
       service.create(currentUser, "missing-business", {
-        template: WebsiteTemplate.ELECTRONIC,
+        template: WebsiteTemplate.FASHION,
       }),
-    ).rejects.toThrow("Business not found");
+    ).rejects.toThrow(
+      "Business could not be found. It may not exist, may have been deleted, or may not be accessible to the current user.",
+    );
   });
 });

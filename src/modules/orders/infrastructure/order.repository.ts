@@ -119,7 +119,9 @@ export class OrderRepository {
       );
 
     if (!fetchedOrder) {
-      throw new NotFoundException("Order not found");
+      throw new NotFoundException(
+        "Order could not be found. It may not exist, may have been deleted, or may not belong to the current business or customer account.",
+      );
     }
 
     return fetchedOrder;

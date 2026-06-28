@@ -141,12 +141,16 @@ export class PaymentGatewayService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Payment gateway providers were loaded successfully. The response includes the requested page of seeded providers and pagination metadata for browsing more results.",
+    );
   }
 
   async findConfigs(businessId: string, query: QueryPaymentGatewayConfigDto) {
@@ -198,6 +202,7 @@ export class PaymentGatewayService {
         total,
         totalPages: Math.ceil(total / limit),
       },
+      "Payment gateway configurations were loaded successfully. The response includes the requested page of business gateway configurations and pagination metadata for browsing more results.",
     );
   }
 
@@ -361,7 +366,9 @@ export class PaymentGatewayService {
       storefront.id !== currentCustomer.websiteId ||
       storefront.businessId !== currentCustomer.businessId
     ) {
-      throw new NotFoundException("Order not found");
+      throw new NotFoundException(
+        "Order could not be found. It may not exist, may have been deleted, or may not belong to the current business or customer account.",
+      );
     }
 
     const settings = await this.getBusinessPaymentSettings(
@@ -709,7 +716,9 @@ export class PaymentGatewayService {
       .limit(1);
 
     if (!row) {
-      throw new NotFoundException("Order not found");
+      throw new NotFoundException(
+        "Order could not be found. It may not exist, may have been deleted, or may not belong to the current business or customer account.",
+      );
     }
 
     return row;

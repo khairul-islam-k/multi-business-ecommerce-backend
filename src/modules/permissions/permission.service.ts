@@ -16,16 +16,7 @@ import {
   rbacRolePermission,
   rbacUserRoleMap,
 } from "@/database/schema";
-import {
-  and,
-  asc,
-  count,
-  eq,
-  exists,
-  gt,
-  isNull,
-  or,
-} from "drizzle-orm";
+import { and, asc, count, eq, exists, gt, isNull, or } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { AddPermissionDto } from "./dto/add-permission";
@@ -124,12 +115,16 @@ export class PermissionService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(permissions, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      permissions,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Role permissions were loaded successfully. The response includes the requested page of permissions assigned to this role and pagination metadata for browsing more results.",
+    );
   }
 
   async findByRole(businessId: string, roleId: string) {
@@ -255,7 +250,10 @@ export class PermissionService {
         and(
           eq(rbacUserRoleMap.userId, currentUser.id),
           eq(rbacUserRoleMap.status, UserRoleMapStatus.ACTIVE),
-          or(isNull(rbacUserRoleMap.expiresAt), gt(rbacUserRoleMap.expiresAt, now)),
+          or(
+            isNull(rbacUserRoleMap.expiresAt),
+            gt(rbacUserRoleMap.expiresAt, now),
+          ),
           exists(
             this.db
               .select({ id: rbacRole.id })
@@ -327,7 +325,9 @@ export class PermissionService {
       .limit(1);
 
     if (!role) {
-      throw new NotFoundException("Role not found");
+      throw new NotFoundException(
+        "Role could not be found. It may not exist, may have been deleted, or may not belong to the requested business.",
+      );
     }
 
     return this.withRolePermissions(role);
@@ -350,7 +350,9 @@ export class PermissionService {
       .limit(1);
 
     if (!role) {
-      throw new NotFoundException("Role not found");
+      throw new NotFoundException(
+        "Role could not be found. It may not exist, may have been deleted, or may not belong to the requested business.",
+      );
     }
   }
 
@@ -378,13 +380,18 @@ export class PermissionService {
     );
   }
 
-  private async withRolePermissions(role: RbacRole): Promise<RoleWithPermissions> {
+  private async withRolePermissions(
+    role: RbacRole,
+  ): Promise<RoleWithPermissions> {
     const [permissions, userRoleMapsCount] = await Promise.all([
       this.db
         .select()
         .from(rbacRolePermission)
         .where(eq(rbacRolePermission.roleId, role.id))
-        .orderBy(asc(rbacRolePermission.feature), asc(rbacRolePermission.action)),
+        .orderBy(
+          asc(rbacRolePermission.feature),
+          asc(rbacRolePermission.action),
+        ),
       this.db
         .select({ value: count() })
         .from(rbacUserRoleMap)

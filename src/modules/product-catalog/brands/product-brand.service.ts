@@ -123,19 +123,25 @@ export class ProductBrandService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Product brands were loaded successfully. The response includes the requested page of brands for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, brandId: string) {
     const brand = await this.findBrandRow(businessId, brandId);
 
     if (!brand) {
-      throw new NotFoundException("Brand not found");
+      throw new NotFoundException(
+        "Brand could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return apiResponse(await this.withBrandCount(brand));
@@ -203,7 +209,9 @@ export class ProductBrandService {
     const brand = await this.findBrandRow(businessId, brandId);
 
     if (!brand) {
-      throw new NotFoundException("Brand not found");
+      throw new NotFoundException(
+        "Brand could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
   }
 

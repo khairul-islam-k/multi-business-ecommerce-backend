@@ -10,6 +10,10 @@ import {
 } from "@nestjs/common";
 
 import { AppConfigService } from "../config/app-config.service";
+import { getDatabaseErrorMetadata } from "../database/db-error.util";
+
+const PRODUCTION_INTERNAL_ERROR_MESSAGE =
+  "The server encountered an unexpected error while processing this request. Please retry the request, and contact support with the request ID if the problem continues.";
 
 type RequestWithMeta = Request & {
   requestId?: string;
@@ -19,6 +23,8 @@ type NormalizedError = {
   message: string;
   errors?: unknown;
   error?: string;
+  exposeMessage?: boolean;
+  statusCode?: number;
 };
 
 @Catch()
@@ -32,12 +38,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const req = ctx.getRequest<RequestWithMeta>();
     const res = ctx.getResponse<Response>();
 
-    const status =
-      exception instanceof HttpException
-        ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
-
     const normalized = this.normalizeException(exception);
+    const status =
+      normalized.statusCode ??
+      (exception instanceof HttpException
+        ? exception.getStatus()
+        : HttpStatus.INTERNAL_SERVER_ERROR);
 
     const requestId =
       req.requestId ||
@@ -64,8 +70,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
       success: false,
       statusCode: status,
       message:
-        status >= 500 && this.appConfig.isProduction
-          ? "Internal server error"
+        status >= 500 &&
+        this.appConfig.isProduction &&
+        !normalized.exposeMessage
+          ? PRODUCTION_INTERNAL_ERROR_MESSAGE
           : normalized.message,
       errors: normalized.errors,
       error: normalized.error,
@@ -76,6 +84,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
   }
 
   private normalizeException(exception: unknown): NormalizedError {
+    const databaseError = getDatabaseErrorMetadata(exception);
+
+    if (databaseError) {
+      return {
+        statusCode: databaseError.statusCode,
+        message: databaseError.message,
+        errors: databaseError.errors,
+        error: databaseError.error,
+        exposeMessage: true,
+      };
+    }
+
     if (exception instanceof HttpException) {
       const response = exception.getResponse();
 
@@ -108,12 +128,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     if (exception instanceof Error) {
       return {
-        message: exception.message || "Internal server error",
+        message: exception.message || PRODUCTION_INTERNAL_ERROR_MESSAGE,
       };
     }
 
     return {
-      message: "Internal server error",
+      message: PRODUCTION_INTERNAL_ERROR_MESSAGE,
     };
   }
 

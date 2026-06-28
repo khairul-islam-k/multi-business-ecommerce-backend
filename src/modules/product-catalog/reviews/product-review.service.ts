@@ -88,12 +88,16 @@ export class ProductReviewService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Product reviews were loaded successfully. The response includes the requested page of reviews for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findApprovedForProduct(

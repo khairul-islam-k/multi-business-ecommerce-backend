@@ -12,6 +12,7 @@ import {
   UpdateCustomerAddressDto,
 } from "../dto/customer.dto";
 import { CustomerRepository } from "../infrastructure/customer.repository";
+
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
@@ -48,7 +49,10 @@ export class CustomerAddressService {
       });
     });
 
-    return apiResponse(address, "Customer address created successfully");
+    return apiResponse(
+      address,
+      "Customer address was created successfully. The address has been saved and default-address rules were applied when requested.",
+    );
   }
 
   async findAddresses(businessId: string, customerId: string) {
@@ -90,7 +94,10 @@ export class CustomerAddressService {
       });
     });
 
-    return apiResponse(address, "Customer address updated successfully");
+    return apiResponse(
+      address,
+      "Customer address was updated successfully. The saved address now reflects the submitted details and default-address rules.",
+    );
   }
 
   async removeAddress(
@@ -126,14 +133,19 @@ export class CustomerAddressService {
       }
     });
 
-    return apiResponse(null, "Customer address deleted successfully");
+    return apiResponse(
+      null,
+      "Customer address was deleted successfully. The address has been soft-deleted and will no longer be used for customer checkout or profile flows.",
+    );
   }
 
   private async getCustomerOrThrow(businessId: string, customerId: string) {
     const customer = await this.customers.findById(businessId, customerId);
 
     if (!customer) {
-      throw new NotFoundException("Customer not found");
+      throw new NotFoundException(
+        "Customer could not be found. It may not exist, may have been deleted, or may not belong to the current business or storefront.",
+      );
     }
 
     return customer;
@@ -149,7 +161,9 @@ export class CustomerAddressService {
     const address = await this.customers.findAddressById(customerId, addressId);
 
     if (!address) {
-      throw new NotFoundException("Customer address not found");
+      throw new NotFoundException(
+        "Customer address could not be found. It may not exist, may have been deleted, or may not belong to this customer.",
+      );
     }
 
     return address;

@@ -1,20 +1,3 @@
-import { Injectable } from "@nestjs/common";
-import {
-  type NewCustomer,
-  type NewCustomerAddress,
-  type Customer,
-  type CustomerAddress,
-  type Order,
-  CustomerStatus,
-  type OrderItem,
-  type OrderPayment,
-  orderCart,
-  customer,
-  customerAddress,
-  order as orderTable,
-  orderItem as orderItemTable,
-  orderPayment,
-} from "@/database/schema";
 import {
   and,
   asc,
@@ -27,12 +10,30 @@ import {
   isNull,
   ne,
   or,
-  type SQL,
+  SQL,
 } from "drizzle-orm";
 
 import {
-  type DatabaseTransaction,
+  Customer,
+  customer,
+  CustomerAddress,
+  customerAddress,
+  CustomerStatus,
+  NewCustomer,
+  NewCustomerAddress,
+  Order,
+  order as orderTable,
+  orderCart,
+  OrderItem,
+  orderItem as orderItemTable,
+  OrderPayment,
+  orderPayment,
+} from "@/database/schema";
+import { Injectable } from "@nestjs/common";
+
+import {
   DatabaseService,
+  DatabaseTransaction,
 } from "../../../database/database.service";
 import { CustomerOrderSortBy, CustomerSortBy } from "../dto/customer.dto";
 

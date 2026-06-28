@@ -34,7 +34,9 @@ export class SupplierProductRepository {
       );
 
     if (!productMap) {
-      throw new NotFoundException("Supplier product not found");
+      throw new NotFoundException(
+        "Supplier product could not be found. It may not exist, may have been removed, or may not belong to this supplier and business.",
+      );
     }
 
     return productMap;

@@ -164,12 +164,16 @@ export class ProductAttributeService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Product attributes were loaded successfully. The response includes the requested page of attributes for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, attributeId: string) {

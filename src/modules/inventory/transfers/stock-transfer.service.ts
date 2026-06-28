@@ -158,12 +158,16 @@ export class StockTransferService {
       rows.map((transfer) => this.withTransferRelations(transfer)),
     );
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Stock transfers were loaded successfully. The response includes the requested page of transfer records for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, transferId: string) {

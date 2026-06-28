@@ -235,7 +235,9 @@ export class PackageSubscriptionService {
     const plan = await this.findActivePlanById(client, planId);
 
     if (!plan) {
-      throw new NotFoundException("Package plan not found");
+      throw new NotFoundException(
+        "Package plan could not be found. It may not exist, may have been archived, or may not be available for the requested package operation.",
+      );
     }
 
     const now = new Date();
@@ -290,7 +292,9 @@ export class PackageSubscriptionService {
     const targetPlan = await this.findActivePlanById(client, targetPlanId);
 
     if (!targetPlan) {
-      throw new NotFoundException("Package plan not found");
+      throw new NotFoundException(
+        "Package plan could not be found. It may not exist, may have been archived, or may not be available for the requested package operation.",
+      );
     }
 
     const currentSubscription = await this.findCurrentSubscriptionRow(

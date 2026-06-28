@@ -206,12 +206,16 @@ export class PurchaseReturnService {
     ]);
     const items = await Promise.all(rows.map((row) => this.hydrateReturn(row)));
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Supplier purchase returns were loaded successfully. The response includes the requested page of return records for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findPurchaseReturn(businessId: string, purchaseReturnId: string) {

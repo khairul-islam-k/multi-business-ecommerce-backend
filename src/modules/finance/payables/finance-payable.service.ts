@@ -87,12 +87,16 @@ export class FinancePayableService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Payables were loaded successfully. The response includes the requested page of payable records for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, payableId: string) {

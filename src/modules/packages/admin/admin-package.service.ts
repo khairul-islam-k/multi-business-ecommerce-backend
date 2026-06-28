@@ -161,19 +161,25 @@ export class AdminPackageService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(plans, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      plans,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Package plans were loaded successfully. The response includes the requested page of package plans and pagination metadata for browsing more results.",
+    );
   }
 
   async findPlan(planId: string) {
     const plan = await this.findPlanRow(planId);
 
     if (!plan) {
-      throw new NotFoundException("Package plan not found");
+      throw new NotFoundException(
+        "Package plan could not be found. It may not exist, may have been archived, or may not be available for the requested package operation.",
+      );
     }
 
     return apiResponse(await this.withPlanDetails(plan));
@@ -290,12 +296,16 @@ export class AdminPackageService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(subscriptions, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      subscriptions,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Package subscriptions were loaded successfully. The response includes the requested page of tenant subscriptions and pagination metadata for browsing more results.",
+    );
   }
 
   async findSubscription(subscriptionId: string) {
@@ -306,7 +316,9 @@ export class AdminPackageService {
       .limit(1);
 
     if (!subscription) {
-      throw new NotFoundException("Subscription not found");
+      throw new NotFoundException(
+        "Subscription could not be found. It may not exist, may have been cancelled, or may not belong to the requested tenant.",
+      );
     }
 
     return apiResponse(await this.withSubscriptionFullDetails(subscription));
@@ -323,7 +335,9 @@ export class AdminPackageService {
       .limit(1);
 
     if (!subscription) {
-      throw new NotFoundException("Subscription not found");
+      throw new NotFoundException(
+        "Subscription could not be found. It may not exist, may have been cancelled, or may not belong to the requested tenant.",
+      );
     }
 
     const updatedSubscription =
@@ -349,7 +363,9 @@ export class AdminPackageService {
       .limit(1);
 
     if (!subscription) {
-      throw new NotFoundException("Subscription not found");
+      throw new NotFoundException(
+        "Subscription could not be found. It may not exist, may have been cancelled, or may not belong to the requested tenant.",
+      );
     }
 
     const [updatedSubscription] = await this.db
@@ -390,7 +406,9 @@ export class AdminPackageService {
     const plan = await this.findPlanRow(planId);
 
     if (!plan) {
-      throw new NotFoundException("Package plan not found");
+      throw new NotFoundException(
+        "Package plan could not be found. It may not exist, may have been archived, or may not be available for the requested package operation.",
+      );
     }
   }
 
@@ -549,7 +567,9 @@ export class AdminPackageService {
       .limit(1);
 
     if (!plan) {
-      throw new NotFoundException("Package plan not found");
+      throw new NotFoundException(
+        "Package plan could not be found. It may not exist, may have been archived, or may not be available for the requested package operation.",
+      );
     }
 
     return plan;

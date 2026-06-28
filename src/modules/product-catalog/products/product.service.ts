@@ -289,19 +289,25 @@ export class ProductService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Products were loaded successfully. The response includes the requested page of products for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, productId: string) {
     const row = await this.findProductRow(businessId, productId);
 
     if (!row) {
-      throw new NotFoundException("Product not found");
+      throw new NotFoundException(
+        "Product could not be found. It may not exist, may have been deleted, or may not belong to the current business or storefront.",
+      );
     }
 
     return apiResponse(

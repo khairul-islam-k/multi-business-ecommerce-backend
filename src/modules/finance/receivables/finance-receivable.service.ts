@@ -82,12 +82,16 @@ export class FinanceReceivableService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Receivables were loaded successfully. The response includes the requested page of receivable records for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, receivableId: string) {

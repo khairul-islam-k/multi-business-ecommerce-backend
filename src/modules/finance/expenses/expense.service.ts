@@ -90,19 +90,25 @@ export class ExpenseService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Expenses were loaded successfully. The response includes the requested page of expenses for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, expenseId: string) {
     const expense = await this.findExpenseWithRelations(businessId, expenseId);
 
     if (!expense) {
-      throw new NotFoundException("Expense not found");
+      throw new NotFoundException(
+        "Expense could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return apiResponse(expense);
@@ -320,7 +326,9 @@ export class ExpenseService {
       );
 
     if (!expense) {
-      throw new NotFoundException("Expense not found");
+      throw new NotFoundException(
+        "Expense could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return expense;
@@ -340,7 +348,9 @@ export class ExpenseService {
       );
 
     if (!account) {
-      throw new NotFoundException("Finance account not found");
+      throw new NotFoundException(
+        "Finance account could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
   }
 
@@ -361,7 +371,9 @@ export class ExpenseService {
       );
 
     if (!category) {
-      throw new NotFoundException("Expense category not found");
+      throw new NotFoundException(
+        "Expense category could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
   }
 

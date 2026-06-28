@@ -33,9 +33,7 @@ export function calculatePurchaseOrderTotals(
   };
 }
 
-export function calculateLineTotal(
-  item: PurchaseOrderTotalItem,
-) {
+export function calculateLineTotal(item: PurchaseOrderTotalItem) {
   const subtotal = new Decimal(item.quantityOrdered).mul(item.unitCost);
   const discountAmount = new Decimal(item.discountAmount ?? 0);
 
@@ -49,4 +47,3 @@ export function calculateLineTax(item: PurchaseOrderTotalItem) {
 
   return taxableAmount.mul(item.taxRate).div(100).toDecimalPlaces(2);
 }
-

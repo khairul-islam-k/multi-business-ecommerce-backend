@@ -85,12 +85,16 @@ export class ExpenseCategoryService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Expense categories were loaded successfully. The response includes the requested page of categories for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async update(
@@ -169,7 +173,9 @@ export class ExpenseCategoryService {
       .limit(1);
 
     if (!category) {
-      throw new NotFoundException("Expense category not found");
+      throw new NotFoundException(
+        "Expense category could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
   }
 

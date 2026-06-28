@@ -155,12 +155,16 @@ export class StockAdjustmentService {
       rows.map((adjustment) => this.withAdjustmentRelations(adjustment)),
     );
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Stock adjustments were loaded successfully. The response includes the requested page of adjustment records for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, adjustmentId: string) {

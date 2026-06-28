@@ -104,8 +104,6 @@ function createCustomDomainCorsChecker(database: DatabaseService) {
     const now = Date.now();
     const cached = cache.get(hostname);
 
-    console.log(hostname, cached);
-
     if (cached && cached.expiresAt > now) {
       return cached.allowed;
     }

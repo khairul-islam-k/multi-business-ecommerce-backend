@@ -513,7 +513,9 @@ export class CreateOrderService {
       );
 
     if (!existingCustomer) {
-      throw new NotFoundException("Customer not found");
+      throw new NotFoundException(
+        "Customer could not be found. It may not exist, may have been deleted, or may not belong to the current business or storefront.",
+      );
     }
   }
 

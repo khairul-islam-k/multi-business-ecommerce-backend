@@ -95,12 +95,16 @@ export class TenantPackageService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(plans, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      plans,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Available package plans were loaded successfully. The response includes the requested page of active plans and pagination metadata for browsing more results.",
+    );
   }
 
   async getCurrentSubscription(tenantId: string) {
@@ -108,7 +112,9 @@ export class TenantPackageService {
       await this.subscriptions.findCurrentSubscription(tenantId);
 
     if (!subscription) {
-      throw new NotFoundException("Current subscription not found");
+      throw new NotFoundException(
+        "Current subscription could not be found for this tenant. Make sure the tenant has an active package subscription before retrying.",
+      );
     }
 
     return apiResponse(subscription);
@@ -141,12 +147,16 @@ export class TenantPackageService {
       })),
     );
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Package payments were loaded successfully. The response includes the requested page of tenant package payments and pagination metadata for browsing more results.",
+    );
   }
 
   async getUsage(tenantId: string) {
@@ -352,7 +362,9 @@ export class TenantPackageService {
       .limit(1);
 
     if (!plan) {
-      throw new NotFoundException("Package plan not found");
+      throw new NotFoundException(
+        "Package plan could not be found. It may not exist, may have been archived, or may not be available for the requested package operation.",
+      );
     }
 
     return this.withPlanDetails(plan);

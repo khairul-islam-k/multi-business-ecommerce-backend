@@ -37,7 +37,9 @@ export class PurchaseOrderRepository {
       );
 
     if (!purchaseOrder) {
-      throw new NotFoundException("Purchase order not found");
+      throw new NotFoundException(
+        "Purchase order could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return this.hydrate(purchaseOrder);

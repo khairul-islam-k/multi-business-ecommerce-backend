@@ -178,12 +178,16 @@ export class PurchaseOrderService {
       rows.map((purchaseOrder) => this.purchaseOrders.hydrate(purchaseOrder)),
     );
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Supplier purchase orders were loaded successfully. The response includes the requested page of purchase orders for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findPurchaseOrder(businessId: string, purchaseOrderId: string) {

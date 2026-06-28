@@ -64,7 +64,10 @@ export class CustomerService {
       updatedBy: currentUser.id,
     });
 
-    return apiResponse(customer, "Customer created successfully");
+    return apiResponse(
+      customer,
+      "Customer was created successfully. The customer profile and contact details were saved for this business.",
+    );
   }
 
   async findAll(businessId: string, query: QueryCustomerDto) {
@@ -97,7 +100,11 @@ export class CustomerService {
       orderBy,
     });
 
-    return paginatedResponse(items, pagination.meta(total));
+    return paginatedResponse(
+      items,
+      pagination.meta(total),
+      "Customers were loaded successfully. The response includes the requested page of customer records for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, customerId: string) {
@@ -137,7 +144,10 @@ export class CustomerService {
       updatedBy: currentUser.id,
     });
 
-    return apiResponse(customer, "Customer updated successfully");
+    return apiResponse(
+      customer,
+      "Customer was updated successfully. The latest customer profile and contact details are included in the response.",
+    );
   }
 
   async remove(
@@ -164,7 +174,10 @@ export class CustomerService {
       );
     });
 
-    return apiResponse(null, "Customer deleted successfully");
+    return apiResponse(
+      null,
+      "Customer was deleted successfully. The customer record was soft-deleted and will no longer appear in active customer lists.",
+    );
   }
 
   createAddress(
@@ -214,7 +227,9 @@ export class CustomerService {
     const customer = await this.customers.findById(businessId, customerId);
 
     if (!customer) {
-      throw new NotFoundException("Customer not found");
+      throw new NotFoundException(
+        "Customer could not be found. It may not exist, may have been deleted, or may not belong to the current business or storefront.",
+      );
     }
 
     return customer;

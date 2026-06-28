@@ -56,7 +56,7 @@ export class WebsiteController {
   }
 
   @RequirePermission(RbacFeature.WEBSITE_MANAGEMENT, PermissionAction.CREATE)
-  @RequirePackageLimit(PackageLimitKey.MAX_WEBSITES)
+  @RequirePackageLimit(PackageLimitKey.MAX_BUSINESSES)
   @Post()
   @ApiOperation({ summary: "Create website" })
   create(

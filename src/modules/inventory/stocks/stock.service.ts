@@ -77,19 +77,25 @@ export class StockService {
       rows.map((stock) => this.withStockRelations(stock)),
     );
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Stock records were loaded successfully. The response includes the requested page of stock balances for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, stockId: string) {
     const stock = await this.findStockRow(businessId, stockId);
 
     if (!stock) {
-      throw new NotFoundException("Stock not found");
+      throw new NotFoundException(
+        "Stock record could not be found. It may not exist yet, may have been deleted, or may not belong to the requested product, variant, or warehouse.",
+      );
     }
 
     return apiResponse(await this.withStockRelations(stock));
@@ -139,12 +145,16 @@ export class StockService {
       rows.map((movement) => this.withMovementRelations(movement)),
     );
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Warehouse stock records were loaded successfully. The response includes the requested page of warehouse-level stock balances and pagination metadata for browsing more results.",
+    );
   }
 
   async reserveForOrder(
@@ -385,7 +395,9 @@ export class StockService {
     const stock = await this.findStockRow(businessId, stockId);
 
     if (!stock) {
-      throw new NotFoundException("Stock not found");
+      throw new NotFoundException(
+        "Stock record could not be found. It may not exist yet, may have been deleted, or may not belong to the requested product, variant, or warehouse.",
+      );
     }
   }
 

@@ -40,7 +40,9 @@ export class PermissionGuard implements CanActivate {
     const user = request.user;
 
     if (!user) {
-      throw new UnauthorizedException("Unauthorized");
+      throw new UnauthorizedException(
+        "Authentication is required before permissions can be checked. Please sign in, send a valid Bearer access token, and retry this request.",
+      );
     }
 
     const businessId = this.getTargetBusinessId(request, requiredPermission);
@@ -83,7 +85,9 @@ export class PermissionGuard implements CanActivate {
       const businessId = String(rawParam);
 
       if (!isUUID(businessId)) {
-        throw new BadRequestException("Invalid business ID");
+        throw new BadRequestException(
+          "The business ID in the request is not a valid UUID. Please send a correctly formatted business ID before retrying this permission-protected request.",
+        );
       }
 
       return businessId;
@@ -94,7 +98,9 @@ export class PermissionGuard implements CanActivate {
     }
 
     if (!request.user?.businessId) {
-      throw new ForbiddenException("You do not have access to this business");
+      throw new ForbiddenException(
+        "Your account is authenticated, but this request does not include a business context that your account can use. Select an assigned business and retry the request.",
+      );
     }
 
     return request.user.businessId;

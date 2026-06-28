@@ -81,7 +81,7 @@ export class CustomerSessionService {
 
       if (revokedSession.length !== 1) {
         throw new UnauthorizedException(
-          "This customer session token has already been used. Please login again.",
+          "This customer refresh token has already been used or revoked, so it cannot be rotated again safely. Please sign in again to create a new storefront session.",
         );
       }
 
@@ -119,11 +119,15 @@ export class CustomerSessionService {
     const now = new Date();
 
     if (session.revokedAt) {
-      throw new UnauthorizedException("Customer session has been revoked");
+      throw new UnauthorizedException(
+        "This customer session has been revoked and can no longer be used for storefront requests. Please sign in again to continue.",
+      );
     }
 
     if (session.expiresAt <= now) {
-      throw new UnauthorizedException("Customer session has expired");
+      throw new UnauthorizedException(
+        "This customer session has expired and can no longer be refreshed. Please sign in again to continue using the storefront.",
+      );
     }
   }
 }

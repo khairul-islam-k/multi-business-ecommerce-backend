@@ -185,7 +185,9 @@ export class ProductCatalogLookupService {
       .limit(1);
 
     if (!item) {
-      throw new NotFoundException("Product not found");
+      throw new NotFoundException(
+        "Product could not be found. It may not exist, may have been deleted, or may not belong to the current business or storefront.",
+      );
     }
 
     return item;
@@ -206,7 +208,9 @@ export class ProductCatalogLookupService {
       .limit(1);
 
     if (!tax) {
-      throw new NotFoundException("Tax not found");
+      throw new NotFoundException(
+        "Tax could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return tax;
@@ -231,7 +235,9 @@ export class ProductCatalogLookupService {
       .limit(1);
 
     if (!variant) {
-      throw new NotFoundException("Product variant not found");
+      throw new NotFoundException(
+        "Product variant could not be found. It may not exist, may have been deleted, or may not belong to the selected product.",
+      );
     }
 
     return variant;

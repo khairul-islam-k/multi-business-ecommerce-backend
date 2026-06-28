@@ -44,7 +44,9 @@ export class SupplierRepository {
       );
 
     if (!supplierRow) {
-      throw new NotFoundException("Supplier not found");
+      throw new NotFoundException(
+        "Supplier could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
   }
 

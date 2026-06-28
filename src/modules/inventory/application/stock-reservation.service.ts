@@ -404,7 +404,9 @@ export class StockReservationService {
       );
 
     if (!warehouseRow) {
-      throw new NotFoundException("Warehouse not found");
+      throw new NotFoundException(
+        "Warehouse could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     const warehouseStock = await this.getWarehouseStockByItemKey(tx, params);

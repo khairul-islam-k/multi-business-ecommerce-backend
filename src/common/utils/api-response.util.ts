@@ -13,6 +13,7 @@ export type PaginationMeta = {
 export type PaginatedApiResponse<T> = {
   data: T[];
   meta: PaginationMeta;
+  message?: string;
 };
 
 export const apiResponse = <T>(data: T, message?: string): ApiResponse<T> => ({
@@ -23,7 +24,9 @@ export const apiResponse = <T>(data: T, message?: string): ApiResponse<T> => ({
 export const paginatedResponse = <T>(
   data: T[],
   meta: PaginationMeta,
+  message: string,
 ): PaginatedApiResponse<T> => ({
   data,
   meta,
+  message,
 });

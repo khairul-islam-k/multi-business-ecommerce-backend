@@ -30,7 +30,9 @@ export class TenantService {
       .limit(1);
 
     if (!tenant) {
-      throw new NotFoundException();
+      throw new NotFoundException(
+        "Tenant could not be found. It may not exist, may have been deleted, or may not be available to the current administrative request.",
+      );
     }
 
     const [profile, ownedBusinesses] = await Promise.all([
@@ -128,12 +130,16 @@ export class TenantService {
       .where(where);
     const total = totalRow?.value ?? 0;
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Tenants were loaded successfully. The response includes the requested page of tenant accounts and pagination metadata for browsing more results.",
+    );
   }
 
   async updateStatus(

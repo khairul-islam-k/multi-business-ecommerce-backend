@@ -91,7 +91,9 @@ export class AccountBalanceService {
       .limit(1);
 
     if (!account) {
-      throw new NotFoundException("Finance account not found");
+      throw new NotFoundException(
+        "Finance account could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     const balanceBefore = toMoney(account.currentBalance);

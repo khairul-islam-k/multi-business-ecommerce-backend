@@ -62,12 +62,16 @@ export class SupplierInvoiceQueryService {
       rows.map((invoice) => this.invoices.hydrate(invoice)),
     );
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Supplier invoices were loaded successfully. The response includes the requested page of supplier invoice records and pagination metadata for browsing more results.",
+    );
   }
 
   async findSupplierInvoice(businessId: string, supplierInvoiceId: string) {

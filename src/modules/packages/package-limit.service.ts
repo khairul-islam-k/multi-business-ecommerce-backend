@@ -278,31 +278,6 @@ export class PackageLimitService {
         .then(([row]) => row?.value ?? 0);
     }
 
-    if (limitKey === PackageLimitKey.MAX_WEBSITES) {
-      return this.db
-        .select({ value: count() })
-        .from(website)
-        .where(
-          and(
-            isNull(website.deletedAt),
-            exists(
-              this.db
-                .select({ id: business.id })
-                .from(business)
-                .where(
-                  and(
-                    eq(business.id, website.businessId),
-                    eq(business.ownerUserId, tenantId),
-                    isNull(business.deletedAt),
-                    eq(business.status, BusinessStatus.ACTIVE),
-                  ),
-                ),
-            ),
-          ),
-        )
-        .then(([row]) => row?.value ?? 0);
-    }
-
     return Promise.resolve(0);
   }
 

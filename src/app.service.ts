@@ -1,8 +1,9 @@
-import { Injectable, InternalServerErrorException } from "@nestjs/common";
 import { sql } from "drizzle-orm";
 
-import { DatabaseService } from "./database/database.service";
+import { Injectable, InternalServerErrorException } from "@nestjs/common";
+
 import { apiResponse } from "./common/utils/api-response.util";
+import { DatabaseService } from "./database/database.service";
 
 @Injectable()
 export class AppService {

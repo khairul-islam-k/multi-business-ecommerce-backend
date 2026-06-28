@@ -116,12 +116,16 @@ export class SupplierCrudService {
       rows.map((supplierRow) => this.suppliers.withCounts(supplierRow)),
     );
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Suppliers were loaded successfully. The response includes the requested page of supplier records for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, supplierId: string) {

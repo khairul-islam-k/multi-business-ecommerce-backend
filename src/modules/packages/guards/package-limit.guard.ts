@@ -40,7 +40,9 @@ export class PackageLimitGuard implements CanActivate {
     }>();
 
     if (!request.user) {
-      throw new UnauthorizedException("Unauthorized");
+      throw new UnauthorizedException(
+        "Authentication is required before package limits can be checked. Please sign in, send a valid Bearer access token, and retry this request.",
+      );
     }
 
     const amount = this.resolveAmount(request, requirement);

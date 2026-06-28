@@ -122,19 +122,25 @@ export class WarehouseService {
       rows.map((warehouseRow) => this.withWarehouseCount(warehouseRow)),
     );
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Warehouses were loaded successfully. The response includes the requested page of warehouse records for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, warehouseId: string) {
     const warehouseRow = await this.findWarehouseRow(businessId, warehouseId);
 
     if (!warehouseRow) {
-      throw new NotFoundException("Warehouse not found");
+      throw new NotFoundException(
+        "Warehouse could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return apiResponse(await this.withWarehouseCount(warehouseRow));
@@ -216,7 +222,9 @@ export class WarehouseService {
     const warehouseRow = await this.findWarehouseRow(businessId, warehouseId);
 
     if (!warehouseRow) {
-      throw new NotFoundException("Warehouse not found");
+      throw new NotFoundException(
+        "Warehouse could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
   }
 

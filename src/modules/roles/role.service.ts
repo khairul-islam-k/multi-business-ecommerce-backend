@@ -129,7 +129,10 @@ export class RoleService {
         return this.withRoleDetails(created);
       });
 
-      return apiResponse(role, "Role created successfully");
+      return apiResponse(
+        role,
+        "Role was created successfully. The role record and requested permissions were saved for this business.",
+      );
     } catch (error) {
       this.handleDatabaseError(error);
     }
@@ -187,12 +190,16 @@ export class RoleService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(roles, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      roles,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Roles were loaded successfully. The response includes the requested page of roles for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, roleId: string) {
@@ -254,7 +261,7 @@ export class RoleService {
 
         return apiResponse(
           await this.withRoleDetails(updated),
-          "Role updated successfully",
+          "Role was updated successfully. The saved role details and permission assignments now reflect the request.",
         );
       });
     } catch (error) {
@@ -297,7 +304,10 @@ export class RoleService {
         .where(eq(rbacRole.id, roleId));
     });
 
-    return apiResponse(null, "Role deleted successfully");
+    return apiResponse(
+      null,
+      "Role was deleted successfully. The role has been soft-deleted and its active assignments were deactivated.",
+    );
   }
 
   async assignRole(
@@ -400,12 +410,16 @@ export class RoleService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(assignments, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      assignments,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Role assignments were loaded successfully. The response includes the requested page of user-role assignments for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async updateAssignment(
@@ -427,7 +441,7 @@ export class RoleService {
 
     return apiResponse(
       await this.withAssignmentDetails(assignment),
-      "Role assignment updated successfully",
+      "Role assignment was updated successfully. The selected user-role assignment now reflects the requested status, scope, or expiry changes.",
     );
   }
 
@@ -460,7 +474,9 @@ export class RoleService {
       .limit(1);
 
     if (!role) {
-      throw new NotFoundException("Role not found");
+      throw new NotFoundException(
+        "Role could not be found. It may not exist, may have been deleted, or may not belong to the requested business.",
+      );
     }
 
     return this.withRoleDetails(role);
@@ -483,7 +499,9 @@ export class RoleService {
       .limit(1);
 
     if (!role) {
-      throw new NotFoundException("Role not found");
+      throw new NotFoundException(
+        "Role could not be found. It may not exist, may have been deleted, or may not belong to the requested business.",
+      );
     }
   }
 
@@ -514,7 +532,9 @@ export class RoleService {
       .limit(1);
 
     if (!assignment) {
-      throw new NotFoundException("Role assignment not found");
+      throw new NotFoundException(
+        "Role assignment could not be found. It may not exist, may have been deleted, or may not belong to the requested business.",
+      );
     }
   }
 
@@ -590,7 +610,9 @@ export class RoleService {
       .limit(1);
 
     if (existingRole) {
-      throw new ConflictException("Role name already exists");
+      throw new ConflictException(
+        "Role name already exists in this business. Please choose a different role name before saving.",
+      );
     }
   }
 
@@ -668,7 +690,9 @@ export class RoleService {
       .limit(1);
 
     if (!role) {
-      throw new NotFoundException("Role not found");
+      throw new NotFoundException(
+        "Role could not be found. It may not exist, may have been deleted, or may not belong to the requested business.",
+      );
     }
 
     const permissions = await this.db
@@ -702,7 +726,9 @@ export class RoleService {
     const normalizedName = name.trim();
 
     if (!normalizedName) {
-      throw new BadRequestException("Role name is required");
+      throw new BadRequestException(
+        "Role name is required. Provide a non-empty role name before saving this role.",
+      );
     }
 
     if (normalizedName.length > 100) {
@@ -754,7 +780,9 @@ export class RoleService {
 
   private handleDatabaseError(error: unknown): never {
     if (isUniqueConstraintError(error)) {
-      throw new ConflictException("Role name already exists");
+      throw new ConflictException(
+        "Role name already exists in this business. Please choose a different role name before saving.",
+      );
     }
 
     throw error;

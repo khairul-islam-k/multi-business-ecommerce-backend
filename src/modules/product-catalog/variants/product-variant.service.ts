@@ -393,7 +393,9 @@ export class ProductVariantService {
     const variant = await this.findVariantRow(businessId, productId, variantId);
 
     if (!variant) {
-      throw new NotFoundException("Product variant not found");
+      throw new NotFoundException(
+        "Product variant could not be found. It may not exist, may have been deleted, or may not belong to the selected product.",
+      );
     }
 
     return apiResponse(await this.getVariantDetails(variant));
@@ -1156,7 +1158,9 @@ export class ProductVariantService {
     ]);
 
     if (!productSummary) {
-      throw new NotFoundException("Product not found");
+      throw new NotFoundException(
+        "Product could not be found. It may not exist, may have been deleted, or may not belong to the current business or storefront.",
+      );
     }
 
     return {

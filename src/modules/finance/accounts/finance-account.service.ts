@@ -137,19 +137,25 @@ export class FinanceAccountService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Finance accounts were loaded successfully. The response includes the requested page of accounts for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, accountId: string) {
     const account = await this.findAccountRow(businessId, accountId);
 
     if (!account) {
-      throw new NotFoundException("Finance account not found");
+      throw new NotFoundException(
+        "Finance account could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return apiResponse(await this.withAccountCount(account));
@@ -283,19 +289,25 @@ export class FinanceAccountService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Finance account transactions were loaded successfully. The response includes the requested page of transactions for this account and pagination metadata for browsing more results.",
+    );
   }
 
   private async assertAccountExists(businessId: string, accountId: string) {
     const account = await this.findAccountRow(businessId, accountId);
 
     if (!account) {
-      throw new NotFoundException("Finance account not found");
+      throw new NotFoundException(
+        "Finance account could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return account;

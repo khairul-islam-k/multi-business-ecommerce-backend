@@ -115,19 +115,25 @@ export class ProductUnitService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Product units were loaded successfully. The response includes the requested page of units for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, unitId: string) {
     const unit = await this.findUnitRow(businessId, unitId);
 
     if (!unit) {
-      throw new NotFoundException("Unit not found");
+      throw new NotFoundException(
+        "Unit could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return apiResponse(await this.withUnitCount(unit));
@@ -188,7 +194,9 @@ export class ProductUnitService {
     const unit = await this.findUnitRow(businessId, unitId);
 
     if (!unit) {
-      throw new NotFoundException("Unit not found");
+      throw new NotFoundException(
+        "Unit could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
   }
 

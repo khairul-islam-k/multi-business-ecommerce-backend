@@ -1,5 +1,5 @@
 import Decimal from "decimal.js";
-import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, or } from "drizzle-orm";
 
 import {
   CatalogProductStatus,
@@ -134,7 +134,10 @@ export class StorefrontCustomerService {
         .returning();
     });
 
-    return apiResponse(created, "Customer address created successfully");
+    return apiResponse(
+      created,
+      "Customer address was created successfully. The address has been saved and default-address rules were applied when requested.",
+    );
   }
 
   async updateAddress(
@@ -185,7 +188,10 @@ export class StorefrontCustomerService {
         .returning();
     });
 
-    return apiResponse(updated, "Customer address updated successfully");
+    return apiResponse(
+      updated,
+      "Customer address was updated successfully. The saved address now reflects the submitted details and default-address rules.",
+    );
   }
 
   async deleteAddress(
@@ -207,7 +213,10 @@ export class StorefrontCustomerService {
       })
       .where(eq(customerAddress.id, address.id));
 
-    return apiResponse(null, "Customer address deleted successfully");
+    return apiResponse(
+      null,
+      "Customer address was deleted successfully. The address has been soft-deleted and will no longer be used for customer checkout or profile flows.",
+    );
   }
 
   async findCarts(
@@ -499,6 +508,7 @@ export class StorefrontCustomerService {
         total,
         totalPages: Math.ceil(total / limit),
       },
+      "Customer orders were loaded successfully. The response includes the requested page of storefront orders for this customer and pagination metadata for browsing more results.",
     );
   }
 
@@ -693,6 +703,7 @@ export class StorefrontCustomerService {
         total,
         totalPages: Math.ceil(total / limit),
       },
+      "Customer order returns were loaded successfully. The response includes the requested page of storefront return requests and pagination metadata for browsing more results.",
     );
   }
 
@@ -788,6 +799,7 @@ export class StorefrontCustomerService {
         total,
         totalPages: Math.ceil(total / limit),
       },
+      "Customer product reviews were loaded successfully. The response includes the requested page of storefront reviews from this customer and pagination metadata for browsing more results.",
     );
   }
 
@@ -864,8 +876,13 @@ export class StorefrontCustomerService {
       .from(orderCartItem)
       .innerJoin(product, eq(product.id, orderCartItem.productId))
       .leftJoin(productVariant, eq(productVariant.id, orderCartItem.variantId))
-      .leftJoin(productImage, eq(product.id, productImage.productId))
-      .leftJoin(productImage, eq(productVariant.id, productImage.variantId))
+      .leftJoin(
+        productImage,
+        or(
+          eq(product.id, productImage.productId),
+          eq(productVariant.id, productImage.variantId),
+        ),
+      )
       .where(eq(orderCartItem.cartId, cart.id))
       .orderBy(orderCartItem.createdAt);
 
@@ -925,7 +942,9 @@ export class StorefrontCustomerService {
       .limit(1);
 
     if (!orderRow) {
-      throw new NotFoundException("Order not found");
+      throw new NotFoundException(
+        "Order could not be found. It may not exist, may have been deleted, or may not belong to the current business or customer account.",
+      );
     }
 
     return orderRow;
@@ -1014,7 +1033,9 @@ export class StorefrontCustomerService {
       .limit(1);
 
     if (!address) {
-      throw new NotFoundException("Customer address not found");
+      throw new NotFoundException(
+        "Customer address could not be found. It may not exist, may have been deleted, or may not belong to this customer.",
+      );
     }
 
     return address;
@@ -1140,7 +1161,9 @@ export class StorefrontCustomerService {
       .limit(1);
 
     if (!productRow) {
-      throw new NotFoundException("Product not found");
+      throw new NotFoundException(
+        "Product could not be found. It may not exist, may have been deleted, or may not belong to the current business or storefront.",
+      );
     }
 
     return productRow;
@@ -1170,7 +1193,9 @@ export class StorefrontCustomerService {
       .limit(1);
 
     if (!variant) {
-      throw new NotFoundException("Product variant not found");
+      throw new NotFoundException(
+        "Product variant could not be found. It may not exist, may have been deleted, or may not belong to the selected product.",
+      );
     }
 
     return variant;
@@ -1190,7 +1215,9 @@ export class StorefrontCustomerService {
       .limit(1);
 
     if (!customerRow) {
-      throw new NotFoundException("Customer not found");
+      throw new NotFoundException(
+        "Customer could not be found. It may not exist, may have been deleted, or may not belong to the current business or storefront.",
+      );
     }
 
     return customerRow;

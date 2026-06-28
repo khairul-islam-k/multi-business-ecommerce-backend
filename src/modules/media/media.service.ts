@@ -106,7 +106,9 @@ export class MediaService {
     dto: UploadMediaDto,
   ) {
     if (!files || files.length === 0) {
-      throw new BadRequestException("At least one image file is required");
+      throw new BadRequestException(
+        "At least one image file is required. Upload one or more valid image files before retrying this media request.",
+      );
     }
 
     if (files.length > this.limits.maxBulkImageFiles) {
@@ -204,12 +206,16 @@ export class MediaService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Media assets were loaded successfully. The response includes the requested page of images for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async deleteImage(
@@ -226,7 +232,10 @@ export class MediaService {
     await this.softDeleteImageAssets([asset.id], currentUser.id);
     await this.uploader.delete(asset.fileUrl);
 
-    return apiResponse(null, "Image deleted successfully");
+    return apiResponse(
+      null,
+      "Image was deleted successfully. The media asset was soft-deleted and its file deletion was requested from the configured uploader.",
+    );
   }
 
   async deleteImages(
@@ -270,7 +279,9 @@ export class MediaService {
     file: UploadableMediaFile | undefined,
   ): asserts file is UploadableMediaFile {
     if (!file) {
-      throw new BadRequestException("Image file is required");
+      throw new BadRequestException(
+        "Image file is required. Upload a valid image file before retrying this media request.",
+      );
     }
 
     if (!file.buffer || !Buffer.isBuffer(file.buffer)) {
@@ -300,7 +311,9 @@ export class MediaService {
       .limit(1);
 
     if (!asset) {
-      throw new BadRequestException("Image not found");
+      throw new BadRequestException(
+        "Image could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return asset;

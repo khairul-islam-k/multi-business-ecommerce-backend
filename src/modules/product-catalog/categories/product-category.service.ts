@@ -173,19 +173,25 @@ export class ProductCategoryService {
         categories.push(node);
       }
     }
-    return paginatedResponse(categories, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      categories,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Product categories were loaded successfully. The response includes the requested page of categories for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, categoryId: string) {
     const category = await this.findCategoryRow(businessId, categoryId);
 
     if (!category) {
-      throw new NotFoundException("Category not found");
+      throw new NotFoundException(
+        "Category could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return apiResponse(
@@ -281,7 +287,9 @@ export class ProductCategoryService {
     const category = await this.findCategoryRow(businessId, categoryId);
 
     if (!category) {
-      throw new NotFoundException("Category not found");
+      throw new NotFoundException(
+        "Category could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
   }
 

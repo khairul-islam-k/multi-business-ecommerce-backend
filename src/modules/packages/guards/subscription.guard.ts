@@ -22,7 +22,9 @@ export class SubscriptionGuard implements CanActivate {
     const user = request.user;
 
     if (!user) {
-      throw new UnauthorizedException("Unauthorized");
+      throw new UnauthorizedException(
+        "Authentication is required before subscription access can be checked. Please sign in, send a valid Bearer access token, and retry this request.",
+      );
     }
 
     if (user.type === SystemUserType.ADMIN) {

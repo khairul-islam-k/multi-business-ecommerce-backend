@@ -33,7 +33,9 @@ export class TaxLookupService {
       .limit(1);
 
     if (!tax) {
-      throw new NotFoundException("Tax not found");
+      throw new NotFoundException(
+        "Tax could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return tax;

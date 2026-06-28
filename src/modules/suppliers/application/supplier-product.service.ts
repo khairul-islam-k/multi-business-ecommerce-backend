@@ -122,7 +122,9 @@ export class SupplierProductService {
       .limit(1);
 
     if (!item) {
-      throw new NotFoundException("Supplier product not found");
+      throw new NotFoundException(
+        "Supplier product could not be found. It may not exist, may have been removed, or may not belong to this supplier and business.",
+      );
     }
 
     return apiResponse(item);
@@ -211,12 +213,16 @@ export class SupplierProductService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Supplier products were loaded successfully. The response includes the requested page of supplier product mappings and pagination metadata for browsing more results.",
+    );
   }
 
   async updateProduct(

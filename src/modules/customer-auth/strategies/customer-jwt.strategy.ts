@@ -3,9 +3,9 @@ import { ExtractJwt, Strategy } from "passport-jwt";
 
 import { AppConfigService } from "@/common/config/app-config.service";
 import {
-  CustomerStatus,
   customer,
   customerAccount,
+  CustomerStatus,
   website,
 } from "@/database/schema";
 import { Injectable, UnauthorizedException } from "@nestjs/common";
@@ -48,7 +48,9 @@ export class CustomerJwtStrategy extends PassportStrategy(
 
   async validate(payload: CustomerJwtPayload): Promise<CurrentCustomerPayload> {
     if (payload.scope !== "storefront") {
-      throw new UnauthorizedException("Invalid customer token");
+      throw new UnauthorizedException(
+        "The customer access token is not valid for storefront requests. Please sign in through the storefront again and retry the request.",
+      );
     }
 
     const [row] = await this.database.db
@@ -64,7 +66,9 @@ export class CustomerJwtStrategy extends PassportStrategy(
       .limit(1);
 
     if (!row) {
-      throw new UnauthorizedException("Invalid customer token");
+      throw new UnauthorizedException(
+        "The customer access token could not be matched to an active storefront customer account. Please sign in again and retry the request.",
+      );
     }
 
     if (
@@ -72,7 +76,9 @@ export class CustomerJwtStrategy extends PassportStrategy(
       row.customer.deletedAt ||
       row.customer.status !== CustomerStatus.ACTIVE
     ) {
-      throw new UnauthorizedException("Customer account is not active");
+      throw new UnauthorizedException(
+        "This customer account cannot use the storefront because the account or customer profile is inactive, blocked, or deleted. Please contact store support before trying again.",
+      );
     }
 
     if (
@@ -81,7 +87,9 @@ export class CustomerJwtStrategy extends PassportStrategy(
       row.customer.businessId !== payload.businessId ||
       row.website.businessId !== payload.businessId
     ) {
-      throw new UnauthorizedException("Invalid customer token");
+      throw new UnauthorizedException(
+        "The customer access token does not match this storefront, business, or customer profile. Please sign in again from the correct storefront and retry the request.",
+      );
     }
 
     return {

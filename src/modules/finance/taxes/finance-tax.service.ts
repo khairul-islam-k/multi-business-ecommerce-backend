@@ -91,19 +91,25 @@ export class FinanceTaxService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Taxes were loaded successfully. The response includes the requested page of tax records for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, taxId: string) {
     const tax = await this.findTaxRow(businessId, taxId);
 
     if (!tax) {
-      throw new NotFoundException("Tax not found");
+      throw new NotFoundException(
+        "Tax could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return apiResponse(tax);
@@ -163,7 +169,9 @@ export class FinanceTaxService {
     const tax = await this.findTaxRow(businessId, taxId);
 
     if (!tax) {
-      throw new NotFoundException("Tax not found");
+      throw new NotFoundException(
+        "Tax could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
   }
 

@@ -1,3 +1,4 @@
+import Decimal from "decimal.js";
 import { and, count, eq, ilike, isNull, or, sql, SQL } from "drizzle-orm";
 
 import {
@@ -11,15 +12,14 @@ import {
   FinanceAccountType,
   financeTax,
   FinanceTaxStatus,
-  productUnit,
   ProductSimpleStatus,
+  productUnit,
   systemUser,
   SystemUserType,
   warehouse,
   WarehouseStatus,
   website,
 } from "@/database/schema";
-import Decimal from "decimal.js";
 import {
   ConflictException,
   ForbiddenException,
@@ -185,7 +185,10 @@ export class BusinessService {
         return this.findBusinessById(created.id, transaction);
       });
 
-      return apiResponse(createdBusiness, "Business created successfully");
+      return apiResponse(
+        createdBusiness,
+        "Business was created successfully. Default operational resources were created with it, and the response includes the saved business profile, settings, branding, and owner details.",
+      );
     } catch (error) {
       this.handleDatabaseError(error);
     }
@@ -246,12 +249,16 @@ export class BusinessService {
 
     const total = totalRow?.value ?? 0;
 
-    return paginatedResponse(this.mapBusinessRows(items), {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      this.mapBusinessRows(items),
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Businesses were loaded successfully. The response includes the businesses visible to the current user and pagination metadata for continuing through the result set.",
+    );
   }
 
   async findOne(currentUser: CurrentUserPayload, businessId: string) {
@@ -264,7 +271,9 @@ export class BusinessService {
     );
 
     if (!matchedBusiness) {
-      throw new NotFoundException("Business not found");
+      throw new NotFoundException(
+        "Business could not be found. It may not exist, may have been deleted, or may not be accessible to the current user.",
+      );
     }
 
     return apiResponse(matchedBusiness);
@@ -384,7 +393,10 @@ export class BusinessService {
         },
       );
 
-      return apiResponse(updatedBusiness, "Business updated successfully");
+      return apiResponse(
+        updatedBusiness,
+        "Business was updated successfully. The saved profile, settings, branding, and related website name changes are included in the response.",
+      );
     } catch (error) {
       this.handleDatabaseError(error);
     }
@@ -426,7 +438,10 @@ export class BusinessService {
       })
       .where(eq(business.id, businessId));
 
-    return apiResponse(null, "Business deleted successfully");
+    return apiResponse(
+      null,
+      "Business was deleted successfully. It has been marked inactive and soft-deleted, so it will no longer appear in normal business lists.",
+    );
   }
 
   async assertCanAccessBusiness(
@@ -466,7 +481,9 @@ export class BusinessService {
       .limit(1);
 
     if (!matchedBusiness) {
-      throw new NotFoundException("Business not found");
+      throw new NotFoundException(
+        "Business could not be found. It may not exist, may have been deleted, or may not be accessible to the current user.",
+      );
     }
 
     return matchedBusiness;
@@ -526,7 +543,9 @@ export class BusinessService {
     );
 
     if (!matchedBusiness) {
-      throw new NotFoundException("Business not found");
+      throw new NotFoundException(
+        "Business could not be found. It may not exist, may have been deleted, or may not be accessible to the current user.",
+      );
     }
 
     return matchedBusiness;
@@ -930,6 +949,9 @@ export class BusinessService {
   }
 
   private handleDatabaseError(error: unknown): never {
-    throwConflictOnUnique(error, "Business name or slug already exists");
+    throwConflictOnUnique(
+      error,
+      "Business name or slug already exists. Please choose a different business name or slug before trying to save this business again.",
+    );
   }
 }

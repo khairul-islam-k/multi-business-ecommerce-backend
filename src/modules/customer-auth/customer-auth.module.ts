@@ -1,8 +1,8 @@
+import { AppConfigService } from "@/common/config/app-config.service";
 import { Module } from "@nestjs/common";
 import { JwtModule, JwtSignOptions } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
 
-import { AppConfigService } from "@/common/config/app-config.service";
 import { OtpPolicy } from "../auth/domain/otp.policy";
 import { MailModule } from "../mail/mail.module";
 import { WebsiteModule } from "../website/website.module";

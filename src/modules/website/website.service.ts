@@ -123,7 +123,7 @@ export class WebsiteService {
 
       return apiResponse(
         await this.findWebsiteDetails(businessId, created.id),
-        "Website created successfully",
+        "Website was created successfully. A draft website, default verified subdomain, configuration, theme settings, and SEO settings were saved for this business.",
       );
     } catch (error) {
       this.handleUniqueError(
@@ -168,12 +168,16 @@ export class WebsiteService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(rows, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      rows,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Websites were loaded successfully. The response includes the requested page of websites for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, websiteId: string) {
@@ -208,8 +212,6 @@ export class WebsiteService {
               generalConfig: dto.config.generalConfig as JsonValue,
             }),
           };
-
-          console.log(configValues);
 
           if (this.hasFields(configValues)) {
             await tx
@@ -262,14 +264,16 @@ export class WebsiteService {
           })
           .where(eq(website.id, websiteId))
           .returning();
-
-        return apiResponse(
-          await this.findWebsiteDetails(businessId, websiteId),
-          "Website updated successfully",
-        );
       });
+      return apiResponse(
+        await this.findWebsiteDetails(businessId, websiteId),
+        "Website was updated successfully. The latest website details, configuration, theme, SEO settings, domains, and publish state are included in the response.",
+      );
     } catch (error) {
-      this.handleUniqueError(error, "Website slug already exists");
+      this.handleUniqueError(
+        error,
+        "Website slug already exists. Please choose a different slug or retry after changing the website name.",
+      );
     }
   }
 
@@ -351,7 +355,7 @@ export class WebsiteService {
 
     return apiResponse(
       await this.findWebsiteDetails(businessId, websiteId),
-      "Website configuration updated successfully",
+      "Website configuration was updated successfully. The saved response includes the latest configuration, theme settings, SEO settings, domains, and publish state.",
     );
   }
 
@@ -396,9 +400,15 @@ export class WebsiteService {
         return created;
       });
 
-      return apiResponse(domainRow, "Website domain added successfully");
+      return apiResponse(
+        domainRow,
+        "Website domain was added successfully. The domain record has been saved; custom domains must still be verified and have active SSL before they can serve storefront traffic.",
+      );
     } catch (error) {
-      this.handleUniqueError(error, "Website domain already exists");
+      this.handleUniqueError(
+        error,
+        "Website domain already exists. This domain or subdomain is already registered, so choose another host or update the existing domain record.",
+      );
     }
   }
 
@@ -437,7 +447,7 @@ export class WebsiteService {
 
     return apiResponse(
       await this.hydrateWebsite(published),
-      "Website published",
+      "Website was published successfully. A publish version snapshot was created and this website can now serve storefront traffic through verified, SSL-active domains.",
     );
   }
 
@@ -456,7 +466,7 @@ export class WebsiteService {
 
     return apiResponse(
       await this.hydrateWebsite(updated),
-      "Website unpublished",
+      "Website was unpublished successfully. Storefront traffic will no longer resolve this website until it is published again.",
     );
   }
 
@@ -477,7 +487,10 @@ export class WebsiteService {
       })
       .where(eq(website.id, websiteId));
 
-    return apiResponse(null, "Website deleted successfully");
+    return apiResponse(
+      null,
+      "Website was deleted successfully. It has been archived and soft-deleted, so it will no longer be available for storefront resolution.",
+    );
   }
 
   async findPublishedById(websiteId: string) {
@@ -518,33 +531,95 @@ export class WebsiteService {
       return null;
     }
 
-    const [row] = await this.db
-      .select({ site: website })
-      .from(websiteDomain)
-      .innerJoin(website, eq(website.id, websiteDomain.websiteId))
-      .where(
-        and(
-          or(
-            eq(websiteDomain.domain, normalizedHost),
-            eq(websiteDomain.subdomain, normalizedHost),
-          ),
-          eq(website.status, WebsiteStatus.PUBLISHED),
-          isNull(website.deletedAt),
-        ),
-      )
-      .limit(1);
+    const row = await this.findWebsiteHostRow(normalizedHost);
+
+    if (!row || !this.isPublishedDomainReady(row)) {
+      return null;
+    }
 
     return row ? this.hydrateWebsite(row.site) : null;
   }
 
   async findPublishedByHostOrThrow(host?: string | null) {
-    const storefront = await this.findPublishedByHost(host ?? "");
+    const normalizedHost = this.normalizeHost(host ?? "");
 
-    if (!storefront) {
-      throw new NotFoundException("Published storefront not found");
+    if (!normalizedHost) {
+      throw new BadRequestException(
+        "A storefront host is required to resolve the published website. Send a valid Host or X-Forwarded-Host header so the API can identify which storefront should handle this request.",
+      );
     }
 
-    return storefront;
+    const row = await this.findWebsiteHostRow(normalizedHost);
+
+    if (!row) {
+      throw new NotFoundException(
+        `No storefront domain is registered for "${normalizedHost}". Please add this domain or subdomain to the website before using it for storefront requests.`,
+      );
+    }
+
+    this.assertPublishedDomainReady(row, normalizedHost);
+
+    return this.hydrateWebsite(row.site);
+  }
+
+  private async findWebsiteHostRow(host: string) {
+    const [row] = await this.db
+      .select({ site: website, domain: websiteDomain })
+      .from(websiteDomain)
+      .innerJoin(website, eq(website.id, websiteDomain.websiteId))
+      .where(
+        or(eq(websiteDomain.domain, host), eq(websiteDomain.subdomain, host)),
+      )
+      .limit(1);
+
+    return row ?? null;
+  }
+
+  private isPublishedDomainReady(row: {
+    site: typeof website.$inferSelect;
+    domain: typeof websiteDomain.$inferSelect;
+  }) {
+    return (
+      row.domain.verificationStatus ===
+        WebsiteDomainVerificationStatus.VERIFIED &&
+      row.domain.sslStatus === WebsiteDomainSslStatus.ACTIVE &&
+      row.site.status === WebsiteStatus.PUBLISHED &&
+      row.site.deletedAt === null
+    );
+  }
+
+  private assertPublishedDomainReady(
+    row: {
+      site: typeof website.$inferSelect;
+      domain: typeof websiteDomain.$inferSelect;
+    },
+    host: string,
+  ) {
+    if (
+      row.domain.verificationStatus !== WebsiteDomainVerificationStatus.VERIFIED
+    ) {
+      throw new BadRequestException(
+        `The storefront domain "${host}" is registered but cannot be used yet because its verification status is ${row.domain.verificationStatus}. Verify the domain ownership first, then retry after the status becomes VERIFIED.`,
+      );
+    }
+
+    if (row.domain.sslStatus !== WebsiteDomainSslStatus.ACTIVE) {
+      throw new BadRequestException(
+        `The storefront domain "${host}" is verified but cannot be used yet because its SSL status is ${row.domain.sslStatus}. Activate SSL for this domain first, then retry after the status becomes ACTIVE.`,
+      );
+    }
+
+    if (row.site.deletedAt !== null) {
+      throw new NotFoundException(
+        `The storefront domain "${host}" belongs to a website that has been deleted. Restore the website or attach the domain to another published website before using this storefront.`,
+      );
+    }
+
+    if (row.site.status !== WebsiteStatus.PUBLISHED) {
+      throw new BadRequestException(
+        `The storefront domain "${host}" belongs to a website whose current status is ${row.site.status}. Publish the website before using this domain for storefront requests.`,
+      );
+    }
   }
 
   private async findWebsiteDetails(businessId: string, websiteId: string) {
@@ -614,7 +689,9 @@ export class WebsiteService {
       .limit(1);
 
     if (!item) {
-      throw new NotFoundException("Website not found");
+      throw new NotFoundException(
+        "Website could not be found. It may not exist, may have been deleted, or may not belong to the requested business.",
+      );
     }
 
     return item;
@@ -628,7 +705,9 @@ export class WebsiteService {
       .limit(1);
 
     if (!businessRow) {
-      throw new NotFoundException("Business not found");
+      throw new NotFoundException(
+        "Business could not be found. It may not exist, may have been deleted, or may not be accessible to the current user.",
+      );
     }
 
     return businessRow;
@@ -642,7 +721,9 @@ export class WebsiteService {
       .limit(1);
 
     if (existing) {
-      throw new BadRequestException("Website already exists for this business");
+      throw new BadRequestException(
+        "A website already exists for this business. Each business can only have one active website, so update or delete the existing website before creating another one.",
+      );
     }
   }
 
@@ -729,14 +810,18 @@ export class WebsiteService {
       dto.domainType === WebsiteDomainType.CUSTOM_DOMAIN &&
       !this.normalizeHost(dto.domain)
     ) {
-      throw new BadRequestException("Custom domain is required");
+      throw new BadRequestException(
+        "Custom domain is required. Provide a valid custom domain when the domain type is CUSTOM_DOMAIN.",
+      );
     }
 
     if (
       dto.domainType === WebsiteDomainType.SUBDOMAIN &&
       !this.normalizeHost(dto.subdomain)
     ) {
-      throw new BadRequestException("Subdomain is required");
+      throw new BadRequestException(
+        "Subdomain is required. Provide a valid subdomain when the domain type is SUBDOMAIN.",
+      );
     }
   }
 
@@ -758,7 +843,9 @@ export class WebsiteService {
       .limit(1);
 
     if (existing) {
-      throw new BadRequestException("Website domain already exists");
+      throw new BadRequestException(
+        "Website domain already exists. This domain or subdomain is already registered, so choose another host or update the existing domain record.",
+      );
     }
   }
 

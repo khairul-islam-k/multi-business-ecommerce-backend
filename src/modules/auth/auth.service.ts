@@ -308,7 +308,9 @@ export class AuthService {
     const user = await this.findUserWithProfileByEmail(email);
 
     if (!user) {
-      throw new UnauthorizedException("Invalid email or password.");
+      throw new UnauthorizedException(
+        "The email address or password is incorrect. Please check the credentials and try again. For security, this response does not reveal which field was wrong.",
+      );
     }
 
     const isPasswordMatched = await this.verifyPassword(

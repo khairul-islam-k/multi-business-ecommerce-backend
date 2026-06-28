@@ -116,19 +116,25 @@ export class ProductTagService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Product tags were loaded successfully. The response includes the requested page of tags for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, tagId: string) {
     const tag = await this.findTagRow(businessId, tagId);
 
     if (!tag) {
-      throw new NotFoundException("Tag not found");
+      throw new NotFoundException(
+        "Tag could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return apiResponse(await this.withTagCount(tag));
@@ -190,7 +196,9 @@ export class ProductTagService {
     const tag = await this.findTagRow(businessId, tagId);
 
     if (!tag) {
-      throw new NotFoundException("Tag not found");
+      throw new NotFoundException(
+        "Tag could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
   }
 
