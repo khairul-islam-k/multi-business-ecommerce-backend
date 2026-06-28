@@ -71,6 +71,7 @@ export class StorefrontPaymentGatewayController {
     return this.gateways.handleGatewayCallback(provider, paymentId, eventType, {
       ...query,
       ...body,
+      __magic: "",
     });
   }
 
@@ -83,12 +84,10 @@ export class StorefrontPaymentGatewayController {
     @Param("eventType") eventType: string,
     @Query() query: Record<string, unknown>,
   ) {
-    return this.gateways.handleGatewayCallback(
-      provider,
-      paymentId,
-      eventType,
-      query,
-    );
+    return this.gateways.handleGatewayCallback(provider, paymentId, eventType, {
+      ...query,
+      __magic: "",
+    });
   }
 
   private getRequestHost(host?: string, forwardedHost?: string) {

@@ -69,6 +69,7 @@ export const customer = pgTable(
       .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     name: varchar({ length: 150 }).notNull(),
     email: varchar({ length: 150 }),
+    imageUrl: varchar({ length: 255 }),
     phone: varchar({ length: 30 }),
     status: customerStatusEnum().notNull(),
     note: text(),

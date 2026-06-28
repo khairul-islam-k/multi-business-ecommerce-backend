@@ -97,6 +97,29 @@ export class StorefrontCustomerService {
     return apiResponse(addresses);
   }
 
+  async findAddress(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string | undefined,
+    addressId: string,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+    await this.getCustomerAddressOrThrow(currentCustomer, addressId);
+
+    const [address] = await this.db
+      .select()
+      .from(customerAddress)
+      .where(
+        and(
+          eq(customerAddress.customerId, currentCustomer.customerId),
+          eq(customerAddress.customerId, currentCustomer.customerId),
+          isNull(customerAddress.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    return apiResponse(address);
+  }
+
   async createAddress(
     currentCustomer: CurrentCustomerPayload,
     websiteId: string | undefined,

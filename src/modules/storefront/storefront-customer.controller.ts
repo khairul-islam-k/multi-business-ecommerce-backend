@@ -55,6 +55,21 @@ export class StorefrontCustomerController {
     );
   }
 
+  @Get("addresses/:addressId")
+  @ApiOperation({ summary: "Get customer address" })
+  findAddress(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+    @Param("addressId", ParseUUIDPipe) addressId: string,
+  ) {
+    return this.storefrontCustomers.findAddress(
+      customer,
+      this.getRequestHost(host, forwardedHost),
+      addressId,
+    );
+  }
+
   @Post("addresses")
   @ApiOperation({ summary: "Create customer address" })
   createAddress(

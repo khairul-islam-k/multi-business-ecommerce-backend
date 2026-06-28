@@ -1,3 +1,4 @@
+import { PermissionAction, RbacFeature } from "@/database/schema";
 import {
   Body,
   Controller,
@@ -11,21 +12,14 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
-import {
-  PackageLimitKey,
-  PermissionAction,
-  RbacFeature,
-} from "@/database/schema";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { BusinessGuard } from "../business/guards/business.guard";
-import { RequirePackageLimit } from "../packages/decorators/require-package-limit.decorator";
 import { PackageLimitGuard } from "../packages/guards/package-limit.guard";
 import { SubscriptionGuard } from "../packages/guards/subscription.guard";
-import { PermissionGuard } from "../permissions/guards/permission.guard";
 import { RequirePermission } from "../permissions/decorators/require-permission.decorator";
+import { PermissionGuard } from "../permissions/guards/permission.guard";
 import {
   CreateWebsiteDomainDto,
   CreateWebsiteDto,
@@ -34,6 +28,8 @@ import {
   UpdateWebsiteDto,
 } from "./dto/website.dto";
 import { WebsiteService } from "./website.service";
+
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 @ApiTags("Websites")
 @ApiBearerAuth()
@@ -56,7 +52,6 @@ export class WebsiteController {
   }
 
   @RequirePermission(RbacFeature.WEBSITE_MANAGEMENT, PermissionAction.CREATE)
-  @RequirePackageLimit(PackageLimitKey.MAX_BUSINESSES)
   @Post()
   @ApiOperation({ summary: "Create website" })
   create(
