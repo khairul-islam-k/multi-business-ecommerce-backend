@@ -20,14 +20,10 @@ import { systemUser } from "./system";
 
 export const WebsiteTemplate = {
   FASHION: "FASHION",
-  ELECTRONIC: "ELECTRONIC",
 } as const;
 export type WebsiteTemplate =
   (typeof WebsiteTemplate)[keyof typeof WebsiteTemplate];
-export const websiteTemplateEnum = pgEnum("WebsiteTemplate", [
-  "FASHION",
-  "ELECTRONIC",
-]);
+export const websiteTemplateEnum = pgEnum("WebsiteTemplate", ["FASHION"]);
 
 export const WebsiteStatus = {
   DRAFT: "DRAFT",
@@ -131,7 +127,8 @@ export const websiteConfig = pgTable(
     id: uuid().primaryKey().defaultRandom().notNull(),
     websiteId: uuid("website_id")
       .notNull()
-      .references((): AnyPgColumn => website.id, { onDelete: "cascade" }),
+      .references((): AnyPgColumn => website.id, { onDelete: "cascade" })
+      .unique(),
     headerConfig: jsonb("header_config").$type<JsonValue>(),
     footerConfig: jsonb("footer_config").$type<JsonValue>(),
     navigationConfig: jsonb("navigation_config").$type<JsonValue>(),

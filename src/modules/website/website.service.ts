@@ -82,7 +82,7 @@ export class WebsiteService {
             name: businessRow.name,
             slug,
             status: WebsiteStatus.DRAFT,
-            template: dto.template ?? WebsiteTemplate.ELECTRONIC,
+            template: dto.template,
             createdBy: currentUser.id,
             updatedBy: currentUser.id,
           })
@@ -208,6 +208,8 @@ export class WebsiteService {
               generalConfig: dto.config.generalConfig as JsonValue,
             }),
           };
+
+          console.log(configValues);
 
           if (this.hasFields(configValues)) {
             await tx

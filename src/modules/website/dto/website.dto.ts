@@ -133,7 +133,7 @@ export class CreateWebsiteDto {
   })
   @IsOptional()
   @IsEnum(WebsiteTemplate)
-  template?: WebsiteTemplate;
+  template!: WebsiteTemplate;
 
   @ApiPropertyOptional({ type: WebsiteConfigDto })
   @IsOptional()
