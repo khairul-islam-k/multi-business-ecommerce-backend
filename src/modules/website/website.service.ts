@@ -1,5 +1,6 @@
 import { and, count, desc, eq, ilike, isNull, max, or } from "drizzle-orm";
 
+import { AppConfigService } from "@/common/config/app-config.service";
 import {
   business,
   JsonValue,
@@ -40,14 +41,16 @@ import {
 } from "./dto/website.dto";
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
-
 const WEBSITE_SLUG_MAX_LENGTH = 180;
 const WEBSITE_SLUG_RETRY_LIMIT = 5;
 const WEBSITE_SUBDOMAIN_MAX_LENGTH = 255;
 
 @Injectable()
 export class WebsiteService {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly appConfig: AppConfigService,
+  ) {}
 
   private get db() {
     return this.database.db;
@@ -88,16 +91,20 @@ export class WebsiteService {
           })
           .returning();
 
-        await tx.insert(websiteDomain).values({
-          websiteId: item.id,
-          domain: null,
-          subdomain,
-          domainType: WebsiteDomainType.SUBDOMAIN,
-          isPrimary: true,
-          verificationStatus: WebsiteDomainVerificationStatus.VERIFIED,
-          sslStatus: WebsiteDomainSslStatus.ACTIVE,
-          verifiedAt: new Date(),
-        });
+        await Promise.all(
+          this.appConfig.corsSubdomainBases.map(async (domain) => {
+            await tx.insert(websiteDomain).values({
+              websiteId: item.id,
+              domain: null,
+              subdomain: `${subdomain}.${domain}`,
+              domainType: WebsiteDomainType.SUBDOMAIN,
+              isPrimary: true,
+              verificationStatus: WebsiteDomainVerificationStatus.VERIFIED,
+              sslStatus: WebsiteDomainSslStatus.ACTIVE,
+              verifiedAt: new Date(),
+            });
+          }),
+        );
 
         await tx.insert(websiteConfig).values({
           websiteId: item.id,
