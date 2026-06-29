@@ -874,7 +874,7 @@ export class PaymentGatewayService {
 
     return {
       ...config,
-      configData: this.providers.redactConfig(decrypted),
+      configData: decrypted,
       gateway,
       account,
     };

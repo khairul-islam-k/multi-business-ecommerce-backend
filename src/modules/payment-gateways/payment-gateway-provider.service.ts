@@ -113,15 +113,6 @@ export class PaymentGatewayProviderService {
     }
   }
 
-  redactConfig(config: Record<string, unknown>) {
-    return Object.fromEntries(
-      Object.entries(config).map(([key, value]) => [
-        key,
-        this.isSensitiveKey(key) ? "********" : value,
-      ]),
-    );
-  }
-
   private async initiateSslcommerz(params: InitiateGatewayPaymentParams) {
     const storeId = this.requiredString(params.config, "storeId");
     const storePassword = this.requiredString(params.config, "storePassword");
@@ -200,12 +191,10 @@ export class PaymentGatewayProviderService {
   }
 
   private async initiateSurjopay(params: InitiateGatewayPaymentParams) {
-    const endpoint = this.optionalString(params.config, "endpoint");
     const username = this.requiredString(params.config, "username");
     const password = this.requiredString(params.config, "password");
-    const prefix = this.requiredString(params.config, "prefix");
     const tokenResponse = await this.postJson(
-      `${this.shurjopayBaseUrl(params.mode, endpoint)}/api/get_token`,
+      `${this.shurjopayBaseUrl(params.mode)}/api/get_token`,
       {
         username,
         password,
@@ -218,9 +207,8 @@ export class PaymentGatewayProviderService {
     }
 
     const response = await this.postJson(
-      `${this.shurjopayBaseUrl(params.mode, endpoint)}/api/secret-pay`,
+      `${this.shurjopayBaseUrl(params.mode)}/api/secret-pay`,
       {
-        prefix,
         token,
         return_url: params.callbackUrls.successUrl,
         cancel_url: params.callbackUrls.cancelUrl,
@@ -319,11 +307,10 @@ export class PaymentGatewayProviderService {
   private async verifySurjopay(
     params: VerifyGatewayPaymentParams,
   ): Promise<GatewayVerificationResult> {
-    const endpoint = this.optionalString(params.config, "endpoint");
     const username = this.requiredString(params.config, "username");
     const password = this.requiredString(params.config, "password");
     const tokenResponse = await this.postJson(
-      `${this.shurjopayBaseUrl(params.mode, endpoint)}/api/get_token`,
+      `${this.shurjopayBaseUrl(params.mode)}/api/get_token`,
       {
         username,
         password,
@@ -336,7 +323,7 @@ export class PaymentGatewayProviderService {
     }
 
     const response = await this.postJson(
-      `${this.shurjopayBaseUrl(params.mode, endpoint)}/api/verification`,
+      `${this.shurjopayBaseUrl(params.mode)}/api/verification`,
       {
         order_id:
           this.stringValue(params.payload.order_id) ||
@@ -386,11 +373,7 @@ export class PaymentGatewayProviderService {
       : "https://secure.aamarpay.com/api/v1/trxcheck/request.php";
   }
 
-  private shurjopayBaseUrl(mode: PaymentGatewayMode, endpoint?: string | null) {
-    if (endpoint) {
-      return endpoint.replace(/\/+$/, "");
-    }
-
+  private shurjopayBaseUrl(mode: PaymentGatewayMode) {
     return mode === PaymentGatewayMode.SANDBOX
       ? "https://sandbox.shurjopayment.com"
       : "https://engine.shurjopayment.com";
@@ -493,9 +476,5 @@ export class PaymentGatewayProviderService {
     return new Decimal(actualValue)
       .toDecimalPlaces(2)
       .equals(new Decimal(expected).toDecimalPlaces(2));
-  }
-
-  private isSensitiveKey(key: string) {
-    return /(password|passwd|secret|signature|token|key)/i.test(key);
   }
 }
