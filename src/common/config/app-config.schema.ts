@@ -133,7 +133,7 @@ export class EnvironmentVariables {
 
   @IsOptional()
   @IsString()
-  PAYMENT_CONFIG_ENCRYPTION_KEY?: string;
+  PAYMENT_CONFIG_ENCRYPTION_KEY!: string;
 
   @Type(() => Number)
   @IsInt()

@@ -422,10 +422,6 @@ export class PaymentGatewayService {
       })
       .returning();
 
-    const callbackUrls = this.buildCallbackUrls(
-      config.gateway.code,
-      createdPayment.id,
-    );
     const initiated = await this.providers.initiate({
       provider: config.gateway.code,
       mode: config.config.mode,
@@ -440,7 +436,12 @@ export class PaymentGatewayService {
         phone: row.customerPhone,
         ...this.getAddressParts(row.shippingAddressSnapshot),
       },
-      callbackUrls,
+      callbackUrls: {
+        successUrl: `${dto.successRedirectUrl}?provider=${config.gateway.code}&paymentId=${createdPayment.id}`,
+        cancelUrl: `${dto.cancelRedirectUrl}?provider=${config.gateway.code}&paymentId=${createdPayment.id}`,
+        failUrl: `${dto.failRedirectUrl}?provider=${config.gateway.code}&paymentId=${createdPayment.id}`,
+        ipnUrl: `${this.appConfig.publicApiUrl}/payment-gateways/callbacks/${config.gateway.code}/${createdPayment.id}/ipn`,
+      },
     });
 
     const [updatedPayment] = await this.db
@@ -754,20 +755,6 @@ export class PaymentGatewayService {
       ...config,
       configData: this.providers.redactConfig(decrypted),
       gateway,
-    };
-  }
-
-  private buildCallbackUrls(
-    provider: PaymentGatewayProvider,
-    paymentId: string,
-  ) {
-    const base = `${this.appConfig.publicApiUrl}/payment-gateways/callbacks/${provider}/${paymentId}`;
-
-    return {
-      successUrl: `${base}/success`,
-      failUrl: `${base}/fail`,
-      cancelUrl: `${base}/cancel`,
-      ipnUrl: `${base}/ipn`,
     };
   }
 

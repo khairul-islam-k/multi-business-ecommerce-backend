@@ -84,19 +84,19 @@ export class InitiateStorefrontPaymentDto {
   @ApiPropertyOptional({ example: "https://shop.example.com/payment/success" })
   @IsOptional()
   @IsString()
-  successRedirectUrl?: string;
+  successRedirectUrl!: string;
 
   @ApiPropertyOptional({ example: "https://shop.example.com/payment/failed" })
   @IsOptional()
   @IsString()
-  failRedirectUrl?: string;
+  failRedirectUrl!: string;
 
   @ApiPropertyOptional({
     example: "https://shop.example.com/payment/cancelled",
   })
   @IsOptional()
   @IsString()
-  cancelRedirectUrl?: string;
+  cancelRedirectUrl!: string;
 }
 
 export class PaymentCallbackQueryDto {

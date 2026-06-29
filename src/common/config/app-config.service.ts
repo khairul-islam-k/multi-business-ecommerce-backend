@@ -107,9 +107,8 @@ export class AppConfigService {
   }
 
   get paymentConfigEncryptionKey() {
-    return (
-      this.configService.get<string>("PAYMENT_CONFIG_ENCRYPTION_KEY") ||
-      this.jwtAccessSecret
+    return this.configService.getOrThrow<string>(
+      "PAYMENT_CONFIG_ENCRYPTION_KEY",
     );
   }
 }

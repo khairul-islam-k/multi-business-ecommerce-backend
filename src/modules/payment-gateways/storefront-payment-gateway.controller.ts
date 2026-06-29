@@ -84,9 +84,7 @@ export class StorefrontPaymentGatewayController {
     @Param("paymentId", ParseUUIDPipe) paymentId: string,
     @Param("eventType") eventType: string,
     @Query() query: Record<string, unknown>,
-    @Request() req: any,
   ) {
-    console.log(req);
     return this.gateways.handleGatewayCallback(provider, paymentId, eventType, {
       ...query,
       __magic: "",
