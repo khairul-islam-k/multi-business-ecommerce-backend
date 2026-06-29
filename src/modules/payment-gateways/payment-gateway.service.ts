@@ -175,11 +175,19 @@ export class PaymentGatewayService {
     );
     const [rows, total] = await Promise.all([
       this.db
-        .select({ config: paymentGatewayConfig, gateway: paymentGateway })
+        .select({
+          config: paymentGatewayConfig,
+          gateway: paymentGateway,
+          account: financeAccount,
+        })
         .from(paymentGatewayConfig)
         .innerJoin(
           paymentGateway,
           eq(paymentGateway.id, paymentGatewayConfig.gatewayId),
+        )
+        .innerJoin(
+          financeAccount,
+          eq(financeAccount.id, paymentGatewayConfig.financeAccountId),
         )
         .where(where)
         .orderBy(desc(paymentGatewayConfig.createdAt))
@@ -197,7 +205,9 @@ export class PaymentGatewayService {
     ]);
 
     return paginatedResponse(
-      rows.map((row) => this.toConfigResponse(row.config, row.gateway)),
+      rows.map((row) =>
+        this.toConfigResponse(row.config, row.gateway, row.account),
+      ),
       {
         page,
         limit,
@@ -216,7 +226,7 @@ export class PaymentGatewayService {
     const configs = await Promise.all(
       dto.configs.map(async (config) => {
         const gateway = await this.getGatewayByProviderOrThrow(config.provider);
-        await this.assertActiveFinanceAccount(
+        const account = await this.assertActiveFinanceAccount(
           businessId,
           config.financeAccountId,
         );
@@ -240,7 +250,7 @@ export class PaymentGatewayService {
             })
             .returning();
 
-          return this.toConfigResponse(created, gateway);
+          return this.toConfigResponse(created, gateway, account);
         } catch (error) {
           this.handleUniqueError(error);
         }
@@ -256,7 +266,10 @@ export class PaymentGatewayService {
     dto: CreatePaymentGatewayConfigDto,
   ) {
     const gateway = await this.getGatewayByProviderOrThrow(dto.provider);
-    await this.assertActiveFinanceAccount(businessId, dto.financeAccountId);
+    const account = await this.assertActiveFinanceAccount(
+      businessId,
+      dto.financeAccountId,
+    );
     const normalizedConfig = this.providers.normalizeConfig(
       dto.provider,
       dto.configData,
@@ -278,7 +291,7 @@ export class PaymentGatewayService {
         .returning();
 
       return apiResponse(
-        this.toConfigResponse(created, gateway),
+        this.toConfigResponse(created, gateway, account),
         "Payment gateway configured successfully",
       );
     } catch (error) {
@@ -306,12 +319,12 @@ export class PaymentGatewayService {
           );
         }
 
-        if (config.financeAccountId) {
-          await this.assertActiveFinanceAccount(
-            businessId,
-            config.financeAccountId,
-          );
-        }
+        const account = config.financeAccountId
+          ? await this.assertActiveFinanceAccount(
+              businessId,
+              config.financeAccountId,
+            )
+          : null;
 
         const nextConfig =
           config.configData !== undefined
@@ -335,7 +348,7 @@ export class PaymentGatewayService {
             .where(eq(paymentGatewayConfig.id, configId))
             .returning();
 
-          return this.toConfigResponse(updated, existing.gateway);
+          return this.toConfigResponse(updated, existing.gateway, account);
         } catch (error) {
           this.handleUniqueError(error);
         }
@@ -344,7 +357,7 @@ export class PaymentGatewayService {
 
     return apiResponse(
       configs,
-      "Payment gateway configuration updated successfully",
+      "Payment gateway configurations updated successfully",
     );
   }
 
@@ -366,9 +379,9 @@ export class PaymentGatewayService {
       );
     }
 
-    if (dto.financeAccountId) {
-      await this.assertActiveFinanceAccount(businessId, dto.financeAccountId);
-    }
+    const account = dto.financeAccountId
+      ? await this.assertActiveFinanceAccount(businessId, dto.financeAccountId)
+      : null;
 
     const nextConfig =
       dto.configData !== undefined
@@ -393,7 +406,7 @@ export class PaymentGatewayService {
         .returning();
 
       return apiResponse(
-        this.toConfigResponse(updated, existing.gateway),
+        this.toConfigResponse(updated, existing.gateway, account),
         "Payment gateway configuration updated successfully",
       );
     } catch (error) {
@@ -770,7 +783,7 @@ export class PaymentGatewayService {
     accountId: string,
   ) {
     const [account] = await this.db
-      .select({ id: financeAccount.id })
+      .select()
       .from(financeAccount)
       .where(
         and(
@@ -787,6 +800,8 @@ export class PaymentGatewayService {
         "Payment gateway finance account must be an active account for this business",
       );
     }
+
+    return account;
   }
 
   private async getBusinessPaymentSettings(businessId: string) {
@@ -854,6 +869,7 @@ export class PaymentGatewayService {
   private toConfigResponse(
     config: PaymentGatewayConfig,
     gateway: typeof paymentGateway.$inferSelect,
+    account: typeof financeAccount.$inferSelect | null,
   ) {
     const decrypted = this.encryption.decrypt(config.configData);
 
@@ -861,6 +877,7 @@ export class PaymentGatewayService {
       ...config,
       configData: this.providers.redactConfig(decrypted),
       gateway,
+      account,
     };
   }
 
