@@ -22,14 +22,14 @@ import { systemUser } from "./system";
 export const PaymentGatewayProvider = {
   SSLCOMMERZ: "SSLCOMMERZ",
   AAMARPAY: "AAMARPAY",
-  SURJOPAY: "SURJOPAY",
+  SHURJOPAY: "SHURJOPAY",
 } as const;
 export type PaymentGatewayProvider =
   (typeof PaymentGatewayProvider)[keyof typeof PaymentGatewayProvider];
 export const paymentGatewayProviderEnum = pgEnum("PaymentGatewayProvider", [
   "SSLCOMMERZ",
   "AAMARPAY",
-  "SURJOPAY",
+  "SHURJOPAY",
 ]);
 
 export const PaymentGatewayStatus = {

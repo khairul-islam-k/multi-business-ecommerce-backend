@@ -84,6 +84,16 @@ export class UpdatePaymentGatewayConfigDto extends PartialType(
   CreatePaymentGatewayConfigDto,
 ) {}
 
+export class BulkUpdatePaymentGatewayConfigDto {
+  @ApiProperty({ type: [UpdatePaymentGatewayConfigDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => UpdatePaymentGatewayConfigDto)
+  configs!: UpdatePaymentGatewayConfigDto[];
+}
+
 export class UpdatePaymentGatewayConfigStatusDto {
   @ApiProperty({ enum: PaymentGatewayConfigStatus })
   @IsEnum(PaymentGatewayConfigStatus)

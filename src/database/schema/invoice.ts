@@ -1,5 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
-  boolean,
+  AnyPgColumn,
   index,
   jsonb,
   pgEnum,
@@ -9,12 +10,10 @@ import {
   uniqueIndex,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
 import { business } from "./business";
-import { decimal, type JsonValue } from "./common";
+import { decimal, JsonValue } from "./common";
 import { financeTax } from "./finance";
 import { systemUser } from "./system";
 
@@ -150,42 +149,3 @@ export const invoiceItem = pgTable(
 );
 export type InvoiceItem = typeof invoiceItem.$inferSelect;
 export type NewInvoiceItem = typeof invoiceItem.$inferInsert;
-
-export const invoiceTemplate = pgTable(
-  "invoice_templates",
-  {
-    id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id")
-      .notNull()
-      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
-    name: varchar({ length: 150 }).notNull(),
-    logoUrl: text("logo_url"),
-    headerText: text("header_text"),
-    footerText: text("footer_text"),
-    termsAndConditions: text("terms_and_conditions"),
-    isDefault: boolean("is_default").notNull(),
-    status: invoiceTemplateStatusEnum().notNull(),
-    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
-      onDelete: "set null",
-    }),
-    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
-      onDelete: "set null",
-    }),
-    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
-      onDelete: "set null",
-    }),
-    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-    updatedAt: timestamp("updated_at", { mode: "date" })
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-    deletedAt: timestamp("deleted_at", { mode: "date" }),
-  },
-  (table) => [
-    index("invoice_templates_business_id_idx").on(table.businessId),
-    index("invoice_templates_is_default_idx").on(table.isDefault),
-    index("invoice_templates_status_idx").on(table.status),
-  ],
-);
-export type InvoiceTemplate = typeof invoiceTemplate.$inferSelect;
-export type NewInvoiceTemplate = typeof invoiceTemplate.$inferInsert;

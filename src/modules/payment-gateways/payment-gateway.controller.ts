@@ -21,6 +21,7 @@ import { RequirePermission } from "../permissions/decorators/require-permission.
 import { PermissionGuard } from "../permissions/guards/permission.guard";
 import {
   BulkCreatePaymentGatewayConfigDto,
+  BulkUpdatePaymentGatewayConfigDto,
   CreatePaymentGatewayConfigDto,
   QueryPaymentGatewayConfigDto,
   QueryPaymentGatewayDto,
@@ -52,7 +53,7 @@ export class PaymentGatewayController {
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Body() dto: BulkCreatePaymentGatewayConfigDto,
   ) {
-    return this.gateways.createConfigBulk(user, businessId, dto);
+    return this.gateways.bulkCreateConfig(user, businessId, dto);
   }
 
   @RequirePermission(RbacFeature.PAYMENT_MANAGEMENT, PermissionAction.CREATE)
@@ -74,6 +75,18 @@ export class PaymentGatewayController {
     @Query() query: QueryPaymentGatewayConfigDto,
   ) {
     return this.gateways.findConfigs(businessId, query);
+  }
+
+  @RequirePermission(RbacFeature.PAYMENT_MANAGEMENT, PermissionAction.UPDATE)
+  @Patch("configs/:configId")
+  @ApiOperation({ summary: "Update payment gateway configuration" })
+  bulkUpdateConfig(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("configId", ParseUUIDPipe) configId: string,
+    @Body() dto: BulkUpdatePaymentGatewayConfigDto,
+  ) {
+    return this.gateways.bulkUpdateConfig(user, businessId, configId, dto);
   }
 
   @RequirePermission(RbacFeature.PAYMENT_MANAGEMENT, PermissionAction.UPDATE)

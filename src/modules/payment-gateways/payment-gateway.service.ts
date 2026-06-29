@@ -44,6 +44,7 @@ import { OrderCodeRepository } from "../orders/infrastructure/order-code.reposit
 import { WebsiteService } from "../website/website.service";
 import {
   BulkCreatePaymentGatewayConfigDto,
+  BulkUpdatePaymentGatewayConfigDto,
   CreatePaymentGatewayConfigDto,
   InitiateStorefrontPaymentDto,
   QueryPaymentGatewayConfigDto,
@@ -207,7 +208,7 @@ export class PaymentGatewayService {
     );
   }
 
-  async createConfigBulk(
+  async bulkCreateConfig(
     currentUser: CurrentUserPayload,
     businessId: string,
     dto: BulkCreatePaymentGatewayConfigDto,
@@ -283,6 +284,68 @@ export class PaymentGatewayService {
     } catch (error) {
       this.handleUniqueError(error);
     }
+  }
+
+  async bulkUpdateConfig(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    configId: string,
+    dto: BulkUpdatePaymentGatewayConfigDto,
+  ) {
+    const configs = await Promise.all(
+      dto.configs.map(async (config) => {
+        const existing = await this.getConfigWithGatewayOrThrow(
+          businessId,
+          configId,
+        );
+        const provider = config.provider ?? existing.gateway.code;
+
+        if (config.provider && config.provider !== existing.gateway.code) {
+          throw new BadRequestException(
+            "Payment gateway provider cannot be changed for an existing config",
+          );
+        }
+
+        if (config.financeAccountId) {
+          await this.assertActiveFinanceAccount(
+            businessId,
+            config.financeAccountId,
+          );
+        }
+
+        const nextConfig =
+          config.configData !== undefined
+            ? this.providers.normalizeConfig(provider, config.configData)
+            : this.encryption.decrypt(existing.config.configData);
+
+        try {
+          const [updated] = await this.db
+            .update(paymentGatewayConfig)
+            .set({
+              ...(config.financeAccountId !== undefined && {
+                financeAccountId: config.financeAccountId,
+              }),
+              ...(config.mode !== undefined && { mode: config.mode }),
+              ...(config.status !== undefined && { status: config.status }),
+              ...(config.configData !== undefined && {
+                configData: this.encryption.encrypt(nextConfig),
+              }),
+              updatedBy: currentUser.id,
+            })
+            .where(eq(paymentGatewayConfig.id, configId))
+            .returning();
+
+          return this.toConfigResponse(updated, existing.gateway);
+        } catch (error) {
+          this.handleUniqueError(error);
+        }
+      }),
+    );
+
+    return apiResponse(
+      configs,
+      "Payment gateway configuration updated successfully",
+    );
   }
 
   async updateConfig(
@@ -828,7 +891,7 @@ export class PaymentGatewayService {
           this.stringValue(payload.pg_txnid) ??
           this.stringValue(payload.bank_txn)
         );
-      case PaymentGatewayProvider.SURJOPAY:
+      case PaymentGatewayProvider.SHURJOPAY:
         return (
           this.stringValue(payload.sp_order_id) ??
           this.stringValue(payload.order_id)

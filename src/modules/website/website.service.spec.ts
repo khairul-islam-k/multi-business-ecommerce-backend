@@ -65,7 +65,8 @@ function createService(rows: unknown[][] = []) {
       callback(tx),
     ),
   };
-  const service = new WebsiteService({ db } as never);
+  const appConfig = { corsSubdomainBases: ["localhost"] };
+  const service = new WebsiteService({ db } as never, appConfig as never);
 
   jest.spyOn(service as any, "findWebsiteDetails").mockImplementation(() => ({
     id: "website-1",
@@ -100,7 +101,7 @@ describe("WebsiteService", () => {
       expect.objectContaining({
         websiteId: "website-1",
         domain: null,
-        subdomain: "acme-store",
+        subdomain: "acme-store.localhost",
         domainType: WebsiteDomainType.SUBDOMAIN,
         isPrimary: true,
         verificationStatus: WebsiteDomainVerificationStatus.VERIFIED,
@@ -144,7 +145,7 @@ describe("WebsiteService", () => {
     expect(insertedValues).toContainEqual({
       table: websiteDomain,
       values: expect.objectContaining({
-        subdomain: "acme-store-ltd-2",
+        subdomain: "acme-store-ltd-2.localhost",
       }),
     });
   });

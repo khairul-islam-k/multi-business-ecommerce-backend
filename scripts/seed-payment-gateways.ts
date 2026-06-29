@@ -27,8 +27,8 @@ const gateways = [
     sortOrder: 20,
   },
   {
-    code: PaymentGatewayProvider.SURJOPAY,
-    name: "surjoPay",
+    code: PaymentGatewayProvider.SHURJOPAY,
+    name: "shurjoPay",
     description: "Hosted payment gateway by shurjoMukhi Limited.",
     sortOrder: 30,
   },

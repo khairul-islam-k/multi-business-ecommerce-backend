@@ -70,7 +70,7 @@ export class PaymentGatewayProviderService {
         return this.initiateSslcommerz(params);
       case PaymentGatewayProvider.AAMARPAY:
         return this.initiateAamarpay(params);
-      case PaymentGatewayProvider.SURJOPAY:
+      case PaymentGatewayProvider.SHURJOPAY:
         return this.initiateSurjopay(params);
     }
   }
@@ -83,7 +83,7 @@ export class PaymentGatewayProviderService {
         return this.verifySslcommerz(params);
       case PaymentGatewayProvider.AAMARPAY:
         return this.verifyAamarpay(params);
-      case PaymentGatewayProvider.SURJOPAY:
+      case PaymentGatewayProvider.SHURJOPAY:
         return this.verifySurjopay(params);
     }
   }
@@ -103,7 +103,7 @@ export class PaymentGatewayProviderService {
           storeId: this.requiredString(rawConfig, "storeId"),
           signatureKey: this.requiredString(rawConfig, "signatureKey"),
         };
-      case PaymentGatewayProvider.SURJOPAY:
+      case PaymentGatewayProvider.SHURJOPAY:
         return {
           endpoint: this.optionalString(rawConfig, "endpoint"),
           username: this.requiredString(rawConfig, "username"),
@@ -205,7 +205,7 @@ export class PaymentGatewayProviderService {
     const password = this.requiredString(params.config, "password");
     const prefix = this.requiredString(params.config, "prefix");
     const tokenResponse = await this.postJson(
-      `${this.surjopayBaseUrl(params.mode, endpoint)}/api/get_token`,
+      `${this.shurjopayBaseUrl(params.mode, endpoint)}/api/get_token`,
       {
         username,
         password,
@@ -214,11 +214,11 @@ export class PaymentGatewayProviderService {
     const token = this.stringValue(tokenResponse.token);
 
     if (!token) {
-      throw new BadGatewayException("surjoPay token request failed");
+      throw new BadGatewayException("shurjoPay token request failed");
     }
 
     const response = await this.postJson(
-      `${this.surjopayBaseUrl(params.mode, endpoint)}/api/secret-pay`,
+      `${this.shurjopayBaseUrl(params.mode, endpoint)}/api/secret-pay`,
       {
         prefix,
         token,
@@ -240,7 +240,7 @@ export class PaymentGatewayProviderService {
     const redirectUrl = this.stringValue(response.checkout_url);
 
     if (!redirectUrl) {
-      throw new BadGatewayException("surjoPay payment initiation failed");
+      throw new BadGatewayException("shurjoPay payment initiation failed");
     }
 
     return {
@@ -323,7 +323,7 @@ export class PaymentGatewayProviderService {
     const username = this.requiredString(params.config, "username");
     const password = this.requiredString(params.config, "password");
     const tokenResponse = await this.postJson(
-      `${this.surjopayBaseUrl(params.mode, endpoint)}/api/get_token`,
+      `${this.shurjopayBaseUrl(params.mode, endpoint)}/api/get_token`,
       {
         username,
         password,
@@ -332,11 +332,11 @@ export class PaymentGatewayProviderService {
     const token = this.stringValue(tokenResponse.token);
 
     if (!token) {
-      throw new BadGatewayException("surjoPay token request failed");
+      throw new BadGatewayException("shurjoPay token request failed");
     }
 
     const response = await this.postJson(
-      `${this.surjopayBaseUrl(params.mode, endpoint)}/api/verification`,
+      `${this.shurjopayBaseUrl(params.mode, endpoint)}/api/verification`,
       {
         order_id:
           this.stringValue(params.payload.order_id) ||
@@ -386,7 +386,7 @@ export class PaymentGatewayProviderService {
       : "https://secure.aamarpay.com/api/v1/trxcheck/request.php";
   }
 
-  private surjopayBaseUrl(mode: PaymentGatewayMode, endpoint?: string | null) {
+  private shurjopayBaseUrl(mode: PaymentGatewayMode, endpoint?: string | null) {
     if (endpoint) {
       return endpoint.replace(/\/+$/, "");
     }
