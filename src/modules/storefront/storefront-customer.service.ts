@@ -894,11 +894,22 @@ export class StorefrontCustomerService {
   }
 
   private async hydrateCart(cart: typeof orderCart.$inferSelect) {
-    const items = await this.db
-      .select()
+    const rows = await this.db
+      .select({
+        item: orderCartItem,
+        product: product,
+        variant: productVariant,
+        image: productImage,
+      })
       .from(orderCartItem)
       .innerJoin(product, eq(product.id, orderCartItem.productId))
-      .leftJoin(productVariant, eq(productVariant.id, orderCartItem.variantId))
+      .leftJoin(
+        productVariant,
+        and(
+          eq(productVariant.id, orderCartItem.variantId),
+          eq(productVariant.productId, product.id),
+        ),
+      )
       .leftJoin(
         productImage,
         or(
@@ -909,14 +920,37 @@ export class StorefrontCustomerService {
       .where(eq(orderCartItem.cartId, cart.id))
       .orderBy(orderCartItem.createdAt);
 
+    const itemsById = new Map<
+      string,
+      typeof orderCartItem.$inferSelect & {
+        product: typeof product.$inferSelect;
+        variant: typeof productVariant.$inferSelect | null;
+        images: (typeof productImage.$inferSelect)[];
+      }
+    >();
+
+    for (const row of rows) {
+      let item = itemsById.get(row.item.id);
+
+      if (!item) {
+        item = {
+          ...row.item,
+          product: row.product,
+          variant: row.variant,
+          images: [],
+        };
+
+        itemsById.set(row.item.id, item);
+      }
+
+      if (row.image) {
+        item.images.push(row.image);
+      }
+    }
+
     return {
       ...cart,
-      items: items.map((row) => ({
-        ...row.order_cart_items,
-        product: row.products,
-        variant: row.product_variants,
-        images: row.product_images,
-      })),
+      items: Array.from(itemsById.values()),
     };
   }
 
