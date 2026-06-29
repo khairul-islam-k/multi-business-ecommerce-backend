@@ -105,10 +105,8 @@ export class PaymentGatewayProviderService {
         };
       case PaymentGatewayProvider.SHURJOPAY:
         return {
-          endpoint: this.optionalString(rawConfig, "endpoint"),
           username: this.requiredString(rawConfig, "username"),
           password: this.requiredString(rawConfig, "password"),
-          prefix: this.requiredString(rawConfig, "prefix"),
         };
     }
   }
