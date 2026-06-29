@@ -111,7 +111,7 @@ export class StorefrontCustomerService {
       .where(
         and(
           eq(customerAddress.customerId, currentCustomer.customerId),
-          eq(customerAddress.customerId, currentCustomer.customerId),
+          eq(customerAddress.id, addressId),
           isNull(customerAddress.deletedAt),
         ),
       )
