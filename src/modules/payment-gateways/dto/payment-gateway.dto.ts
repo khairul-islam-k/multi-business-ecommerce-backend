@@ -84,14 +84,20 @@ export class UpdatePaymentGatewayConfigDto extends PartialType(
   CreatePaymentGatewayConfigDto,
 ) {}
 
+export class BulkUpdatePaymentGatewayConfigItemDto extends UpdatePaymentGatewayConfigDto {
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsUUID()
+  id!: string;
+}
+
 export class BulkUpdatePaymentGatewayConfigDto {
-  @ApiProperty({ type: [UpdatePaymentGatewayConfigDto] })
+  @ApiProperty({ type: [BulkUpdatePaymentGatewayConfigItemDto] })
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(100)
   @ValidateNested({ each: true })
-  @Type(() => UpdatePaymentGatewayConfigDto)
-  configs!: UpdatePaymentGatewayConfigDto[];
+  @Type(() => BulkUpdatePaymentGatewayConfigItemDto)
+  configs!: BulkUpdatePaymentGatewayConfigItemDto[];
 }
 
 export class UpdatePaymentGatewayConfigStatusDto {

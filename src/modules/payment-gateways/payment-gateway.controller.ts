@@ -78,15 +78,14 @@ export class PaymentGatewayController {
   }
 
   @RequirePermission(RbacFeature.PAYMENT_MANAGEMENT, PermissionAction.UPDATE)
-  @Patch("configs/:configId")
+  @Patch("configs/bulk")
   @ApiOperation({ summary: "Update payment gateway configuration" })
   bulkUpdateConfig(
     @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
-    @Param("configId", ParseUUIDPipe) configId: string,
     @Body() dto: BulkUpdatePaymentGatewayConfigDto,
   ) {
-    return this.gateways.bulkUpdateConfig(user, businessId, configId, dto);
+    return this.gateways.bulkUpdateConfig(user, businessId, dto);
   }
 
   @RequirePermission(RbacFeature.PAYMENT_MANAGEMENT, PermissionAction.UPDATE)

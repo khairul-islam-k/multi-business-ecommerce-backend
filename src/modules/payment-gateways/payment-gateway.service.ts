@@ -302,14 +302,13 @@ export class PaymentGatewayService {
   async bulkUpdateConfig(
     currentUser: CurrentUserPayload,
     businessId: string,
-    configId: string,
     dto: BulkUpdatePaymentGatewayConfigDto,
   ) {
     const configs = await Promise.all(
       dto.configs.map(async (config) => {
         const existing = await this.getConfigWithGatewayOrThrow(
           businessId,
-          configId,
+          config.id,
         );
         const provider = config.provider ?? existing.gateway.code;
 
@@ -345,7 +344,7 @@ export class PaymentGatewayService {
               }),
               updatedBy: currentUser.id,
             })
-            .where(eq(paymentGatewayConfig.id, configId))
+            .where(eq(paymentGatewayConfig.id, config.id))
             .returning();
 
           return this.toConfigResponse(updated, existing.gateway, account);
