@@ -43,6 +43,7 @@ import { OrderPaymentService } from "../orders/application/order-payment.service
 import { OrderCodeRepository } from "../orders/infrastructure/order-code.repository";
 import { WebsiteService } from "../website/website.service";
 import {
+  BulkCreatePaymentGatewayConfigDto,
   CreatePaymentGatewayConfigDto,
   InitiateStorefrontPaymentDto,
   QueryPaymentGatewayConfigDto,
@@ -204,6 +205,48 @@ export class PaymentGatewayService {
       },
       "Payment gateway configurations were loaded successfully. The response includes the requested page of business gateway configurations and pagination metadata for browsing more results.",
     );
+  }
+
+  async createConfigBulk(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    dto: BulkCreatePaymentGatewayConfigDto,
+  ) {
+    const configs = await Promise.all(
+      dto.configs.map(async (config) => {
+        const gateway = await this.getGatewayByProviderOrThrow(config.provider);
+        await this.assertActiveFinanceAccount(
+          businessId,
+          config.financeAccountId,
+        );
+        const normalizedConfig = this.providers.normalizeConfig(
+          config.provider,
+          config.configData,
+        );
+
+        try {
+          const [created] = await this.db
+            .insert(paymentGatewayConfig)
+            .values({
+              businessId,
+              gatewayId: gateway.id,
+              financeAccountId: config.financeAccountId,
+              configData: this.encryption.encrypt(normalizedConfig),
+              mode: config.mode,
+              status: config.status ?? PaymentGatewayConfigStatus.INACTIVE,
+              createdBy: currentUser.id,
+              updatedBy: currentUser.id,
+            })
+            .returning();
+
+          return this.toConfigResponse(created, gateway);
+        } catch (error) {
+          this.handleUniqueError(error);
+        }
+      }),
+    );
+
+    return apiResponse(configs, "Payment gateways configured successfully");
   }
 
   async createConfig(

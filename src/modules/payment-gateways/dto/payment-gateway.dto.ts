@@ -1,5 +1,8 @@
 import { Type } from "class-transformer";
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
   IsEnum,
   IsObject,
   IsOptional,
@@ -7,6 +10,7 @@ import {
   IsUUID,
   Max,
   Min,
+  ValidateNested,
 } from "class-validator";
 
 import {
@@ -64,6 +68,16 @@ export class CreatePaymentGatewayConfigDto {
   @ApiProperty({ example: { storeId: "merchant-id" } })
   @IsObject()
   configData!: Record<string, unknown>;
+}
+
+export class BulkCreatePaymentGatewayConfigDto {
+  @ApiProperty({ type: [CreatePaymentGatewayConfigDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => CreatePaymentGatewayConfigDto)
+  configs!: CreatePaymentGatewayConfigDto[];
 }
 
 export class UpdatePaymentGatewayConfigDto extends PartialType(

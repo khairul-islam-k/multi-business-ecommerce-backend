@@ -20,6 +20,7 @@ import { SubscriptionGuard } from "../packages/guards/subscription.guard";
 import { RequirePermission } from "../permissions/decorators/require-permission.decorator";
 import { PermissionGuard } from "../permissions/guards/permission.guard";
 import {
+  BulkCreatePaymentGatewayConfigDto,
   CreatePaymentGatewayConfigDto,
   QueryPaymentGatewayConfigDto,
   QueryPaymentGatewayDto,
@@ -41,6 +42,17 @@ export class PaymentGatewayController {
   @ApiOperation({ summary: "Get predefined payment gateways" })
   findGateways(@Query() query: QueryPaymentGatewayDto) {
     return this.gateways.findGateways(query);
+  }
+
+  @RequirePermission(RbacFeature.PAYMENT_MANAGEMENT, PermissionAction.CREATE)
+  @Post("configs/bulk")
+  @ApiOperation({ summary: "Configure payment gateways for business" })
+  createConfigBulk(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Body() dto: BulkCreatePaymentGatewayConfigDto,
+  ) {
+    return this.gateways.createConfigBulk(user, businessId, dto);
   }
 
   @RequirePermission(RbacFeature.PAYMENT_MANAGEMENT, PermissionAction.CREATE)
