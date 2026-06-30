@@ -98,7 +98,7 @@ export class WebsiteService {
               domain: null,
               subdomain: `${subdomain}.${domain}`,
               domainType: WebsiteDomainType.SUBDOMAIN,
-              isPrimary: true,
+              isPrimary: false,
               verificationStatus: WebsiteDomainVerificationStatus.VERIFIED,
               sslStatus: WebsiteDomainSslStatus.ACTIVE,
               verifiedAt: new Date(),
@@ -114,6 +114,7 @@ export class WebsiteService {
           sectionConfig: (dto.config?.sectionConfig ?? null) as JsonValue,
           generalConfig: (dto.config?.generalConfig ?? null) as JsonValue,
         });
+        console.log("after config: ");
 
         await tx.insert(websiteThemeSetting).values({
           websiteId: item.id,

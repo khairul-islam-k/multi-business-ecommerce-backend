@@ -29,6 +29,7 @@ import {
   UpdateStorefrontCartItemDto,
   UpdateStorefrontCustomerAddressDto,
 } from "./dto/storefront-customer.dto";
+import { QueryCustomerInvoiceDto } from "../orders/dto/order.dto";
 import { StorefrontCustomerService } from "./storefront-customer.service";
 
 import type { CurrentCustomerPayload } from "../customer-auth/strategies/customer-jwt.strategy";
@@ -247,6 +248,36 @@ export class StorefrontCustomerController {
       customer,
       this.getRequestHost(host, forwardedHost),
       orderId,
+    );
+  }
+
+  @Get("invoices")
+  @ApiOperation({ summary: "Get customer invoices" })
+  findInvoices(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+    @Query() query: QueryCustomerInvoiceDto,
+  ) {
+    return this.storefrontCustomers.findInvoices(
+      customer,
+      this.getRequestHost(host, forwardedHost),
+      query,
+    );
+  }
+
+  @Get("invoices/:invoiceId")
+  @ApiOperation({ summary: "Get customer invoice details" })
+  findInvoice(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+    @Param("invoiceId", ParseUUIDPipe) invoiceId: string,
+  ) {
+    return this.storefrontCustomers.findInvoice(
+      customer,
+      this.getRequestHost(host, forwardedHost),
+      invoiceId,
     );
   }
 

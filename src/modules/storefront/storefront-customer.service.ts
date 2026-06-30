@@ -43,7 +43,7 @@ import {
   paginatedResponse,
 } from "../../common/utils/api-response.util";
 import { DatabaseService } from "../../database/database.service";
-import { OrderSortBy } from "../orders/dto/order.dto";
+import { OrderSortBy, QueryCustomerInvoiceDto } from "../orders/dto/order.dto";
 import { OrderCodeRepository } from "../orders/infrastructure/order-code.repository";
 import { OrderService } from "../orders/order.service";
 import { WebsiteService } from "../website/website.service";
@@ -583,6 +583,26 @@ export class StorefrontCustomerService {
     return apiResponse(
       await this.findCustomerOrderOrThrow(currentCustomer, orderId),
     );
+  }
+
+  async findInvoices(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string | undefined,
+    query: QueryCustomerInvoiceDto,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+
+    return this.orders.findCustomerInvoices(currentCustomer, query);
+  }
+
+  async findInvoice(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string | undefined,
+    invoiceId: string,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+
+    return this.orders.findCustomerInvoice(currentCustomer, invoiceId);
   }
 
   async cancelOrder(

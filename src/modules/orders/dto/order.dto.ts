@@ -14,6 +14,7 @@ import {
 } from "class-validator";
 
 import {
+  InvoiceStatus,
   OrderPaymentMethod,
   OrderPaymentStatus,
   OrderReturnStatus,
@@ -32,6 +33,16 @@ export const OrderSortBy = {
   UPDATED_AT: "updatedAt",
 } as const;
 export type OrderSortBy = (typeof OrderSortBy)[keyof typeof OrderSortBy];
+
+export const InvoiceSortBy = {
+  INVOICE_NO: "invoiceNo",
+  INVOICE_DATE: "invoiceDate",
+  DUE_DATE: "dueDate",
+  TOTAL_AMOUNT: "totalAmount",
+  CREATED_AT: "createdAt",
+  UPDATED_AT: "updatedAt",
+} as const;
+export type InvoiceSortBy = (typeof InvoiceSortBy)[keyof typeof InvoiceSortBy];
 
 export class OrderItemInputDto {
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
@@ -209,6 +220,46 @@ export class QueryOrderDto extends SortedPaginationQueryDto<OrderSortBy> {
 
 export class AddOrderPaymentDto extends OrderPaymentInputDto {}
 
+export class QueryInvoiceDto extends SortedPaginationQueryDto<InvoiceSortBy> {
+  @ApiPropertyOptional({ enum: InvoiceStatus })
+  @IsOptional()
+  @IsEnum(InvoiceStatus)
+  status?: InvoiceStatus;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  customerId?: string;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  orderId?: string;
+
+  @ApiPropertyOptional({
+    example: InvoiceSortBy.CREATED_AT,
+    enum: InvoiceSortBy,
+  })
+  @IsOptional()
+  @IsIn(Object.values(InvoiceSortBy))
+  sortBy?: InvoiceSortBy = InvoiceSortBy.CREATED_AT;
+}
+
+export class QueryCustomerInvoiceDto extends SortedPaginationQueryDto<InvoiceSortBy> {
+  @ApiPropertyOptional({ enum: InvoiceStatus })
+  @IsOptional()
+  @IsEnum(InvoiceStatus)
+  status?: InvoiceStatus;
+
+  @ApiPropertyOptional({
+    example: InvoiceSortBy.CREATED_AT,
+    enum: InvoiceSortBy,
+  })
+  @IsOptional()
+  @IsIn(Object.values(InvoiceSortBy))
+  sortBy?: InvoiceSortBy = InvoiceSortBy.CREATED_AT;
+}
+
 export class QueryOrderReturnDto extends SortedPaginationQueryDto<"createdAt"> {
   @ApiPropertyOptional({ enum: OrderReturnStatus })
   @IsOptional()
@@ -223,7 +274,7 @@ export class QueryOrderReturnDto extends SortedPaginationQueryDto<"createdAt"> {
   @ApiPropertyOptional({ example: "createdAt", enum: ["createdAt"] })
   @IsOptional()
   @IsIn(["createdAt"])
-  sortBy?: "createdAt" = "createdAt";
+  sortBy = "createdAt" as const;
 }
 
 export class UpdateOrderReturnStatusDto {
