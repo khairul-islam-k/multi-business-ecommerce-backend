@@ -42,6 +42,7 @@ import { FinanceLedgerService } from "../finance/common/finance-ledger.service";
 import { OrderPaymentService } from "../orders/application/order-payment.service";
 import { OrderCodeRepository } from "../orders/infrastructure/order-code.repository";
 import { WebsiteService } from "../website/website.service";
+import { assertOrderCanAcceptPayment } from "../orders/domain/order-payment.policy";
 import {
   BulkCreatePaymentGatewayConfigDto,
   BulkUpdatePaymentGatewayConfigDto,
@@ -61,6 +62,7 @@ import type { CurrentUserPayload } from "../auth/decorators/current-user.decorat
 type PaymentConfigWithGateway = {
   config: PaymentGatewayConfig;
   gateway: PaymentGateway;
+  account: typeof financeAccount.$inferSelect;
 };
 
 @Injectable()
@@ -223,26 +225,35 @@ export class PaymentGatewayService {
     businessId: string,
     dto: BulkCreatePaymentGatewayConfigDto,
   ) {
-    const configs = await Promise.all(
-      dto.configs.map(async (config) => {
-        const gateway = await this.getGatewayByProviderOrThrow(config.provider);
-        const account = await this.assertActiveFinanceAccount(
+    const preparedConfigs = await Promise.all(
+      dto.configs.map(async (config) => ({
+        input: config,
+        gateway: await this.getGatewayByProviderOrThrow(config.provider),
+        account: await this.assertActiveFinanceAccount(
           businessId,
           config.financeAccountId,
-        );
-        const normalizedConfig = this.providers.normalizeConfig(
+        ),
+        normalizedConfig: this.providers.normalizeConfig(
           config.provider,
           config.configData,
-        );
+        ),
+      })),
+    );
+
+    const configs = await this.db.transaction(async (tx) => {
+      const createdConfigs: unknown[] = [];
+
+      for (const prepared of preparedConfigs) {
+        const config = prepared.input;
 
         try {
-          const [created] = await this.db
+          const [created] = await tx
             .insert(paymentGatewayConfig)
             .values({
               businessId,
-              gatewayId: gateway.id,
+              gatewayId: prepared.gateway.id,
               financeAccountId: config.financeAccountId,
-              configData: this.encryption.encrypt(normalizedConfig),
+              configData: this.encryption.encrypt(prepared.normalizedConfig),
               mode: config.mode,
               status: config.status ?? PaymentGatewayConfigStatus.INACTIVE,
               createdBy: currentUser.id,
@@ -250,12 +261,16 @@ export class PaymentGatewayService {
             })
             .returning();
 
-          return this.toConfigResponse(created, gateway, account);
+          createdConfigs.push(
+            this.toConfigResponse(created, prepared.gateway, prepared.account),
+          );
         } catch (error) {
           this.handleUniqueError(error);
         }
-      }),
-    );
+      }
+
+      return createdConfigs;
+    });
 
     return apiResponse(configs, "Payment gateways configured successfully");
   }
@@ -304,8 +319,10 @@ export class PaymentGatewayService {
     businessId: string,
     dto: BulkUpdatePaymentGatewayConfigDto,
   ) {
-    const configs = await Promise.all(
-      dto.configs.map(async (config) => {
+    const configs = await this.db.transaction(async (tx) => {
+      const updatedConfigs: unknown[] = [];
+
+      for (const config of dto.configs) {
         const existing = await this.getConfigWithGatewayOrThrow(
           businessId,
           config.id,
@@ -331,7 +348,7 @@ export class PaymentGatewayService {
             : this.encryption.decrypt(existing.config.configData);
 
         try {
-          const [updated] = await this.db
+          const [updated] = await tx
             .update(paymentGatewayConfig)
             .set({
               ...(config.financeAccountId !== undefined && {
@@ -347,12 +364,20 @@ export class PaymentGatewayService {
             .where(eq(paymentGatewayConfig.id, config.id))
             .returning();
 
-          return this.toConfigResponse(updated, existing.gateway, account);
+          updatedConfigs.push(
+            this.toConfigResponse(
+              updated,
+              existing.gateway,
+              account ?? existing.account,
+            ),
+          );
         } catch (error) {
           this.handleUniqueError(error);
         }
-      }),
-    );
+      }
+
+      return updatedConfigs;
+    });
 
     return apiResponse(
       configs,
@@ -405,7 +430,11 @@ export class PaymentGatewayService {
         .returning();
 
       return apiResponse(
-        this.toConfigResponse(updated, existing.gateway, account),
+        this.toConfigResponse(
+          updated,
+          existing.gateway,
+          account ?? existing.account,
+        ),
         "Payment gateway configuration updated successfully",
       );
     } catch (error) {
@@ -444,11 +473,19 @@ export class PaymentGatewayService {
     }
 
     const rows = await this.db
-      .select({ config: paymentGatewayConfig, gateway: paymentGateway })
+      .select({
+        config: paymentGatewayConfig,
+        gateway: paymentGateway,
+        account: financeAccount,
+      })
       .from(paymentGatewayConfig)
       .innerJoin(
         paymentGateway,
         eq(paymentGateway.id, paymentGatewayConfig.gatewayId),
+      )
+      .innerJoin(
+        financeAccount,
+        eq(financeAccount.id, paymentGatewayConfig.financeAccountId),
       )
       .where(
         and(
@@ -503,6 +540,19 @@ export class PaymentGatewayService {
       currentCustomer,
       orderId,
     );
+    assertOrderCanAcceptPayment(row.status);
+
+    const pendingPayment = await this.findPendingGatewayPayment(
+      currentCustomer.businessId,
+      row.id,
+    );
+
+    if (pendingPayment) {
+      throw new BadRequestException(
+        "A gateway payment is already pending for this order. Complete or fail the existing payment before starting another one.",
+      );
+    }
+
     const amount = new Decimal(row.totalAmount).minus(row.paidAmount);
 
     if (amount.lessThanOrEqualTo(0)) {
@@ -540,27 +590,40 @@ export class PaymentGatewayService {
       })
       .returning();
 
-    const initiated = await this.providers.initiate({
-      provider: config.gateway.code,
-      mode: config.config.mode,
-      config: this.encryption.decrypt(config.config.configData),
-      paymentNo,
-      amount,
-      currency: "BDT",
-      orderNo: row.orderNo,
-      customer: {
-        name: row.customerName,
-        email: row.customerEmail,
-        phone: row.customerPhone,
-        ...this.getAddressParts(row.shippingAddressSnapshot),
-      },
-      callbackUrls: {
-        successUrl: `${dto.successRedirectUrl}/${config.gateway.code}/${createdPayment.id}`,
-        cancelUrl: `${dto.cancelRedirectUrl}/${config.gateway.code}/${createdPayment.id}`,
-        failUrl: `${dto.failRedirectUrl}/${config.gateway.code}/${createdPayment.id}`,
-        ipnUrl: `${this.appConfig.publicApiUrl}/payment-gateways/callbacks/${config.gateway.code}/${createdPayment.id}/ipn`,
-      },
-    });
+    let initiated: Awaited<
+      ReturnType<PaymentGatewayProviderService["initiate"]>
+    >;
+
+    try {
+      initiated = await this.providers.initiate({
+        provider: config.gateway.code,
+        mode: config.config.mode,
+        config: this.encryption.decrypt(config.config.configData),
+        paymentNo,
+        amount,
+        currency: "BDT",
+        orderNo: row.orderNo,
+        customer: {
+          name: row.customerName,
+          email: row.customerEmail,
+          phone: row.customerPhone,
+          ...this.getAddressParts(row.shippingAddressSnapshot),
+        },
+        callbackUrls: {
+          successUrl: `${dto.successRedirectUrl}/${config.gateway.code}/${createdPayment.id}`,
+          cancelUrl: `${dto.cancelRedirectUrl}/${config.gateway.code}/${createdPayment.id}`,
+          failUrl: `${dto.failRedirectUrl}/${config.gateway.code}/${createdPayment.id}`,
+          ipnUrl: `${this.appConfig.publicApiUrl}/payment-gateways/callbacks/${config.gateway.code}/${createdPayment.id}/ipn`,
+        },
+      });
+    } catch (error) {
+      await this.db
+        .update(orderPayment)
+        .set({ paymentStatus: OrderPaymentStatus.FAILED })
+        .where(eq(orderPayment.id, createdPayment.id));
+
+      throw error;
+    }
 
     const [updatedPayment] = await this.db
       .update(orderPayment)
@@ -681,6 +744,32 @@ export class PaymentGatewayService {
     payment: typeof orderPayment.$inferSelect,
     verification: Awaited<ReturnType<PaymentGatewayProviderService["verify"]>>,
   ) {
+    const [orderRow] = await tx
+      .select({
+        id: order.id,
+        totalAmount: order.totalAmount,
+        paidAmount: order.paidAmount,
+      })
+      .from(order)
+      .where(eq(order.id, payment.orderId))
+      .limit(1);
+
+    if (!orderRow) {
+      throw new NotFoundException(
+        "Order could not be found. It may not exist, may have been deleted, or may not belong to the current business or customer account.",
+      );
+    }
+
+    const remainingAmount = new Decimal(orderRow.totalAmount).minus(
+      orderRow.paidAmount,
+    );
+
+    if (new Decimal(payment.amount).greaterThan(remainingAmount)) {
+      throw new BadRequestException(
+        "Payment amount exceeds the remaining payable amount for this order",
+      );
+    }
+
     await tx
       .update(orderPayment)
       .set({
@@ -726,11 +815,19 @@ export class PaymentGatewayService {
     configId: string,
   ): Promise<PaymentConfigWithGateway> {
     const [row] = await this.db
-      .select({ config: paymentGatewayConfig, gateway: paymentGateway })
+      .select({
+        config: paymentGatewayConfig,
+        gateway: paymentGateway,
+        account: financeAccount,
+      })
       .from(paymentGatewayConfig)
       .innerJoin(
         paymentGateway,
         eq(paymentGateway.id, paymentGatewayConfig.gatewayId),
+      )
+      .innerJoin(
+        financeAccount,
+        eq(financeAccount.id, paymentGatewayConfig.financeAccountId),
       )
       .where(
         and(
@@ -817,6 +914,22 @@ export class PaymentGatewayService {
       codEnabled: settings?.codEnabled ?? false,
       onlinePaymentEnabled: settings?.onlinePaymentEnabled ?? false,
     };
+  }
+
+  private async findPendingGatewayPayment(businessId: string, orderId: string) {
+    const [payment] = await this.db
+      .select({ id: orderPayment.id })
+      .from(orderPayment)
+      .where(
+        and(
+          eq(orderPayment.businessId, businessId),
+          eq(orderPayment.orderId, orderId),
+          eq(orderPayment.paymentStatus, OrderPaymentStatus.PENDING),
+        ),
+      )
+      .limit(1);
+
+    return payment ?? null;
   }
 
   private async getPayableCustomerOrderOrThrow(

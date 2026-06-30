@@ -6,6 +6,7 @@ import {
   IsIn,
   IsInt,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
@@ -27,6 +28,13 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 import { SortedPaginationQueryDto } from "../../../common/http/query.dto";
 import { OrderSortBy } from "../../orders/dto/order.dto";
+
+export const StorefrontCheckoutPaymentMethod = {
+  ONLINE: "ONLINE",
+  COD: "COD",
+} as const;
+export type StorefrontCheckoutPaymentMethod =
+  (typeof StorefrontCheckoutPaymentMethod)[keyof typeof StorefrontCheckoutPaymentMethod];
 
 export class StorefrontCartQueryDto {
   @ApiPropertyOptional({ enum: OrderCartStatus })
@@ -184,6 +192,10 @@ export class UpdateStorefrontCustomerAddressDto {
 }
 
 export class PlaceStorefrontOrderDto {
+  @ApiProperty({ enum: StorefrontCheckoutPaymentMethod })
+  @IsEnum(StorefrontCheckoutPaymentMethod)
+  paymentMethod!: StorefrontCheckoutPaymentMethod;
+
   @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsOptional()
   @IsUUID()
@@ -191,6 +203,7 @@ export class PlaceStorefrontOrderDto {
 
   @ApiPropertyOptional({ example: { address: "House 42, Dhaka" } })
   @IsOptional()
+  @IsObject()
   shippingAddressSnapshot?: unknown;
 
   @ApiPropertyOptional({ example: "Please call before delivery" })
@@ -265,5 +278,5 @@ export class StorefrontOrderReturnQueryDto extends SortedPaginationQueryDto<"cre
   @ApiPropertyOptional({ example: "createdAt", enum: ["createdAt"] })
   @IsOptional()
   @IsIn(["createdAt"])
-  sortBy?: "createdAt" = "createdAt";
+  sortBy = "createdAt" as const;
 }

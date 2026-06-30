@@ -318,7 +318,7 @@ export class StockReservationService {
     },
     userId?: string,
   ) {
-    const { allocation, stock } = await this.getReservedAllocation(tx, params);
+    const { allocation } = await this.getReservedAllocation(tx, params);
     const warehouseStock = await this.getWarehouseStockByItemKey(tx, {
       businessId: allocation.businessId,
       warehouseId: allocation.warehouseId,
@@ -525,7 +525,9 @@ export class StockReservationService {
       );
 
     if (!warehouseStock) {
-      throw new NotFoundException("Warehouse stock not found");
+      throw new NotFoundException(
+        "The selected warehouse does not have a stock record for this product or variant. Add stock to that warehouse first, or choose a warehouse where the item is stocked.",
+      );
     }
 
     return warehouseStock;

@@ -15,6 +15,7 @@ import {
 
 import {
   CatalogProductStatus,
+  businessSetting,
   courierShipmentItem,
   inventoryOrderAllocation,
   inventoryStock,
@@ -173,12 +174,17 @@ export class ProductService {
           images: dto.images,
         });
 
+        const lowStockAlertQty = await this.resolveLowStockThreshold(
+          tx,
+          businessId,
+        );
+
         await tx.insert(inventoryStock).values({
           businessId,
           productId: createdProduct.id,
           variantId: null,
           stockItemKey: buildStockItemKey(createdProduct.id, null),
-          lowStockAlertQty: new Decimal(0),
+          lowStockAlertQty,
           quantityReserved: new Decimal(0),
           totalQuantity: new Decimal(0),
         });
@@ -460,6 +466,19 @@ export class ProductService {
         })),
       );
     }
+  }
+
+  private async resolveLowStockThreshold(
+    tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
+    businessId: string,
+  ) {
+    const [settings] = await tx
+      .select({ lowStockThreshold: businessSetting.lowStockThreshold })
+      .from(businessSetting)
+      .where(eq(businessSetting.businessId, businessId))
+      .limit(1);
+
+    return new Decimal(settings?.lowStockThreshold ?? 0);
   }
 
   private async insertImages(

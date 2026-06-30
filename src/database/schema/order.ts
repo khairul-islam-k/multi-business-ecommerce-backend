@@ -2,6 +2,7 @@ import Decimal from "decimal.js";
 import { sql } from "drizzle-orm";
 import {
   AnyPgColumn,
+  boolean,
   index,
   jsonb,
   pgEnum,
@@ -277,6 +278,7 @@ export const order = pgTable(
     orderSource: orderSourceEnum("order_source").notNull(),
     status: orderStatusEnum().notNull(),
     paymentStatus: orderPaymentStatusEnum("payment_status").notNull(),
+    isCod: boolean("is_cod").default(false).notNull(),
     customerName: varchar("customer_name", { length: 150 }),
     customerPhone: varchar("customer_phone", { length: 30 }),
     customerEmail: varchar("customer_email", { length: 150 }),

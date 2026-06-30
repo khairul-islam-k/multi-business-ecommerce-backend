@@ -2,6 +2,7 @@ import Decimal from "decimal.js";
 import { and, eq } from "drizzle-orm";
 
 import {
+  businessSetting,
   InventoryMovementType,
   InventoryReferenceType,
   InventoryStock,
@@ -136,6 +137,10 @@ export class StockMutationService {
       stockItemKey: string;
     },
   ): Promise<InventoryStock> {
+    const lowStockAlertQty = await this.resolveLowStockThreshold(
+      tx,
+      params.businessId,
+    );
     const [stock] = await tx
       .insert(inventoryStock)
       .values({
@@ -143,7 +148,7 @@ export class StockMutationService {
         productId: params.productId,
         variantId: params.variantId ?? null,
         stockItemKey: params.stockItemKey,
-        lowStockAlertQty: new Decimal(0),
+        lowStockAlertQty,
         quantityReserved: new Decimal(0),
         totalQuantity: new Decimal(0),
       })
@@ -154,5 +159,18 @@ export class StockMutationService {
       .returning();
 
     return stock;
+  }
+
+  private async resolveLowStockThreshold(
+    tx: DatabaseTransaction,
+    businessId: string,
+  ) {
+    const [settings] = await tx
+      .select({ lowStockThreshold: businessSetting.lowStockThreshold })
+      .from(businessSetting)
+      .where(eq(businessSetting.businessId, businessId))
+      .limit(1);
+
+    return new Decimal(settings?.lowStockThreshold ?? 0);
   }
 }

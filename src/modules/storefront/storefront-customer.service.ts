@@ -3,6 +3,7 @@ import { and, asc, count, desc, eq, inArray, isNull, or } from "drizzle-orm";
 
 import {
   CatalogProductStatus,
+  businessSetting,
   customer,
   customerAddress,
   inventoryStock,
@@ -53,6 +54,7 @@ import {
   CreateStorefrontOrderReturnDto,
   CreateStorefrontReviewDto,
   PlaceStorefrontOrderDto,
+  StorefrontCheckoutPaymentMethod,
   StorefrontCartQueryDto,
   StorefrontOrderQueryDto,
   StorefrontOrderReturnQueryDto,
@@ -283,7 +285,6 @@ export class StorefrontCustomerService {
     dto: AddStorefrontCartItemDto,
   ) {
     await this.assertStorefrontCustomer(currentCustomer, websiteId);
-    await this.assertCartItemTarget(currentCustomer.businessId, dto);
 
     const cart = await this.findOrCreateActiveCart(currentCustomer);
     const existingItem = await this.findCartItemByProduct(
@@ -291,13 +292,20 @@ export class StorefrontCustomerService {
       dto.productId,
       dto.variantId ?? null,
     );
+    const nextQuantity = existingItem
+      ? new Decimal(existingItem.quantity).plus(dto.quantity)
+      : new Decimal(dto.quantity);
+
+    await this.assertCartItemTarget(
+      currentCustomer.businessId,
+      dto,
+      nextQuantity,
+    );
 
     if (existingItem) {
-      const quantity = new Decimal(existingItem.quantity).plus(dto.quantity);
-
       await this.db
         .update(orderCartItem)
-        .set({ quantity })
+        .set({ quantity: nextQuantity })
         .where(eq(orderCartItem.id, existingItem.id));
 
       return apiResponse(
@@ -329,6 +337,12 @@ export class StorefrontCustomerService {
     const row = await this.getActiveCustomerCartItemOrThrow(
       currentCustomer,
       itemId,
+    );
+    await this.assertItemInStock(
+      currentCustomer.businessId,
+      row.item.productId,
+      row.item.variantId ?? undefined,
+      dto.quantity,
     );
 
     await this.db
@@ -434,6 +448,28 @@ export class StorefrontCustomerService {
       throw new BadRequestException("Active cart is empty");
     }
 
+    await this.assertCheckoutPaymentSettings(
+      currentCustomer.businessId,
+      dto.paymentMethod,
+    );
+
+    for (const cartItem of cartItems) {
+      await this.assertItemInStock(
+        currentCustomer.businessId,
+        cartItem.productId,
+        cartItem.variantId ?? undefined,
+        cartItem.quantity,
+      );
+    }
+
+    if (
+      Boolean(dto.shippingAddressId) === Boolean(dto.shippingAddressSnapshot)
+    ) {
+      throw new BadRequestException(
+        "Provide either a saved shipping address or a new shipping address snapshot",
+      );
+    }
+
     const shippingAddressSnapshot = dto.shippingAddressId
       ? this.buildAddressSnapshot(
           await this.getCustomerAddressOrThrow(
@@ -451,8 +487,8 @@ export class StorefrontCustomerService {
         customerPhone: customerRow.phone ?? undefined,
         customerEmail: currentCustomer.email,
         shippingAddressSnapshot,
-        // FIXME: fix this; shouldn't calculated somehow.
         shippingCharge: 0,
+        isCod: dto.paymentMethod === StorefrontCheckoutPaymentMethod.COD,
         note: dto.note,
         items: cartItems.map((row) => ({
           productId: row.productId,
@@ -1192,10 +1228,16 @@ export class StorefrontCustomerService {
   private async assertCartItemTarget(
     businessId: string,
     dto: AddStorefrontCartItemDto,
+    quantity: Decimal.Value,
   ) {
     await this.getActiveProductOrThrow(businessId, dto.productId);
     await this.assertVariantSelection(businessId, dto.productId, dto.variantId);
-    await this.assertItemInStock(businessId, dto.productId, dto.variantId);
+    await this.assertItemInStock(
+      businessId,
+      dto.productId,
+      dto.variantId,
+      quantity,
+    );
   }
 
   private async assertReviewTarget(
@@ -1265,6 +1307,7 @@ export class StorefrontCustomerService {
     businessId: string,
     productId: string,
     variantId?: string,
+    requestedQuantity: Decimal.Value = 1,
   ) {
     const [stock] = await this.db
       .select()
@@ -1280,14 +1323,55 @@ export class StorefrontCustomerService {
       )
       .limit(1);
 
-    console.log(stock);
+    if (!stock) {
+      throw new NotFoundException(
+        "The requested item is out of stock. Stock has not been added for this product or variant yet.",
+      );
+    }
 
-    // TODO: should we use low-stock quantity here?
-    if (stock.totalQuantity.lessThanOrEqualTo(0)) {
-      throw new NotFoundException("The requested item is out of stock.");
+    const availableQuantity = new Decimal(stock.totalQuantity).minus(
+      stock.quantityReserved,
+    );
+
+    if (availableQuantity.lessThan(requestedQuantity)) {
+      throw new NotFoundException(
+        "The requested item does not have enough available stock. Some quantity may already be reserved for other orders.",
+      );
     }
 
     return stock;
+  }
+
+  private async assertCheckoutPaymentSettings(
+    businessId: string,
+    paymentMethod: StorefrontCheckoutPaymentMethod,
+  ) {
+    const [settings] = await this.db
+      .select({
+        codEnabled: businessSetting.codEnabled,
+        onlinePaymentEnabled: businessSetting.onlinePaymentEnabled,
+      })
+      .from(businessSetting)
+      .where(eq(businessSetting.businessId, businessId))
+      .limit(1);
+
+    if (
+      paymentMethod === StorefrontCheckoutPaymentMethod.COD &&
+      !settings?.codEnabled
+    ) {
+      throw new BadRequestException(
+        "Cash on delivery is not enabled for this storefront",
+      );
+    }
+
+    if (
+      paymentMethod === StorefrontCheckoutPaymentMethod.ONLINE &&
+      !settings?.onlinePaymentEnabled
+    ) {
+      throw new BadRequestException(
+        "Online payment is not enabled for this storefront",
+      );
+    }
   }
   private async getCustomerOrThrow(currentCustomer: CurrentCustomerPayload) {
     const [customerRow] = await this.db

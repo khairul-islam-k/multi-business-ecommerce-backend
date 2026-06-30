@@ -80,7 +80,10 @@ export class CreateOrderService {
   }
 
   async createStorefrontOrder(businessId: string, dto: CreateOrderDto) {
-    await this.assertStorefrontPaymentSettings(businessId, dto);
+    const settings = await this.assertStorefrontPaymentSettings(
+      businessId,
+      dto,
+    );
 
     const defaultWarehouseId =
       await this.resolveDefaultWarehouseIdOrThrow(businessId);
@@ -91,7 +94,9 @@ export class CreateOrderService {
       orderType: OrderType.ONLINE,
       orderSource: OrderSource.WEBSITE,
       fulfillImmediately: false,
-      initialStatus: OrderStatus.PENDING,
+      initialStatus: settings.autoConfirmOrder
+        ? OrderStatus.CONFIRMED
+        : OrderStatus.PENDING,
     });
   }
 
@@ -131,10 +136,7 @@ export class CreateOrderService {
   ) {
     assertOrderItems(params.items);
     assertOrderPaymentInput(params.payment, params.isCod);
-
-    if (params.isCod && !params.courier) {
-      throw new BadRequestException("COD order requires courier shipment");
-    }
+    await this.assertBusinessOrderSettings(businessId, params);
 
     if (params.customerId) {
       await this.assertCustomerExists(businessId, params.customerId);
@@ -164,6 +166,7 @@ export class CreateOrderService {
           orderSource: params.orderSource,
           status: params.initialStatus,
           paymentStatus: OrderPaymentStatus.UNPAID,
+          isCod: params.isCod ?? false,
           customerName: this.normalizeNullableText(params.customerName),
           customerPhone: this.normalizeNullableText(params.customerPhone),
           customerEmail: this.normalizeNullableText(params.customerEmail),
@@ -562,6 +565,7 @@ export class CreateOrderService {
       .select({
         codEnabled: businessSetting.codEnabled,
         onlinePaymentEnabled: businessSetting.onlinePaymentEnabled,
+        autoConfirmOrder: businessSetting.autoConfirmOrder,
       })
       .from(businessSetting)
       .where(eq(businessSetting.businessId, businessId))
@@ -576,6 +580,33 @@ export class CreateOrderService {
     if (dto.payment && !settings?.onlinePaymentEnabled) {
       throw new BadRequestException(
         "Online payment is not enabled for this storefront",
+      );
+    }
+
+    return {
+      codEnabled: settings?.codEnabled ?? false,
+      onlinePaymentEnabled: settings?.onlinePaymentEnabled ?? false,
+      autoConfirmOrder: settings?.autoConfirmOrder ?? false,
+    };
+  }
+
+  private async assertBusinessOrderSettings(
+    businessId: string,
+    dto: Pick<CreateOrderDto, "isCod">,
+  ) {
+    if (!dto.isCod) {
+      return;
+    }
+
+    const [settings] = await this.db
+      .select({ codEnabled: businessSetting.codEnabled })
+      .from(businessSetting)
+      .where(eq(businessSetting.businessId, businessId))
+      .limit(1);
+
+    if (!settings?.codEnabled) {
+      throw new BadRequestException(
+        "Cash on delivery is not enabled for this business",
       );
     }
   }

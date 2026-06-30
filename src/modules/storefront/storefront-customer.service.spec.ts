@@ -11,6 +11,7 @@ import {
 import { describe, expect, it, jest } from "@jest/globals";
 
 import { StorefrontCustomerService } from "./storefront-customer.service";
+import { StorefrontCheckoutPaymentMethod } from "./dto/storefront-customer.dto";
 
 const currentCustomer = {
   accountId: "account-1",
@@ -29,7 +30,7 @@ function createService() {
       set: jest.fn((values: Record<string, unknown>) => {
         updates.push({ table, values });
 
-        return { where: jest.fn(async () => undefined) };
+        return { where: jest.fn(() => Promise.resolve(undefined)) };
       }),
     })),
     insert: jest.fn((table) => ({
@@ -37,21 +38,25 @@ function createService() {
         inserts.push({ table, values });
 
         return {
-          returning: jest.fn(async () => [
-            {
-              id: "created-1",
-              ...values,
-            },
-          ]),
+          returning: jest.fn(() =>
+            Promise.resolve([
+              {
+                id: "created-1",
+                ...values,
+              },
+            ]),
+          ),
         };
       }),
     })),
   };
   const websites = {
-    findPublishedById: jest.fn(async () => ({
-      id: "website-1",
-      businessId: "business-1",
-    })),
+    findPublishedById: jest.fn(() =>
+      Promise.resolve({
+        id: "website-1",
+        businessId: "business-1",
+      }),
+    ),
   };
   const orders = {
     createStorefrontOrder: jest.fn(),
@@ -82,20 +87,18 @@ describe("StorefrontCustomerService", () => {
 
     jest
       .spyOn(service as any, "assertStorefrontCustomer")
-      .mockResolvedValue({ id: "website-1" } as never);
+      .mockResolvedValue({ id: "website-1" });
     jest
       .spyOn(service as any, "assertCartItemTarget")
-      .mockResolvedValue(undefined as never);
+      .mockResolvedValue(undefined);
     jest
       .spyOn(service as any, "findOrCreateActiveCart")
-      .mockResolvedValue(cart as never);
+      .mockResolvedValue(cart);
     jest.spyOn(service as any, "findCartItemByProduct").mockResolvedValue({
       id: "item-1",
       quantity: new Decimal(2),
-    } as never);
-    jest
-      .spyOn(service as any, "hydrateCart")
-      .mockResolvedValue(hydratedCart as never);
+    });
+    jest.spyOn(service as any, "hydrateCart").mockResolvedValue(hydratedCart);
 
     const result = await service.addCartItem(currentCustomer, "website-1", {
       productId: "product-1",
@@ -119,15 +122,15 @@ describe("StorefrontCustomerService", () => {
 
     jest
       .spyOn(service as any, "assertStorefrontCustomer")
-      .mockResolvedValue({ id: "website-1" } as never);
+      .mockResolvedValue({ id: "website-1" });
     jest
       .spyOn(service as any, "assertReviewTarget")
-      .mockResolvedValue(undefined as never);
+      .mockResolvedValue(undefined);
     jest.spyOn(service as any, "getCustomerOrThrow").mockResolvedValue({
       id: "customer-1",
       name: "Buyer One",
       phone: "+8801700000000",
-    } as never);
+    });
 
     const result = await service.createReview(currentCustomer, "website-1", {
       productId: "product-1",
@@ -173,15 +176,13 @@ describe("StorefrontCustomerService", () => {
 
     jest
       .spyOn(service as any, "assertStorefrontCustomer")
-      .mockResolvedValue({ id: "website-1" } as never);
+      .mockResolvedValue({ id: "website-1" });
     jest.spyOn(service as any, "getCustomerOrThrow").mockResolvedValue({
       id: "customer-1",
       name: "Buyer One",
       phone: "+8801700000000",
-    } as never);
-    jest
-      .spyOn(service as any, "findActiveCart")
-      .mockResolvedValue(cart as never);
+    });
+    jest.spyOn(service as any, "findActiveCart").mockResolvedValue(cart);
     jest.spyOn(service as any, "getCartItems").mockResolvedValue([
       {
         productId: "product-1",
@@ -191,10 +192,17 @@ describe("StorefrontCustomerService", () => {
     ] as never);
     jest
       .spyOn(service as any, "findCustomerOrderOrThrow")
-      .mockResolvedValue(placedOrder as never);
+      .mockResolvedValue(placedOrder);
+    jest
+      .spyOn(service as any, "assertCheckoutPaymentSettings")
+      .mockResolvedValue(undefined);
+    jest
+      .spyOn(service as any, "assertItemInStock")
+      .mockResolvedValue(undefined);
 
     const result = await service.placeOrder(currentCustomer, "website-1", {
-      shippingCharge: 50,
+      paymentMethod: StorefrontCheckoutPaymentMethod.ONLINE,
+      shippingAddressSnapshot: { address: "House 42" },
     });
 
     expect(result.data).toBe(placedOrder);
@@ -211,9 +219,9 @@ describe("StorefrontCustomerService", () => {
         },
       ],
       note: undefined,
-      shippingAddressSnapshot: undefined,
-      shippingCharge: 50,
-      warehouseId: undefined,
+      shippingAddressSnapshot: { address: "House 42" },
+      shippingCharge: 0,
+      isCod: false,
     });
     expect(updates).toContainEqual({
       table: orderCart,
@@ -237,15 +245,13 @@ describe("StorefrontCustomerService", () => {
 
     jest
       .spyOn(service as any, "assertStorefrontCustomer")
-      .mockResolvedValue({ id: "website-1" } as never);
+      .mockResolvedValue({ id: "website-1" });
     jest.spyOn(service as any, "getCustomerOrThrow").mockResolvedValue({
       id: "customer-1",
       name: "Buyer One",
       phone: "+8801700000000",
-    } as never);
-    jest
-      .spyOn(service as any, "findActiveCart")
-      .mockResolvedValue(cart as never);
+    });
+    jest.spyOn(service as any, "findActiveCart").mockResolvedValue(cart);
     jest.spyOn(service as any, "getCartItems").mockResolvedValue([
       {
         productId: "product-1",
@@ -260,12 +266,19 @@ describe("StorefrontCustomerService", () => {
       address: "House 42",
       city: "Dhaka",
       country: "Bangladesh",
-    } as never);
+    });
     jest.spyOn(service as any, "findCustomerOrderOrThrow").mockResolvedValue({
       id: "order-1",
-    } as never);
+    });
+    jest
+      .spyOn(service as any, "assertCheckoutPaymentSettings")
+      .mockResolvedValue(undefined);
+    jest
+      .spyOn(service as any, "assertItemInStock")
+      .mockResolvedValue(undefined);
 
     await service.placeOrder(currentCustomer, "website-1", {
+      paymentMethod: StorefrontCheckoutPaymentMethod.COD,
       shippingAddressId: "address-1",
     });
 
@@ -280,6 +293,8 @@ describe("StorefrontCustomerService", () => {
           city: "Dhaka",
           country: "Bangladesh",
         },
+        isCod: true,
+        shippingCharge: 0,
       }),
     );
   });

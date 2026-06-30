@@ -12,6 +12,10 @@ import {
   FinanceAccountType,
   financeTax,
   FinanceTaxStatus,
+  paymentGateway,
+  paymentGatewayConfig,
+  PaymentGatewayConfigStatus,
+  PaymentGatewayMode,
   ProductSimpleStatus,
   productUnit,
   systemUser,
@@ -181,6 +185,13 @@ export class BusinessService {
           businessId: created.id,
           ...brandingData,
         });
+
+        await this.createDefaultPaymentGatewayConfigs(
+          transaction,
+          created.id,
+          defaults.defaultFinanceAccountId,
+          userId,
+        );
 
         return this.findBusinessById(created.id, transaction);
       });
@@ -674,9 +685,6 @@ export class BusinessService {
       ...(dto.lowStockThreshold !== undefined && {
         lowStockThreshold: dto.lowStockThreshold,
       }),
-      ...(dto.allowBackorder !== undefined && {
-        allowBackorder: dto.allowBackorder,
-      }),
       ...(dto.autoConfirmOrder !== undefined && {
         autoConfirmOrder: dto.autoConfirmOrder,
       }),
@@ -771,6 +779,32 @@ export class BusinessService {
       defaultUnitId: defaultUnit.id,
       defaultTaxId: tax.id,
     };
+  }
+
+  private async createDefaultPaymentGatewayConfigs(
+    transaction: DatabaseTransaction,
+    businessId: string,
+    defaultFinanceAccountId: string,
+    userId: string,
+  ) {
+    const gateways = await transaction.select().from(paymentGateway);
+
+    if (gateways.length === 0) {
+      return;
+    }
+
+    await transaction.insert(paymentGatewayConfig).values(
+      gateways.map((gateway) => ({
+        businessId,
+        gatewayId: gateway.id,
+        financeAccountId: defaultFinanceAccountId,
+        configData: "",
+        mode: PaymentGatewayMode.SANDBOX,
+        status: PaymentGatewayConfigStatus.INACTIVE,
+        createdBy: userId,
+        updatedBy: userId,
+      })),
+    );
   }
 
   private buildBusinessBrandingData(

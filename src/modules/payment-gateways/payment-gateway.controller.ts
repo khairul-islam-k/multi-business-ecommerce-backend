@@ -2,12 +2,10 @@ import { PermissionAction, RbacFeature } from "@/database/schema";
 import {
   Body,
   Controller,
-  Delete,
   Get,
   Param,
   ParseUUIDPipe,
   Patch,
-  Post,
   Query,
   UseGuards,
 } from "@nestjs/common";
@@ -20,9 +18,7 @@ import { SubscriptionGuard } from "../packages/guards/subscription.guard";
 import { RequirePermission } from "../permissions/decorators/require-permission.decorator";
 import { PermissionGuard } from "../permissions/guards/permission.guard";
 import {
-  BulkCreatePaymentGatewayConfigDto,
   BulkUpdatePaymentGatewayConfigDto,
-  CreatePaymentGatewayConfigDto,
   QueryPaymentGatewayConfigDto,
   QueryPaymentGatewayDto,
   UpdatePaymentGatewayConfigDto,
@@ -43,28 +39,6 @@ export class PaymentGatewayController {
   @ApiOperation({ summary: "Get predefined payment gateways" })
   findGateways(@Query() query: QueryPaymentGatewayDto) {
     return this.gateways.findGateways(query);
-  }
-
-  @RequirePermission(RbacFeature.PAYMENT_MANAGEMENT, PermissionAction.CREATE)
-  @Post("configs/bulk")
-  @ApiOperation({ summary: "Configure payment gateways for business" })
-  createConfigBulk(
-    @CurrentUser() user: CurrentUserPayload,
-    @Param("businessId", ParseUUIDPipe) businessId: string,
-    @Body() dto: BulkCreatePaymentGatewayConfigDto,
-  ) {
-    return this.gateways.bulkCreateConfig(user, businessId, dto);
-  }
-
-  @RequirePermission(RbacFeature.PAYMENT_MANAGEMENT, PermissionAction.CREATE)
-  @Post("configs")
-  @ApiOperation({ summary: "Configure payment gateway for business" })
-  createConfig(
-    @CurrentUser() user: CurrentUserPayload,
-    @Param("businessId", ParseUUIDPipe) businessId: string,
-    @Body() dto: CreatePaymentGatewayConfigDto,
-  ) {
-    return this.gateways.createConfig(user, businessId, dto);
   }
 
   @RequirePermission(RbacFeature.PAYMENT_MANAGEMENT, PermissionAction.READ)
@@ -98,16 +72,5 @@ export class PaymentGatewayController {
     @Body() dto: UpdatePaymentGatewayConfigDto,
   ) {
     return this.gateways.updateConfig(user, businessId, configId, dto);
-  }
-
-  @RequirePermission(RbacFeature.PAYMENT_MANAGEMENT, PermissionAction.DELETE)
-  @Delete("configs/:configId")
-  @ApiOperation({ summary: "Delete payment gateway configuration" })
-  removeConfig(
-    @CurrentUser() user: CurrentUserPayload,
-    @Param("businessId", ParseUUIDPipe) businessId: string,
-    @Param("configId", ParseUUIDPipe) configId: string,
-  ) {
-    return this.gateways.removeConfig(user, businessId, configId);
   }
 }

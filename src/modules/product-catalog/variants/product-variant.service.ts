@@ -14,6 +14,7 @@ import {
 } from "drizzle-orm";
 
 import {
+  businessSetting,
   courierShipmentItem,
   inventoryOrderAllocation,
   inventoryStock,
@@ -153,12 +154,17 @@ export class ProductVariantService {
           images: dto.images,
         });
 
+        const lowStockAlertQty = await this.resolveLowStockThreshold(
+          tx,
+          businessId,
+        );
+
         await tx.insert(inventoryStock).values({
           businessId,
           productId,
           variantId: createdVariant.id,
           stockItemKey: buildStockItemKey(productId, createdVariant.id),
-          lowStockAlertQty: new Decimal(0),
+          lowStockAlertQty,
           quantityReserved: new Decimal(0),
           totalQuantity: new Decimal(0),
         });
@@ -251,12 +257,17 @@ export class ProductVariantService {
             images: variant.dto.images,
           });
 
+          const lowStockAlertQty = await this.resolveLowStockThreshold(
+            tx,
+            businessId,
+          );
+
           await tx.insert(inventoryStock).values({
             businessId,
             productId,
             variantId: createdVariant.id,
             stockItemKey: buildStockItemKey(productId, createdVariant.id),
-            lowStockAlertQty: new Decimal(0),
+            lowStockAlertQty,
             quantityReserved: new Decimal(0),
             totalQuantity: new Decimal(0),
           });
@@ -1082,12 +1093,17 @@ export class ProductVariantService {
       .limit(1);
 
     if (!productStock) {
+      const lowStockAlertQty = await this.resolveLowStockThreshold(
+        tx,
+        businessId,
+      );
+
       await tx.insert(inventoryStock).values({
         businessId,
         productId,
         variantId: null,
         stockItemKey,
-        lowStockAlertQty: new Decimal(0),
+        lowStockAlertQty,
         quantityReserved: new Decimal(0),
         totalQuantity: new Decimal(0),
       });
@@ -1135,6 +1151,19 @@ export class ProductVariantService {
       )
       .limit(1)
       .then(([row]) => row ?? null);
+  }
+
+  private async resolveLowStockThreshold(
+    tx: DatabaseTransaction,
+    businessId: string,
+  ) {
+    const [settings] = await tx
+      .select({ lowStockThreshold: businessSetting.lowStockThreshold })
+      .from(businessSetting)
+      .where(eq(businessSetting.businessId, businessId))
+      .limit(1);
+
+    return new Decimal(settings?.lowStockThreshold ?? 0);
   }
 
   private async getVariantsDetails(variants: ProductVariant[]) {

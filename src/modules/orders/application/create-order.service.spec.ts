@@ -25,7 +25,7 @@ describe("CreateOrderService", () => {
       .mockResolvedValue("warehouse-default");
     jest
       .spyOn(service as any, "assertStorefrontPaymentSettings")
-      .mockResolvedValue(undefined);
+      .mockResolvedValue({ autoConfirmOrder: false });
 
     await service.createStorefrontOrder("business-1", {
       warehouseId: "warehouse-from-client",
@@ -46,6 +46,37 @@ describe("CreateOrderService", () => {
         orderSource: OrderSource.WEBSITE,
         fulfillImmediately: false,
         initialStatus: OrderStatus.PENDING,
+      }),
+    );
+  });
+
+  it("confirms storefront orders on creation when auto-confirm is enabled", async () => {
+    const service = createService();
+    const createOrderFlow = jest
+      .spyOn(service as any, "createOrderFlow")
+      .mockResolvedValue({ data: { id: "order-1" } });
+
+    jest
+      .spyOn(service as any, "resolveDefaultWarehouseIdOrThrow")
+      .mockResolvedValue("warehouse-default");
+    jest
+      .spyOn(service as any, "assertStorefrontPaymentSettings")
+      .mockResolvedValue({ autoConfirmOrder: true });
+
+    await service.createStorefrontOrder("business-1", {
+      items: [
+        {
+          productId: "product-1",
+          quantity: 1,
+        },
+      ],
+    });
+
+    expect(createOrderFlow).toHaveBeenCalledWith(
+      undefined,
+      "business-1",
+      expect.objectContaining({
+        initialStatus: OrderStatus.CONFIRMED,
       }),
     );
   });

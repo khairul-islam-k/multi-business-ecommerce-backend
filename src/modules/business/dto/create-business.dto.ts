@@ -137,11 +137,6 @@ export class CreateBusinessSettingDto {
   @ApiPropertyOptional({ example: false })
   @IsOptional()
   @IsBoolean()
-  allowBackorder?: boolean;
-
-  @ApiPropertyOptional({ example: false })
-  @IsOptional()
-  @IsBoolean()
   autoConfirmOrder?: boolean;
 
   @ApiPropertyOptional({ example: true })

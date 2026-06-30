@@ -226,7 +226,6 @@ export class PaymentGatewayProviderService {
       },
       { Authorization: `Bearer ${token}` },
     );
-    console.log(response);
     const redirectUrl = this.stringValue(response.checkout_url);
 
     if (!redirectUrl) {

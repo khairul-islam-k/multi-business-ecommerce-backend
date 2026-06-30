@@ -165,7 +165,6 @@ export const businessSetting = pgTable(
         onDelete: "restrict",
       }),
     lowStockThreshold: integer("low_stock_threshold"),
-    allowBackorder: boolean("allow_backorder"),
     autoConfirmOrder: boolean("auto_confirm_order"),
     codEnabled: boolean("cod_enabled"),
     onlinePaymentEnabled: boolean("online_payment_enabled"),
