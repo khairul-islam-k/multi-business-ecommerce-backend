@@ -107,6 +107,7 @@ export class PaymentGatewayProviderService {
         return {
           username: this.requiredString(rawConfig, "username"),
           password: this.requiredString(rawConfig, "password"),
+          prefix: this.requiredString(rawConfig, "prefix"),
         };
     }
   }
@@ -191,6 +192,7 @@ export class PaymentGatewayProviderService {
   private async initiateSurjopay(params: InitiateGatewayPaymentParams) {
     const username = this.requiredString(params.config, "username");
     const password = this.requiredString(params.config, "password");
+    const prefix = this.requiredString(params.config, "prefix");
     const tokenResponse = await this.postJson(
       `${this.shurjopayBaseUrl(params.mode)}/api/get_token`,
       {
@@ -208,6 +210,7 @@ export class PaymentGatewayProviderService {
       `${this.shurjopayBaseUrl(params.mode)}/api/secret-pay`,
       {
         token,
+        prefix,
         return_url: params.callbackUrls.successUrl,
         cancel_url: params.callbackUrls.cancelUrl,
         store_id: this.stringValue(tokenResponse.store_id),
@@ -223,6 +226,7 @@ export class PaymentGatewayProviderService {
       },
       { Authorization: `Bearer ${token}` },
     );
+    console.log(response);
     const redirectUrl = this.stringValue(response.checkout_url);
 
     if (!redirectUrl) {

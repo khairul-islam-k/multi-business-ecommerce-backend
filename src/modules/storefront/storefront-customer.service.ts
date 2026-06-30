@@ -5,6 +5,7 @@ import {
   CatalogProductStatus,
   customer,
   customerAddress,
+  inventoryStock,
   order,
   orderCart,
   orderCartItem,
@@ -450,7 +451,8 @@ export class StorefrontCustomerService {
         customerPhone: customerRow.phone ?? undefined,
         customerEmail: currentCustomer.email,
         shippingAddressSnapshot,
-        shippingCharge: dto.shippingCharge,
+        // FIXME: fix this; shouldn't calculated somehow.
+        shippingCharge: 0,
         note: dto.note,
         items: cartItems.map((row) => ({
           productId: row.productId,
@@ -1193,6 +1195,7 @@ export class StorefrontCustomerService {
   ) {
     await this.getActiveProductOrThrow(businessId, dto.productId);
     await this.assertVariantSelection(businessId, dto.productId, dto.variantId);
+    await this.assertItemInStock(businessId, dto.productId, dto.variantId);
   }
 
   private async assertReviewTarget(
@@ -1258,6 +1261,34 @@ export class StorefrontCustomerService {
     return variant;
   }
 
+  private async assertItemInStock(
+    businessId: string,
+    productId: string,
+    variantId?: string,
+  ) {
+    const [stock] = await this.db
+      .select()
+      .from(inventoryStock)
+      .where(
+        and(
+          eq(inventoryStock.businessId, businessId),
+          eq(inventoryStock.productId, productId),
+          variantId
+            ? eq(inventoryStock.variantId, variantId)
+            : isNull(inventoryStock.variantId),
+        ),
+      )
+      .limit(1);
+
+    console.log(stock);
+
+    // TODO: should we use low-stock quantity here?
+    if (stock.totalQuantity.lessThanOrEqualTo(0)) {
+      throw new NotFoundException("The requested item is out of stock.");
+    }
+
+    return stock;
+  }
   private async getCustomerOrThrow(currentCustomer: CurrentCustomerPayload) {
     const [customerRow] = await this.db
       .select()

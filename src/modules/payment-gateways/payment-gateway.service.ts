@@ -532,9 +532,9 @@ export class PaymentGatewayService {
         transactionReference: paymentNo,
         gatewayPayload: {
           requestedRedirects: {
-            successRedirectUrl: dto.successRedirectUrl ?? null,
-            failRedirectUrl: dto.failRedirectUrl ?? null,
-            cancelRedirectUrl: dto.cancelRedirectUrl ?? null,
+            successRedirectUrl: dto.successRedirectUrl,
+            failRedirectUrl: dto.failRedirectUrl,
+            cancelRedirectUrl: dto.cancelRedirectUrl,
           },
         } as JsonValue,
       })
@@ -555,9 +555,9 @@ export class PaymentGatewayService {
         ...this.getAddressParts(row.shippingAddressSnapshot),
       },
       callbackUrls: {
-        successUrl: `${dto.successRedirectUrl}?provider=${config.gateway.code}&paymentId=${createdPayment.id}`,
-        cancelUrl: `${dto.cancelRedirectUrl}?provider=${config.gateway.code}&paymentId=${createdPayment.id}`,
-        failUrl: `${dto.failRedirectUrl}?provider=${config.gateway.code}&paymentId=${createdPayment.id}`,
+        successUrl: `${dto.successRedirectUrl}/${config.gateway.code}/${createdPayment.id}`,
+        cancelUrl: `${dto.cancelRedirectUrl}/${config.gateway.code}/${createdPayment.id}`,
+        failUrl: `${dto.failRedirectUrl}/${config.gateway.code}/${createdPayment.id}`,
         ipnUrl: `${this.appConfig.publicApiUrl}/payment-gateways/callbacks/${config.gateway.code}/${createdPayment.id}/ipn`,
       },
     });

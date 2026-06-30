@@ -193,13 +193,6 @@ export class PlaceStorefrontOrderDto {
   @IsOptional()
   shippingAddressSnapshot?: unknown;
 
-  @ApiPropertyOptional({ example: 80 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  shippingCharge?: number;
-
   @ApiPropertyOptional({ example: "Please call before delivery" })
   @IsOptional()
   @IsString()
