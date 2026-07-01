@@ -1,16 +1,5 @@
 import Decimal from "decimal.js";
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  ilike,
-  isNull,
-  lte,
-  ne,
-  or,
-} from "drizzle-orm";
+import { and, count, desc, eq, ilike, isNull, lte, ne, or } from "drizzle-orm";
 
 import {
   PackagePayment,
@@ -115,7 +104,6 @@ export class AdminPackageService {
             freeTrialDays: dto.freeTrialDays ?? 0,
             isDefault: dto.isDefault ?? false,
             status: dto.status ?? PackageStatus.ACTIVE,
-            sortOrder: dto.sortOrder ?? 0,
           })
           .returning();
 
@@ -150,7 +138,7 @@ export class AdminPackageService {
         .select()
         .from(packagePlan)
         .where(where)
-        .orderBy(asc(packagePlan.sortOrder), desc(packagePlan.createdAt))
+        .orderBy(desc(packagePlan.createdAt))
         .limit(limit)
         .offset(skip)
         .then((rows) => this.withPlansDetails(rows)),
@@ -225,7 +213,6 @@ export class AdminPackageService {
             }),
             ...(dto.isDefault !== undefined && { isDefault: dto.isDefault }),
             ...(dto.status !== undefined && { status: dto.status }),
-            ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
           })
           .where(eq(packagePlan.id, planId))
           .returning();
@@ -452,11 +439,10 @@ export class AdminPackageService {
 
     if (dto.features?.length) {
       await tx.insert(packagePlanFeature).values(
-        dto.features.map((feature, index) => ({
+        dto.features.map((feature) => ({
           packageId: planId,
           title: feature.title.trim(),
           description: feature.description?.trim() || null,
-          sortOrder: feature.sortOrder ?? index,
           isActive: feature.isActive ?? true,
         })),
       );
@@ -478,8 +464,7 @@ export class AdminPackageService {
       this.db
         .select()
         .from(packagePlanFeature)
-        .where(eq(packagePlanFeature.packageId, plan.id))
-        .orderBy(asc(packagePlanFeature.sortOrder)),
+        .where(eq(packagePlanFeature.packageId, plan.id)),
       this.db
         .select({ value: count() })
         .from(packageSubscription)

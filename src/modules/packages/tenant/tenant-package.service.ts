@@ -84,7 +84,7 @@ export class TenantPackageService {
         .select()
         .from(packagePlan)
         .where(where)
-        .orderBy(asc(packagePlan.sortOrder), desc(packagePlan.createdAt))
+        .orderBy(desc(packagePlan.createdAt))
         .limit(limit)
         .offset(skip)
         .then((rows) => this.withPlansDetails(rows)),
@@ -386,8 +386,7 @@ export class TenantPackageService {
             eq(packagePlanFeature.packageId, plan.id),
             eq(packagePlanFeature.isActive, true),
           ),
-        )
-        .orderBy(asc(packagePlanFeature.sortOrder)),
+        ),
     ]);
 
     return {

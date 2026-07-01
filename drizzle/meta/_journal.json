@@ -8,6 +8,20 @@
       "when": 1782896707864,
       "tag": "0000_black_alex_wilder",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1782902833576,
+      "tag": "0001_acoustic_quasar",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782903027391,
+      "tag": "0002_round_blacklash",
+      "breakpoints": true
     }
   ]
 }

@@ -7,6 +7,10 @@ import {
   businessMember,
   businessSetting,
   BusinessStatus,
+  courier,
+  courierConfig,
+  CourierConfigMode,
+  CourierConfigStatus,
   financeAccount,
   FinanceAccountStatus,
   FinanceAccountType,
@@ -192,6 +196,7 @@ export class BusinessService {
           defaults.defaultFinanceAccountId,
           userId,
         );
+        await this.createDefaultCourierConfigs(transaction, created.id, userId);
 
         return this.findBusinessById(created.id, transaction);
       });
@@ -801,6 +806,30 @@ export class BusinessService {
         configData: "",
         mode: PaymentGatewayMode.SANDBOX,
         status: PaymentGatewayConfigStatus.INACTIVE,
+        createdBy: userId,
+        updatedBy: userId,
+      })),
+    );
+  }
+
+  private async createDefaultCourierConfigs(
+    transaction: DatabaseTransaction,
+    businessId: string,
+    userId: string,
+  ) {
+    const couriers = await transaction.select().from(courier);
+
+    if (couriers.length === 0) {
+      return;
+    }
+
+    await transaction.insert(courierConfig).values(
+      couriers.map((row) => ({
+        businessId,
+        courierId: row.id,
+        configData: {},
+        mode: CourierConfigMode.SANDBOX,
+        status: CourierConfigStatus.INACTIVE,
         createdBy: userId,
         updatedBy: userId,
       })),

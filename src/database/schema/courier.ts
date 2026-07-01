@@ -144,7 +144,6 @@ export const courier = pgTable(
     code: courierProviderEnum().notNull(),
     description: text(),
     status: courierStatusEnum().default("ACTIVE").notNull(),
-    sortOrder: integer("sort_order").default(0).notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -211,7 +210,6 @@ export const courierDeliveryZone = pgTable(
     name: varchar({ length: 150 }).notNull(),
     description: text(),
     status: courierDeliveryZoneStatusEnum().default("ACTIVE").notNull(),
-    sortOrder: integer("sort_order").default(0).notNull(),
     deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
       onDelete: "set null",
     }),

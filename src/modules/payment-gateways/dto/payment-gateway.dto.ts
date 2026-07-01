@@ -8,8 +8,6 @@ import {
   IsOptional,
   IsString,
   IsUUID,
-  Max,
-  Min,
   ValidateNested,
 } from "class-validator";
 
@@ -169,11 +167,4 @@ export class SeedPaymentGatewayDto {
   @IsOptional()
   @IsEnum(PaymentGatewayStatus)
   status?: PaymentGatewayStatus;
-
-  @ApiPropertyOptional({ example: 0 })
-  @IsOptional()
-  @Type(() => Number)
-  @Min(0)
-  @Max(999999)
-  sortOrder?: number;
 }

@@ -140,7 +140,6 @@ export const packagePlan = pgTable(
     freeTrialDays: integer("free_trial_days").notNull(),
     isDefault: boolean("is_default").notNull(),
     status: packageStatusEnum().notNull(),
-    sortOrder: integer("sort_order").default(0).notNull(),
     deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
       onDelete: "set null",
     }),
@@ -171,7 +170,6 @@ export const packagePlanFeature = pgTable(
       .references((): AnyPgColumn => packagePlan.id, { onDelete: "cascade" }),
     title: varchar({ length: 255 }).notNull(),
     description: text(),
-    sortOrder: integer("sort_order").default(0).notNull(),
     isActive: boolean("is_active").notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
@@ -181,10 +179,6 @@ export const packagePlanFeature = pgTable(
   },
   (table) => [
     index("package_plan_features_package_id_idx").on(table.packageId),
-    index("package_plan_features_package_id_sort_order_idx").on(
-      table.packageId,
-      table.sortOrder,
-    ),
     index("package_plan_features_is_active_idx").on(table.isActive),
   ],
 );

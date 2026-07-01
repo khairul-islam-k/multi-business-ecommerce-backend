@@ -39,13 +39,6 @@ export class CreateProductCategoryDto {
   @IsOptional()
   @IsEnum(ProductSimpleStatus)
   status?: ProductSimpleStatus;
-
-  @ApiPropertyOptional({ example: 0 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  sortOrder?: number;
 }
 
 export class UpdateProductCategoryDto extends PartialType(

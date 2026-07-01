@@ -88,7 +88,6 @@ export const paymentGateway = pgTable(
     code: paymentGatewayProviderEnum().notNull(),
     description: text(),
     status: paymentGatewayStatusEnum().notNull(),
-    sortOrder: integer("sort_order").notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()

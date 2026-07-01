@@ -70,7 +70,6 @@ export type PackagePlanSnapshot = {
   features: {
     title: string;
     description: string | null;
-    sortOrder: number;
   }[];
   capturedAt: string;
 };
@@ -439,7 +438,6 @@ export class PackageSubscriptionService {
           isNull(packagePlan.deletedAt),
         ),
       )
-      .orderBy(asc(packagePlan.sortOrder))
       .limit(1);
 
     return plan ? this.withPlanDetails(client, plan) : null;
@@ -500,8 +498,7 @@ export class PackageSubscriptionService {
             eq(packagePlanFeature.packageId, plan.id),
             eq(packagePlanFeature.isActive, true),
           ),
-        )
-        .orderBy(asc(packagePlanFeature.sortOrder)),
+        ),
     ]);
 
     return {
@@ -557,7 +554,6 @@ export class PackageSubscriptionService {
       features: plan.features.map((feature) => ({
         title: feature.title,
         description: feature.description,
-        sortOrder: feature.sortOrder,
       })),
       capturedAt: capturedAt.toISOString(),
     };

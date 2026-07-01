@@ -147,7 +147,6 @@
 //     code: varchar({ length: 100 }).notNull(),
 //     description: text(),
 //     status: smsProviderStatusEnum().notNull(),
-//     sortOrder: integer("sort_order").notNull(),
 //     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
 //     updatedAt: timestamp("updated_at", { mode: "date" })
 //       .defaultNow()

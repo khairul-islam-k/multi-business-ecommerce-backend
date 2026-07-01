@@ -97,7 +97,6 @@ export class PaymentGatewayService {
             name: item.name.trim(),
             description: item.description?.trim() || null,
             status: item.status ?? PaymentGatewayStatus.ACTIVE,
-            sortOrder: item.sortOrder ?? 0,
           })
           .onConflictDoUpdate({
             target: paymentGateway.code,
@@ -105,7 +104,6 @@ export class PaymentGatewayService {
               name: item.name.trim(),
               description: item.description?.trim() || null,
               status: item.status ?? PaymentGatewayStatus.ACTIVE,
-              sortOrder: item.sortOrder ?? 0,
             },
           })
           .returning();
@@ -138,7 +136,7 @@ export class PaymentGatewayService {
         .select()
         .from(paymentGateway)
         .where(where)
-        .orderBy(asc(paymentGateway.sortOrder), asc(paymentGateway.name))
+        .orderBy(asc(paymentGateway.name))
         .limit(limit)
         .offset(skip),
       this.db
@@ -498,7 +496,7 @@ export class PaymentGatewayService {
           isNull(paymentGatewayConfig.deletedAt),
         ),
       )
-      .orderBy(asc(paymentGateway.sortOrder), asc(paymentGateway.name));
+      .orderBy(asc(paymentGateway.name));
 
     return apiResponse(
       rows.map((row) => ({

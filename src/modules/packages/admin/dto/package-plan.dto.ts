@@ -63,13 +63,6 @@ export class PackagePlanFeatureDto {
   @IsString()
   description?: string;
 
-  @ApiPropertyOptional({ example: 0 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  sortOrder?: number;
-
   @ApiPropertyOptional({ example: true })
   @IsOptional()
   @IsBoolean()
@@ -122,13 +115,6 @@ export class CreatePackagePlanDto {
   @IsOptional()
   @IsEnum(PackageStatus)
   status?: PackageStatus;
-
-  @ApiPropertyOptional({ example: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  sortOrder?: number;
 
   @ApiPropertyOptional({ type: [PackagePlanLimitDto] })
   @IsOptional()

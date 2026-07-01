@@ -708,7 +708,6 @@ export class ProductVariantService {
         variantId: params.variantId,
         imageUrl: image.imageUrl.trim(),
         altText: this.lookup.normalizeNullableText(image.altText),
-        sortOrder: index,
         isThumbnail: index === 0,
         createdBy: params.userId,
         updatedBy: params.userId,
@@ -1210,8 +1209,7 @@ export class ProductVariantService {
           eq(productImage.variantId, variantId),
           isNull(productImage.deletedAt),
         ),
-      )
-      .orderBy(asc(productImage.sortOrder));
+      );
   }
 
   private async getVariantAttributes(

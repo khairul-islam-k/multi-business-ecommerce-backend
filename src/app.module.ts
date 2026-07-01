@@ -12,6 +12,7 @@ import { RequestContextMiddleware } from "./common/request-context/request-conte
 import { DatabaseModule } from "./database/database.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { BusinessModule } from "./modules/business/business.module";
+import { CourierModule } from "./modules/couriers/courier.module";
 import { CustomerAuthModule } from "./modules/customer-auth/customer-auth.module";
 import { CustomerModule } from "./modules/customers/customer.module";
 import { EmployeeModule } from "./modules/employees/employee.module";
@@ -44,6 +45,7 @@ import { WebsiteModule } from "./modules/website/website.module";
     TenantModule,
     PackageModule,
     BusinessModule,
+    CourierModule,
     EmployeeModule,
     RoleModule,
     PermissionModule,

@@ -18,19 +18,16 @@ const gateways = [
     code: PaymentGatewayProvider.SSLCOMMERZ,
     name: "SSLCOMMERZ",
     description: "Hosted payment gateway by SSLCOMMERZ.",
-    sortOrder: 10,
   },
   {
     code: PaymentGatewayProvider.AAMARPAY,
     name: "aamarPay",
     description: "Hosted payment gateway by aamarPay.",
-    sortOrder: 20,
   },
   {
     code: PaymentGatewayProvider.SHURJOPAY,
     name: "shurjoPay",
     description: "Hosted payment gateway by shurjoMukhi Limited.",
-    sortOrder: 30,
   },
 ] as const;
 
@@ -50,7 +47,6 @@ const main = async () => {
           set: {
             name: gateway.name,
             description: gateway.description,
-            sortOrder: gateway.sortOrder,
             status: PaymentGatewayStatus.ACTIVE,
           },
         })

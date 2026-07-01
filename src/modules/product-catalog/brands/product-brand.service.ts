@@ -62,7 +62,6 @@ export class ProductBrandService {
           description: this.lookup.normalizeNullableText(dto.description),
           logoUrl: this.lookup.normalizeNullableText(dto.logoUrl),
           status: dto.status ?? ProductSimpleStatus.ACTIVE,
-          sortOrder: dto.sortOrder ?? 0,
           createdBy: currentUser.id,
           updatedBy: currentUser.id,
         })
@@ -99,7 +98,6 @@ export class ProductBrandService {
         .from(productBrand)
         .where(where)
         .orderBy(
-          asc(productBrand.sortOrder),
           buildOrderBy(
             resolveSortColumn(
               query.sortBy,
@@ -169,7 +167,6 @@ export class ProductBrandService {
             logoUrl: this.lookup.normalizeNullableText(dto.logoUrl),
           }),
           ...(dto.status !== undefined && { status: dto.status }),
-          ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
           updatedBy: currentUser.id,
         })
         .where(eq(productBrand.id, brandId))

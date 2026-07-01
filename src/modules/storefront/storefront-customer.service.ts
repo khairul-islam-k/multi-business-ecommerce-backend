@@ -1268,7 +1268,7 @@ export class StorefrontCustomerService {
         ),
       )
       .where(eq(customerWishlist.id, wishlistItem.id))
-      .orderBy(desc(productImage.isThumbnail), asc(productImage.sortOrder))
+      .orderBy(desc(productImage.isThumbnail))
       .limit(1);
 
     return row

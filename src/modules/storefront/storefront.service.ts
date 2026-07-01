@@ -92,7 +92,7 @@ export class StorefrontService {
           isNull(productCategory.deletedAt),
         ),
       )
-      .orderBy(asc(productCategory.sortOrder), asc(productCategory.name))
+      .orderBy(asc(productCategory.name))
       .then((rows) => this.withCategoriesDetails(rows));
 
     const categoryMap = new Map<string, CategoryTreeNode>();
@@ -475,8 +475,7 @@ export class StorefrontService {
             isNull(productImage.variantId),
             isNull(productImage.deletedAt),
           ),
-        )
-        .orderBy(asc(productImage.sortOrder)),
+        ),
       this.findActiveProductVariants(item.businessId, item.id),
       this.db
         .select()
@@ -503,8 +502,7 @@ export class StorefrontService {
                 inArray(productImage.variantId, variantIds),
                 isNull(productImage.deletedAt),
               ),
-            )
-            .orderBy(asc(productImage.sortOrder));
+            );
 
     return {
       ...item,
@@ -553,8 +551,7 @@ export class StorefrontService {
               ? isNull(productCategory.deletedAt)
               : undefined,
           ),
-        )
-        .orderBy(asc(productCategory.sortOrder)),
+        ),
       this.db
         .select({ value: count() })
         .from(productCategory)
@@ -616,8 +613,7 @@ export class StorefrontService {
             eq(productImage.variantId, variant.id),
             isNull(productImage.deletedAt),
           ),
-        )
-        .orderBy(asc(productImage.sortOrder)),
+        ),
       this.db
         .select()
         .from(inventoryStock)

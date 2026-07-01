@@ -84,7 +84,6 @@ export const productCategory = pgTable(
     description: text(),
     imageUrl: text("image_url"),
     status: productSimpleStatusEnum().notNull(),
-    sortOrder: integer("sort_order").default(0).notNull(),
     createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
       onDelete: "set null",
     }),
@@ -125,7 +124,6 @@ export const productBrand = pgTable(
     description: text(),
     logoUrl: text("logo_url"),
     status: productSimpleStatusEnum().notNull(),
-    sortOrder: integer("sort_order").default(0).notNull(),
     createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
       onDelete: "set null",
     }),
@@ -494,7 +492,6 @@ export const productImage = pgTable(
     imageUrl: text("image_url").notNull(),
     altText: text("alt_text"),
     isThumbnail: boolean("is_thumbnail").notNull(),
-    sortOrder: integer("sort_order").default(0).notNull(),
     createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
       onDelete: "set null",
     }),

@@ -82,7 +82,6 @@ export class ProductCategoryService {
           description: this.lookup.normalizeNullableText(dto.description),
           imageUrl: this.lookup.normalizeNullableText(dto.imageUrl),
           status: dto.status ?? ProductSimpleStatus.ACTIVE,
-          sortOrder: dto.sortOrder ?? 0,
           createdBy: currentUser.id,
           updatedBy: currentUser.id,
         })
@@ -122,7 +121,6 @@ export class ProductCategoryService {
         .from(productCategory)
         .where(where)
         .orderBy(
-          asc(productCategory.sortOrder),
           buildOrderBy(
             resolveSortColumn(
               query.sortBy,
@@ -244,7 +242,6 @@ export class ProductCategoryService {
             imageUrl: this.lookup.normalizeNullableText(dto.imageUrl),
           }),
           ...(dto.status !== undefined && { status: dto.status }),
-          ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
           updatedBy: currentUser.id,
         })
         .where(eq(productCategory.id, categoryId))
@@ -379,8 +376,7 @@ export class ProductCategoryService {
               ? isNull(productCategory.deletedAt)
               : undefined,
           ),
-        )
-        .orderBy(asc(productCategory.sortOrder)),
+        ),
       this.db
         .select({ value: count() })
         .from(productCategory)

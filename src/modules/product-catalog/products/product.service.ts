@@ -819,8 +819,7 @@ export class ProductService {
             : eq(productImage.variantId, variantId),
           isNull(productImage.deletedAt),
         ),
-      )
-      .orderBy(asc(productImage.sortOrder));
+      );
   }
 
   private async getVariants(
