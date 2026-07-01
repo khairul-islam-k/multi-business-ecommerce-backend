@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  AnyPgColumn,
   boolean,
   index,
   integer,
@@ -10,11 +12,9 @@ import {
   uniqueIndex,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
-import { decimal, type JsonValue } from "./common";
+import { decimal, JsonValue } from "./common";
 import { systemUser } from "./system";
 
 export const PackageBillingCycle = {

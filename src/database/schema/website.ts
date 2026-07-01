@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  AnyPgColumn,
   boolean,
   index,
   integer,
@@ -10,12 +12,10 @@ import {
   uniqueIndex,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
-import { type JsonValue } from "./common";
 import { business } from "./business";
+import { JsonValue } from "./common";
 import { systemUser } from "./system";
 
 export const WebsiteTemplate = {

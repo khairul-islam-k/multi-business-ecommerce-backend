@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  AnyPgColumn,
   index,
   integer,
   pgEnum,
@@ -8,9 +10,7 @@ import {
   uniqueIndex,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
 import { business } from "./business";
 import { decimal } from "./common";
@@ -71,9 +71,7 @@ export const supplierInvoiceStatusEnum = pgEnum("SupplierInvoiceStatus", [
 export const SupplierPaymentMethod = {
   CASH: "CASH",
   BANK_TRANSFER: "BANK_TRANSFER",
-  BKASH: "BKASH",
-  NAGAD: "NAGAD",
-  CHEQUE: "CHEQUE",
+  MOBILE_BANKING: "MOBILE_BANKING",
   OTHER: "OTHER",
 } as const;
 export type SupplierPaymentMethod =
@@ -81,9 +79,7 @@ export type SupplierPaymentMethod =
 export const supplierPaymentMethodEnum = pgEnum("SupplierPaymentMethod", [
   "CASH",
   "BANK_TRANSFER",
-  "BKASH",
-  "NAGAD",
-  "CHEQUE",
+  "MOBILE_BANKING",
   "OTHER",
 ]);
 
@@ -212,7 +208,6 @@ export const supplierPurchaseOrder = pgTable(
       precision: 12,
       scale: 2,
     }).notNull(),
-    // TODO: Can I normalize it by removing the following two fields?
     taxTotal: decimal("tax_total", { precision: 12, scale: 2 }).notNull(),
     taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
     shippingCost: decimal("shipping_cost", {
@@ -338,7 +333,6 @@ export const supplierInvoice = pgTable(
       precision: 12,
       scale: 2,
     }).notNull(),
-    // TODO: Can I normalize it by removing the following two fields?
     taxTotal: decimal("tax_total", { precision: 12, scale: 2 }).notNull(),
     taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
     shippingCost: decimal("shipping_cost", {
@@ -498,7 +492,6 @@ export const supplierPurchaseReturn = pgTable(
       precision: 12,
       scale: 2,
     }).notNull(),
-    // TODO: Can I normalize it by removing the following two fields?
     taxTotal: decimal("tax_total", { precision: 12, scale: 2 }).notNull(),
     taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
     totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull(),

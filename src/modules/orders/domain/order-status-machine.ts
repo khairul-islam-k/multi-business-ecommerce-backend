@@ -2,7 +2,7 @@ import { OrderStatus } from "@/database/schema";
 import { BadRequestException } from "@nestjs/common";
 
 const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-  [OrderStatus.PENDING]: "pending",
+  [OrderStatus.PLACED]: "placed",
   [OrderStatus.CONFIRMED]: "confirmed",
   [OrderStatus.PROCESSING]: "processing",
   [OrderStatus.SHIPPED]: "shipped",

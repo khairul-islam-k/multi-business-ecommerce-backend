@@ -96,7 +96,7 @@ export class CreateOrderService {
       fulfillImmediately: false,
       initialStatus: settings.autoConfirmOrder
         ? OrderStatus.CONFIRMED
-        : OrderStatus.PENDING,
+        : OrderStatus.PLACED,
     });
   }
 

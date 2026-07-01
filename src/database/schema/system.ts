@@ -1,4 +1,5 @@
 import {
+  AnyPgColumn,
   date,
   index,
   integer,
@@ -9,7 +10,6 @@ import {
   timestamp,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 import { business } from "./business";

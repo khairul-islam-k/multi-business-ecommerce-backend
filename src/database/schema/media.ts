@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  AnyPgColumn,
   index,
   integer,
   pgEnum,
@@ -8,11 +10,9 @@ import {
   uniqueIndex,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 import { business } from "./business";
-import { sql } from "drizzle-orm";
 import { systemUser } from "./system";
 
 export const MediaFileType = {

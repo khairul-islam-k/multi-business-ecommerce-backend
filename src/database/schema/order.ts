@@ -25,16 +25,12 @@ import { systemUser } from "./system";
 export const OrderCartStatus = {
   ACTIVE: "ACTIVE",
   ORDERED: "ORDERED",
-  ABANDONED: "ABANDONED",
-  EXPIRED: "EXPIRED",
 } as const;
 export type OrderCartStatus =
   (typeof OrderCartStatus)[keyof typeof OrderCartStatus];
 export const orderCartStatusEnum = pgEnum("OrderCartStatus", [
   "ACTIVE",
   "ORDERED",
-  "ABANDONED",
-  "EXPIRED",
 ]);
 
 export const OrderType = {
@@ -49,18 +45,16 @@ export const OrderSource = {
   WEBSITE: "WEBSITE",
   POS: "POS",
   ADMIN_PANEL: "ADMIN_PANEL",
-  MOBILE_APP: "MOBILE_APP",
 } as const;
 export type OrderSource = (typeof OrderSource)[keyof typeof OrderSource];
 export const orderSourceEnum = pgEnum("OrderSource", [
   "WEBSITE",
   "POS",
   "ADMIN_PANEL",
-  "MOBILE_APP",
 ]);
 
 export const OrderStatus = {
-  PENDING: "PENDING",
+  PLACED: "PLACED",
   CONFIRMED: "CONFIRMED",
   PROCESSING: "PROCESSING",
   SHIPPED: "SHIPPED",
@@ -70,7 +64,7 @@ export const OrderStatus = {
 } as const;
 export type OrderStatus = (typeof OrderStatus)[keyof typeof OrderStatus];
 export const orderStatusEnum = pgEnum("OrderStatus", [
-  "PENDING",
+  "PLACED",
   "CONFIRMED",
   "PROCESSING",
   "SHIPPED",
@@ -127,10 +121,7 @@ export const orderDiscountSourceEnum = pgEnum("OrderDiscountSource", [
 export const OrderPaymentMethod = {
   CASH: "CASH",
   COD: "COD",
-  BKASH: "BKASH",
-  NAGAD: "NAGAD",
-  CARD: "CARD",
-  BANK_TRANSFER: "BANK_TRANSFER",
+  ONLINE_PAYMENT: "ONLINE_PAYMENT",
   OTHER: "OTHER",
 } as const;
 export type OrderPaymentMethod =
@@ -138,10 +129,7 @@ export type OrderPaymentMethod =
 export const orderPaymentMethodEnum = pgEnum("OrderPaymentMethod", [
   "CASH",
   "COD",
-  "BKASH",
-  "NAGAD",
-  "CARD",
-  "BANK_TRANSFER",
+  "ONLINE_PAYMENT",
   "OTHER",
 ]);
 
@@ -163,21 +151,15 @@ export const orderReturnStatusEnum = pgEnum("OrderReturnStatus", [
 ]);
 
 export const OrderRefundMethod = {
-  CASH: "CASH",
-  BKASH: "BKASH",
-  NAGAD: "NAGAD",
-  CARD: "CARD",
-  BANK_TRANSFER: "BANK_TRANSFER",
+  COD: "COD",
+  ONLINE_PAYMENT: "ONLINE_PAYMENT",
   OTHER: "OTHER",
 } as const;
 export type OrderRefundMethod =
   (typeof OrderRefundMethod)[keyof typeof OrderRefundMethod];
 export const orderRefundMethodEnum = pgEnum("OrderRefundMethod", [
-  "CASH",
-  "BKASH",
-  "NAGAD",
-  "CARD",
-  "BANK_TRANSFER",
+  "COD",
+  "ONLINE_PAYMENT",
   "OTHER",
 ]);
 

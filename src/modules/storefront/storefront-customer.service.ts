@@ -714,6 +714,7 @@ export class StorefrontCustomerService {
     query: StorefrontOrderQueryDto,
   ) {
     await this.assertStorefrontCustomer(currentCustomer, websiteId);
+    // TODO: add search here
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;

@@ -45,7 +45,7 @@ describe("CreateOrderService", () => {
         orderType: OrderType.ONLINE,
         orderSource: OrderSource.WEBSITE,
         fulfillImmediately: false,
-        initialStatus: OrderStatus.PENDING,
+        initialStatus: OrderStatus.PLACED,
       }),
     );
   });

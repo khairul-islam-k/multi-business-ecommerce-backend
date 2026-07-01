@@ -140,7 +140,6 @@ export const financePayableStatusEnum = pgEnum("FinancePayableStatus", [
 
 export const FinanceSourceType = {
   ORDER: "ORDER",
-  INVOICE: "INVOICE",
   SUPPLIER_INVOICE: "SUPPLIER_INVOICE",
   SUPPLIER_PAYMENT: "SUPPLIER_PAYMENT",
   SUPPLIER_RETURN: "SUPPLIER_RETURN",
@@ -154,7 +153,6 @@ export type FinanceSourceType =
   (typeof FinanceSourceType)[keyof typeof FinanceSourceType];
 export const financeSourceTypeEnum = pgEnum("FinanceSourceType", [
   "ORDER",
-  "INVOICE",
   "SUPPLIER_INVOICE",
   "SUPPLIER_PAYMENT",
   "SUPPLIER_RETURN",

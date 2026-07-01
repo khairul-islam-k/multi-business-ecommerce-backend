@@ -174,7 +174,7 @@ describe("StorefrontCustomerService", () => {
     };
     const placedOrder = {
       id: "order-1",
-      status: OrderStatus.PENDING,
+      status: OrderStatus.PLACED,
     };
 
     orders.createStorefrontOrder.mockResolvedValue({
@@ -247,7 +247,7 @@ describe("StorefrontCustomerService", () => {
     };
     const placedOrder = {
       id: "order-2",
-      status: OrderStatus.PENDING,
+      status: OrderStatus.PLACED,
     };
 
     orders.createStorefrontOrder.mockResolvedValue({
