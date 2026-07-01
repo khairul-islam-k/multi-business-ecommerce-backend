@@ -1248,11 +1248,19 @@ export class StorefrontCustomerService {
       .select({
         item: customerWishlist,
         product,
+        stock: inventoryStock,
         variant: productVariant,
         image: productImage,
       })
       .from(customerWishlist)
       .innerJoin(product, eq(product.id, customerWishlist.productId))
+      .innerJoin(
+        inventoryStock,
+        and(
+          eq(inventoryStock.productId, customerWishlist.productId),
+          eq(inventoryStock.variantId, customerWishlist.variantId),
+        ),
+      )
       .leftJoin(
         productVariant,
         and(
@@ -1274,6 +1282,7 @@ export class StorefrontCustomerService {
     return row
       ? {
           ...row.item,
+          stockSummary: row.stock,
           product: row.product,
           variant: row.variant,
           image: row.image,
