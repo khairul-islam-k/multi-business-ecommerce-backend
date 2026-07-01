@@ -1378,6 +1378,12 @@ export class StorefrontCustomerService {
         .select()
         .from(orderItem)
         .where(eq(orderItem.orderId, orderRow.id))
+        .innerJoin(
+          productImage,
+          eq(productImage.productId, orderItem.productId),
+        )
+        .innerJoin(product, eq(product.id, orderItem.productId))
+        .leftJoin(productVariant, eq(productVariant.id, orderItem.variantId))
         .orderBy(asc(orderItem.createdAt)),
       this.db
         .select()
@@ -1403,7 +1409,12 @@ export class StorefrontCustomerService {
 
     return {
       ...orderRow,
-      items,
+      items: items.map((item) => ({
+        ...item.order_items,
+        product: item.products,
+        variant: item.product_variants,
+        image: item.product_images,
+      })),
       payments,
       statusLogs,
       returns,
