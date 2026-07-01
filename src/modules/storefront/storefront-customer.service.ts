@@ -2,10 +2,11 @@ import Decimal from "decimal.js";
 import { and, asc, count, desc, eq, inArray, isNull, or } from "drizzle-orm";
 
 import {
-  CatalogProductStatus,
   businessSetting,
+  CatalogProductStatus,
   customer,
   customerAddress,
+  customerWishlist,
   inventoryStock,
   order,
   orderCart,
@@ -54,11 +55,14 @@ import {
   CreateStorefrontOrderReturnDto,
   CreateStorefrontReviewDto,
   PlaceStorefrontOrderDto,
-  StorefrontCheckoutPaymentMethod,
   StorefrontCartQueryDto,
+  StorefrontCheckoutPaymentMethod,
   StorefrontOrderQueryDto,
   StorefrontOrderReturnQueryDto,
   StorefrontReviewQueryDto,
+  StorefrontWishlistItemDto,
+  StorefrontWishlistQueryDto,
+  StorefrontWishlistSortBy,
   UpdateStorefrontCartItemDto,
   UpdateStorefrontCustomerAddressDto,
 } from "./dto/storefront-customer.dto";
@@ -279,6 +283,178 @@ export class StorefrontCustomerService {
     return apiResponse(cart ? await this.hydrateCart(cart) : null);
   }
 
+  async findWishlist(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string | undefined,
+    query: StorefrontWishlistQueryDto,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const skip = (page - 1) * limit;
+    const where = and(
+      eq(customerWishlist.businessId, currentCustomer.businessId),
+      eq(customerWishlist.customerId, currentCustomer.customerId),
+    );
+
+    const [rows, total] = await Promise.all([
+      this.db
+        .select()
+        .from(customerWishlist)
+        .where(where)
+        .orderBy(
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [StorefrontWishlistSortBy.CREATED_AT]:
+                  customerWishlist.createdAt,
+                [StorefrontWishlistSortBy.UPDATED_AT]:
+                  customerWishlist.updatedAt,
+              },
+              StorefrontWishlistSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
+          ),
+        )
+        .limit(limit)
+        .offset(skip),
+      this.db
+        .select({ value: count() })
+        .from(customerWishlist)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
+    ]);
+
+    return paginatedResponse(
+      await Promise.all(rows.map((row) => this.hydrateWishlistItem(row))),
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Customer wishlist was loaded successfully. The response includes saved products and pagination metadata for browsing more items.",
+    );
+  }
+
+  async addWishlistItem(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string | undefined,
+    dto: StorefrontWishlistItemDto,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+    await this.getActiveProductOrThrow(
+      currentCustomer.businessId,
+      dto.productId,
+    );
+    await this.assertVariantSelection(
+      currentCustomer.businessId,
+      dto.productId,
+      dto.variantId,
+    );
+
+    const existing = await this.findWishlistItemByProduct(
+      currentCustomer,
+      dto.productId,
+      dto.variantId ?? null,
+    );
+
+    if (existing) {
+      return apiResponse(
+        await this.hydrateWishlistItem(existing),
+        "Wishlist item already exists",
+      );
+    }
+
+    try {
+      const [created] = await this.db
+        .insert(customerWishlist)
+        .values({
+          businessId: currentCustomer.businessId,
+          customerId: currentCustomer.customerId,
+          productId: dto.productId,
+          variantId: dto.variantId ?? null,
+        })
+        .returning();
+
+      return apiResponse(
+        await this.hydrateWishlistItem(created),
+        "Wishlist item added successfully",
+      );
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      const concurrentItem = await this.findWishlistItemByProduct(
+        currentCustomer,
+        dto.productId,
+        dto.variantId ?? null,
+      );
+
+      if (!concurrentItem) {
+        throw error;
+      }
+
+      return apiResponse(
+        await this.hydrateWishlistItem(concurrentItem),
+        "Wishlist item already exists",
+      );
+    }
+  }
+
+  async checkWishlistItem(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string | undefined,
+    query: StorefrontWishlistItemDto,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+    const item = await this.findWishlistItemByProduct(
+      currentCustomer,
+      query.productId,
+      query.variantId ?? null,
+    );
+
+    return apiResponse({
+      exists: Boolean(item),
+      item: item ? await this.hydrateWishlistItem(item) : null,
+    });
+  }
+
+  async removeWishlistItem(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string | undefined,
+    wishlistItemId: string,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+    await this.getWishlistItemOrThrow(currentCustomer, wishlistItemId);
+
+    await this.db
+      .delete(customerWishlist)
+      .where(eq(customerWishlist.id, wishlistItemId));
+
+    return apiResponse(null, "Wishlist item removed successfully");
+  }
+
+  async clearWishlist(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string | undefined,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+
+    await this.db
+      .delete(customerWishlist)
+      .where(
+        and(
+          eq(customerWishlist.businessId, currentCustomer.businessId),
+          eq(customerWishlist.customerId, currentCustomer.customerId),
+        ),
+      );
+
+    return apiResponse(null, "Wishlist cleared successfully");
+  }
+
   async addCartItem(
     currentCustomer: CurrentCustomerPayload,
     websiteId: string | undefined,
@@ -433,14 +609,33 @@ export class StorefrontCustomerService {
     dto: PlaceStorefrontOrderDto,
   ) {
     await this.assertStorefrontCustomer(currentCustomer, websiteId);
-    const [customerRow, cart] = await Promise.all([
-      this.getCustomerOrThrow(currentCustomer),
-      this.findActiveCart(currentCustomer),
-    ]);
+    const cart = await this.findActiveCart(currentCustomer);
 
     if (!cart) {
       throw new BadRequestException("Active cart is empty");
     }
+
+    return this.placeCartOrder(currentCustomer, cart, dto);
+  }
+
+  async placeOrderFromCart(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string | undefined,
+    cartId: string,
+    dto: PlaceStorefrontOrderDto,
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+    const cart = await this.getPlaceableCartOrThrow(currentCustomer, cartId);
+
+    return this.placeCartOrder(currentCustomer, cart, dto);
+  }
+
+  private async placeCartOrder(
+    currentCustomer: CurrentCustomerPayload,
+    cart: typeof orderCart.$inferSelect,
+    dto: PlaceStorefrontOrderDto,
+  ) {
+    const customerRow = await this.getCustomerOrThrow(currentCustomer);
 
     const cartItems = await this.getCartItems(cart.id);
 
@@ -916,6 +1111,31 @@ export class StorefrontCustomerService {
       .then(([cart]) => cart ?? null);
   }
 
+  private async getPlaceableCartOrThrow(
+    currentCustomer: CurrentCustomerPayload,
+    cartId: string,
+  ) {
+    const [cart] = await this.db
+      .select()
+      .from(orderCart)
+      .where(
+        and(
+          eq(orderCart.id, cartId),
+          eq(orderCart.businessId, currentCustomer.businessId),
+          eq(orderCart.customerId, currentCustomer.customerId),
+        ),
+      )
+      .limit(1);
+
+    if (!cart) {
+      throw new NotFoundException(
+        "Cart could not be found. It may not exist, or may not belong to this storefront customer.",
+      );
+    }
+
+    return cart;
+  }
+
   private async findOrCreateActiveCart(
     currentCustomer: CurrentCustomerPayload,
   ) {
@@ -1018,6 +1238,93 @@ export class StorefrontCustomerService {
       .from(orderCartItem)
       .where(eq(orderCartItem.cartId, cartId))
       .orderBy(asc(orderCartItem.createdAt));
+  }
+
+  private async hydrateWishlistItem(
+    wishlistItem: typeof customerWishlist.$inferSelect,
+  ) {
+    const [row] = await this.db
+      .select({
+        item: customerWishlist,
+        product,
+        variant: productVariant,
+        image: productImage,
+      })
+      .from(customerWishlist)
+      .innerJoin(product, eq(product.id, customerWishlist.productId))
+      .leftJoin(
+        productVariant,
+        and(
+          eq(productVariant.id, customerWishlist.variantId),
+          eq(productVariant.productId, product.id),
+        ),
+      )
+      .leftJoin(
+        productImage,
+        or(
+          eq(product.id, productImage.productId),
+          eq(productVariant.id, productImage.variantId),
+        ),
+      )
+      .where(eq(customerWishlist.id, wishlistItem.id))
+      .orderBy(desc(productImage.isThumbnail), asc(productImage.sortOrder))
+      .limit(1);
+
+    return row
+      ? {
+          ...row.item,
+          product: row.product,
+          variant: row.variant,
+          image: row.image,
+        }
+      : wishlistItem;
+  }
+
+  private async findWishlistItemByProduct(
+    currentCustomer: CurrentCustomerPayload,
+    productId: string,
+    variantId: string | null,
+  ) {
+    return this.db
+      .select()
+      .from(customerWishlist)
+      .where(
+        and(
+          eq(customerWishlist.businessId, currentCustomer.businessId),
+          eq(customerWishlist.customerId, currentCustomer.customerId),
+          eq(customerWishlist.productId, productId),
+          variantId
+            ? eq(customerWishlist.variantId, variantId)
+            : isNull(customerWishlist.variantId),
+        ),
+      )
+      .limit(1)
+      .then(([item]) => item ?? null);
+  }
+
+  private async getWishlistItemOrThrow(
+    currentCustomer: CurrentCustomerPayload,
+    wishlistItemId: string,
+  ) {
+    const [item] = await this.db
+      .select()
+      .from(customerWishlist)
+      .where(
+        and(
+          eq(customerWishlist.id, wishlistItemId),
+          eq(customerWishlist.businessId, currentCustomer.businessId),
+          eq(customerWishlist.customerId, currentCustomer.customerId),
+        ),
+      )
+      .limit(1);
+
+    if (!item) {
+      throw new NotFoundException(
+        "Wishlist item could not be found. It may not exist, may have already been removed, or may not belong to this storefront customer.",
+      );
+    }
+
+    return item;
   }
 
   private async findCustomerOrderOrThrow(

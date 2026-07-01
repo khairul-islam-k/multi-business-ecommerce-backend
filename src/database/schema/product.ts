@@ -16,8 +16,8 @@ import {
 import { business } from "./business";
 import { decimal } from "./common";
 import { customer } from "./customer";
-import { systemUser } from "./system";
 import { financeTax } from "./finance";
+import { systemUser } from "./system";
 
 export const ProductSimpleStatus = {
   ACTIVE: "ACTIVE",

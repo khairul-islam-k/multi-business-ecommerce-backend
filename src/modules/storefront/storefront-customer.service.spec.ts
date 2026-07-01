@@ -1,6 +1,7 @@
 import Decimal from "decimal.js";
 
 import {
+  customerWishlist,
   orderCart,
   orderCartItem,
   OrderCartStatus,
@@ -23,9 +24,15 @@ const currentCustomer = {
 };
 
 function createService() {
+  const deletes: unknown[] = [];
   const updates: { table: unknown; values: Record<string, unknown> }[] = [];
   const inserts: { table: unknown; values: Record<string, unknown> }[] = [];
   const db = {
+    delete: jest.fn((table) => {
+      deletes.push(table);
+
+      return { where: jest.fn(() => Promise.resolve(undefined)) };
+    }),
     update: jest.fn((table) => ({
       set: jest.fn((values: Record<string, unknown>) => {
         updates.push({ table, values });
@@ -72,7 +79,7 @@ function createService() {
     orderCodes as never,
   );
 
-  return { db, inserts, orderCodes, orders, service, updates };
+  return { db, deletes, inserts, orderCodes, orders, service, updates };
 }
 
 describe("StorefrontCustomerService", () => {
@@ -231,6 +238,73 @@ describe("StorefrontCustomerService", () => {
     });
   });
 
+  it("places a selected active cart as an unpaid storefront order", async () => {
+    const { orders, service, updates } = createService();
+    const cart = {
+      id: "cart-2",
+      businessId: "business-1",
+      customerId: "customer-1",
+    };
+    const placedOrder = {
+      id: "order-2",
+      status: OrderStatus.PENDING,
+    };
+
+    orders.createStorefrontOrder.mockResolvedValue({
+      data: { id: "order-2" },
+    } as never);
+
+    jest
+      .spyOn(service as any, "assertStorefrontCustomer")
+      .mockResolvedValue({ id: "website-1" });
+    jest
+      .spyOn(service as any, "getPlaceableCartOrThrow")
+      .mockResolvedValue(cart);
+    jest.spyOn(service as any, "getCustomerOrThrow").mockResolvedValue({
+      id: "customer-1",
+      name: "Buyer One",
+      phone: "+8801700000000",
+    });
+    jest.spyOn(service as any, "getCartItems").mockResolvedValue([
+      {
+        productId: "product-1",
+        variantId: null,
+        quantity: new Decimal(2),
+      },
+    ] as never);
+    jest
+      .spyOn(service as any, "findCustomerOrderOrThrow")
+      .mockResolvedValue(placedOrder);
+    jest
+      .spyOn(service as any, "assertCheckoutPaymentSettings")
+      .mockResolvedValue(undefined);
+    jest
+      .spyOn(service as any, "assertItemInStock")
+      .mockResolvedValue(undefined);
+
+    const result = await service.placeOrderFromCart(
+      currentCustomer,
+      "website-1",
+      "cart-2",
+      {
+        paymentMethod: StorefrontCheckoutPaymentMethod.ONLINE,
+        shippingAddressSnapshot: { address: "House 42" },
+      },
+    );
+
+    expect(result.data).toBe(placedOrder);
+    expect(service["getPlaceableCartOrThrow"]).toHaveBeenCalledWith(
+      currentCustomer,
+      "cart-2",
+    );
+    expect(updates).toContainEqual({
+      table: orderCart,
+      values: {
+        status: OrderCartStatus.ORDERED,
+      },
+    });
+  });
+
   it("uses a saved customer address snapshot when placing an order", async () => {
     const { orders, service } = createService();
     const cart = {
@@ -297,5 +371,47 @@ describe("StorefrontCustomerService", () => {
         shippingCharge: 0,
       }),
     );
+  });
+
+  it("adds a product to the customer wishlist", async () => {
+    const { inserts, service } = createService();
+    const wishlistItem = {
+      id: "wishlist-1",
+      businessId: "business-1",
+      customerId: "customer-1",
+      productId: "product-1",
+      variantId: null,
+    };
+
+    jest
+      .spyOn(service as any, "assertStorefrontCustomer")
+      .mockResolvedValue({ id: "website-1" });
+    jest
+      .spyOn(service as any, "getActiveProductOrThrow")
+      .mockResolvedValue({ id: "product-1" });
+    jest
+      .spyOn(service as any, "assertVariantSelection")
+      .mockResolvedValue(undefined);
+    jest
+      .spyOn(service as any, "findWishlistItemByProduct")
+      .mockResolvedValue(null);
+    jest
+      .spyOn(service as any, "hydrateWishlistItem")
+      .mockResolvedValue(wishlistItem);
+
+    const result = await service.addWishlistItem(currentCustomer, "website-1", {
+      productId: "product-1",
+    });
+
+    expect(result.data).toBe(wishlistItem);
+    expect(inserts).toContainEqual({
+      table: customerWishlist,
+      values: expect.objectContaining({
+        businessId: "business-1",
+        customerId: "customer-1",
+        productId: "product-1",
+        variantId: null,
+      }),
+    });
   });
 });

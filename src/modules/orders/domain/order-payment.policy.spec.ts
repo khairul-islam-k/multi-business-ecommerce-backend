@@ -8,6 +8,7 @@ import { BadRequestException } from "@nestjs/common";
 
 import {
   assertOrderCanAcceptPayment,
+  assertOrderIsNotCod,
   assertOrderPaymentInput,
   calculatePaidAmount,
   getOrderPaymentStatus,
@@ -27,6 +28,10 @@ describe("order payment policy", () => {
     expect(() => assertOrderCanAcceptPayment(OrderStatus.CANCELLED)).toThrow(
       BadRequestException,
     );
+  });
+
+  it("rejects adding direct payment to an existing COD order", () => {
+    expect(() => assertOrderIsNotCod(true)).toThrow(BadRequestException);
   });
 
   it("calculates payment status from totals", () => {

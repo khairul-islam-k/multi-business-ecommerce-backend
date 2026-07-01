@@ -40,9 +40,12 @@ import {
 } from "../../database/database.service";
 import { FinanceLedgerService } from "../finance/common/finance-ledger.service";
 import { OrderPaymentService } from "../orders/application/order-payment.service";
+import {
+  assertOrderCanAcceptPayment,
+  assertOrderIsNotCod,
+} from "../orders/domain/order-payment.policy";
 import { OrderCodeRepository } from "../orders/infrastructure/order-code.repository";
 import { WebsiteService } from "../website/website.service";
-import { assertOrderCanAcceptPayment } from "../orders/domain/order-payment.policy";
 import {
   BulkCreatePaymentGatewayConfigDto,
   BulkUpdatePaymentGatewayConfigDto,
@@ -541,6 +544,7 @@ export class PaymentGatewayService {
       orderId,
     );
     assertOrderCanAcceptPayment(row.status);
+    assertOrderIsNotCod(row.isCod);
 
     const pendingPayment = await this.findPendingGatewayPayment(
       currentCustomer.businessId,

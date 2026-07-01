@@ -16,6 +16,7 @@ import {
 import { business } from "./business";
 import { systemUser } from "./system";
 import { website } from "./website";
+import { product, productVariant } from "./product";
 
 export const CustomerStatus = {
   ACTIVE: "ACTIVE",
@@ -338,3 +339,42 @@ export const customerSession = pgTable(
 );
 export type CustomerSession = typeof customerSession.$inferSelect;
 export type NewCustomerSession = typeof customerSession.$inferInsert;
+
+export const customerWishlist = pgTable(
+  "customer_wishlist_items",
+  {
+    id: uuid().primaryKey().defaultRandom().notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references((): AnyPgColumn => customer.id, { onDelete: "cascade" }),
+    productId: uuid("product_id")
+      .notNull()
+      .references((): AnyPgColumn => product.id, { onDelete: "cascade" }),
+    variantId: uuid("variant_id").references(
+      (): AnyPgColumn => productVariant.id,
+      { onDelete: "cascade" },
+    ),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("customer_wishlist_customer_product_no_variant_unique")
+      .on(table.businessId, table.customerId, table.productId)
+      .where(sql`${table.variantId} IS NULL`),
+    uniqueIndex("customer_wishlist_customer_product_variant_unique")
+      .on(table.businessId, table.customerId, table.productId, table.variantId)
+      .where(sql`${table.variantId} IS NOT NULL`),
+    index("customer_wishlist_business_id_idx").on(table.businessId),
+    index("customer_wishlist_customer_id_idx").on(table.customerId),
+    index("customer_wishlist_product_id_idx").on(table.productId),
+    index("customer_wishlist_variant_id_idx").on(table.variantId),
+  ],
+);
+export type CustomerWishlist = typeof customerWishlist.$inferSelect;
+export type NewCustomerWishlist = typeof customerWishlist.$inferInsert;

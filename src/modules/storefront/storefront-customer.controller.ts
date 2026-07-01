@@ -15,6 +15,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 
 import { CurrentCustomer } from "../customer-auth/decorators/current-customer.decorator";
 import { CustomerAuthGuard } from "../customer-auth/guards/customer-auth.guard";
+import { QueryCustomerInvoiceDto } from "../orders/dto/order.dto";
 import {
   AddStorefrontCartItemDto,
   CancelStorefrontOrderDto,
@@ -26,10 +27,11 @@ import {
   StorefrontOrderQueryDto,
   StorefrontOrderReturnQueryDto,
   StorefrontReviewQueryDto,
+  StorefrontWishlistItemDto,
+  StorefrontWishlistQueryDto,
   UpdateStorefrontCartItemDto,
   UpdateStorefrontCustomerAddressDto,
 } from "./dto/storefront-customer.dto";
-import { QueryCustomerInvoiceDto } from "../orders/dto/order.dto";
 import { StorefrontCustomerService } from "./storefront-customer.service";
 
 import type { CurrentCustomerPayload } from "../customer-auth/strategies/customer-jwt.strategy";
@@ -206,6 +208,23 @@ export class StorefrontCustomerController {
     );
   }
 
+  @Post("carts/:cartId/place")
+  @ApiOperation({ summary: "Place an existing active cart as an unpaid order" })
+  placeExistingCartOrder(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+    @Param("cartId", ParseUUIDPipe) cartId: string,
+    @Body() dto: PlaceStorefrontOrderDto,
+  ) {
+    return this.storefrontCustomers.placeOrderFromCart(
+      customer,
+      this.getRequestHost(host, forwardedHost),
+      cartId,
+      dto,
+    );
+  }
+
   @Post("orders/place")
   @ApiOperation({ summary: "Place active cart as an unpaid order" })
   placeOrder(
@@ -218,6 +237,79 @@ export class StorefrontCustomerController {
       customer,
       this.getRequestHost(host, forwardedHost),
       dto,
+    );
+  }
+
+  @Get("wishlist")
+  @ApiOperation({ summary: "Get customer wishlist" })
+  findWishlist(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+    @Query() query: StorefrontWishlistQueryDto,
+  ) {
+    return this.storefrontCustomers.findWishlist(
+      customer,
+      this.getRequestHost(host, forwardedHost),
+      query,
+    );
+  }
+
+  @Get("wishlist/check")
+  @ApiOperation({ summary: "Check if a product is in the customer wishlist" })
+  checkWishlistItem(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+    @Query() query: StorefrontWishlistItemDto,
+  ) {
+    return this.storefrontCustomers.checkWishlistItem(
+      customer,
+      this.getRequestHost(host, forwardedHost),
+      query,
+    );
+  }
+
+  @Post("wishlist/items")
+  @ApiOperation({ summary: "Add item to customer wishlist" })
+  addWishlistItem(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+    @Body() dto: StorefrontWishlistItemDto,
+  ) {
+    return this.storefrontCustomers.addWishlistItem(
+      customer,
+      this.getRequestHost(host, forwardedHost),
+      dto,
+    );
+  }
+
+  @Delete("wishlist/items/:wishlistItemId")
+  @ApiOperation({ summary: "Remove item from customer wishlist" })
+  removeWishlistItem(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+    @Param("wishlistItemId", ParseUUIDPipe) wishlistItemId: string,
+  ) {
+    return this.storefrontCustomers.removeWishlistItem(
+      customer,
+      this.getRequestHost(host, forwardedHost),
+      wishlistItemId,
+    );
+  }
+
+  @Delete("wishlist")
+  @ApiOperation({ summary: "Clear customer wishlist" })
+  clearWishlist(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+  ) {
+    return this.storefrontCustomers.clearWishlist(
+      customer,
+      this.getRequestHost(host, forwardedHost),
     );
   }
 

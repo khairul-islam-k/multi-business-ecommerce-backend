@@ -43,6 +43,34 @@ export class StorefrontCartQueryDto {
   status?: OrderCartStatus;
 }
 
+export const StorefrontWishlistSortBy = {
+  CREATED_AT: "createdAt",
+  UPDATED_AT: "updatedAt",
+} as const;
+export type StorefrontWishlistSortBy =
+  (typeof StorefrontWishlistSortBy)[keyof typeof StorefrontWishlistSortBy];
+
+export class StorefrontWishlistQueryDto extends SortedPaginationQueryDto<StorefrontWishlistSortBy> {
+  @ApiPropertyOptional({
+    enum: StorefrontWishlistSortBy,
+    example: StorefrontWishlistSortBy.CREATED_AT,
+  })
+  @IsOptional()
+  @IsIn(Object.values(StorefrontWishlistSortBy))
+  sortBy?: StorefrontWishlistSortBy = StorefrontWishlistSortBy.CREATED_AT;
+}
+
+export class StorefrontWishlistItemDto {
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsUUID()
+  productId!: string;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  variantId?: string;
+}
+
 export class AddStorefrontCartItemDto {
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsUUID()

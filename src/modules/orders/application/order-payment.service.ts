@@ -25,6 +25,7 @@ import { FinanceLedgerService } from "../../finance/common/finance-ledger.servic
 import {
   assertDirectOrderPayment,
   assertOrderCanAcceptPayment,
+  assertOrderIsNotCod,
   assertSettlementPayment,
   calculatePaidAmount,
   getOrderPaymentStatus,
@@ -60,6 +61,7 @@ export class OrderPaymentService {
     const order = await this.orders.getByIdOrThrow(businessId, orderId);
 
     assertOrderCanAcceptPayment(order.status);
+    assertOrderIsNotCod(order.isCod);
     assertDirectOrderPayment(dto);
 
     const updatedOrder = await this.db.transaction(async (tx) => {

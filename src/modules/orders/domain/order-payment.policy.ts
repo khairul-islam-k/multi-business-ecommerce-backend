@@ -35,6 +35,14 @@ export function assertOrderCanAcceptPayment(status: OrderStatus) {
   }
 }
 
+export function assertOrderIsNotCod(isCod: boolean) {
+  if (isCod) {
+    throw new BadRequestException(
+      "This is a COD order. Payment should be recorded through courier settlement, or convert the order from COD before adding a direct payment.",
+    );
+  }
+}
+
 export function assertDirectOrderPayment(payment: OrderPaymentInputDto) {
   if (payment.paymentMethod === OrderPaymentMethod.COD) {
     throw new BadRequestException("COD is recorded through courier settlement");
