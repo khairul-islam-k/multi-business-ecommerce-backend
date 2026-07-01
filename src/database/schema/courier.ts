@@ -18,6 +18,19 @@ import { business } from "./business";
 import { decimal, JsonValue } from "./common";
 import { systemUser } from "./system";
 
+export const CourierProvider = {
+  PATHAO: "PATHAO",
+  REDX: "REDX",
+  STEADFAST: "STEADFAST",
+} as const;
+export type CourierProvider =
+  (typeof CourierProvider)[keyof typeof CourierProvider];
+export const courierProviderEnum = pgEnum("CourierProvider", [
+  "PATHAO",
+  "REDX",
+  "STEADFAST",
+]);
+
 export const CourierStatus = {
   ACTIVE: "ACTIVE",
   INACTIVE: "INACTIVE",
@@ -128,6 +141,7 @@ export const courier = pgTable(
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
     name: varchar({ length: 150 }).notNull(),
+    code: courierProviderEnum().notNull(),
     description: text(),
     status: courierStatusEnum().default("ACTIVE").notNull(),
     sortOrder: integer("sort_order").default(0).notNull(),
@@ -139,6 +153,7 @@ export const courier = pgTable(
   },
   (table) => [
     uniqueIndex("courier_couriers_name_unique").on(table.name),
+    uniqueIndex("courier_couriers_code_unique").on(table.code),
     index("courier_couriers_status_idx").on(table.status),
   ],
 );
@@ -157,7 +172,7 @@ export const courierConfig = pgTable(
       .references((): AnyPgColumn => courier.id, { onDelete: "restrict" }),
     configData: jsonb("config_data").$type<JsonValue>().notNull(),
     mode: courierConfigModeEnum().default("SANDBOX").notNull(),
-    status: courierConfigStatusEnum().default("ACTIVE").notNull(),
+    status: courierConfigStatusEnum().default("INACTIVE").notNull(),
     createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
       onDelete: "set null",
     }),
@@ -175,8 +190,8 @@ export const courierConfig = pgTable(
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
-    uniqueIndex("courier_configs_business_courier_mode_active_unique")
-      .on(table.businessId, table.courierId, table.mode)
+    uniqueIndex("courier_configs_business_courier_active_unique")
+      .on(table.businessId, table.courierId)
       .where(sql`${table.deletedAt} IS NULL`),
     index("courier_configs_business_id_idx").on(table.businessId),
     index("courier_configs_courier_id_idx").on(table.courierId),
@@ -301,6 +316,10 @@ export const courierShipment = pgTable(
     courierId: uuid("courier_id").references((): AnyPgColumn => courier.id, {
       onDelete: "set null",
     }),
+    courierConfigId: uuid("courier_config_id").references(
+      (): AnyPgColumn => courierConfig.id,
+      { onDelete: "set null" },
+    ),
     deliveryZoneId: uuid("delivery_zone_id").references(
       (): AnyPgColumn => courierDeliveryZone.id,
       { onDelete: "set null" },
@@ -351,6 +370,7 @@ export const courierShipment = pgTable(
     index("courier_shipments_business_id_idx").on(table.businessId),
     index("courier_shipments_order_id_idx").on(table.orderId),
     index("courier_shipments_courier_id_idx").on(table.courierId),
+    index("courier_shipments_courier_config_id_idx").on(table.courierConfigId),
     index("courier_shipments_delivery_zone_id_idx").on(table.deliveryZoneId),
     index("courier_shipments_status_idx").on(table.status),
     index("courier_shipments_tracking_code_idx").on(table.trackingCode),
