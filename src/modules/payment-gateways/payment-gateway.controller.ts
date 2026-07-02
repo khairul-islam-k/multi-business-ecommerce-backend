@@ -37,7 +37,10 @@ export class PaymentGatewayController {
   @RequirePermission(RbacFeature.PAYMENT_MANAGEMENT, PermissionAction.READ)
   @Get("gateways")
   @ApiOperation({ summary: "Get predefined payment gateways" })
-  findGateways(@Query() query: QueryPaymentGatewayDto) {
+  findGateways(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Query() query: QueryPaymentGatewayDto,
+  ) {
     return this.gateways.findGateways(query);
   }
 

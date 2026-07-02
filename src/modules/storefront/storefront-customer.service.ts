@@ -44,6 +44,7 @@ import {
   paginatedResponse,
 } from "../../common/utils/api-response.util";
 import { DatabaseService } from "../../database/database.service";
+import { CourierService } from "../couriers/courier.service";
 import { OrderSortBy, QueryCustomerInvoiceDto } from "../orders/dto/order.dto";
 import { OrderCodeRepository } from "../orders/infrastructure/order-code.repository";
 import { OrderService } from "../orders/order.service";
@@ -76,6 +77,7 @@ export class StorefrontCustomerService {
     private readonly websites: WebsiteService,
     private readonly orders: OrderService,
     private readonly orderCodes: OrderCodeRepository,
+    private readonly couriers: CourierService,
   ) {}
 
   private get db() {
@@ -673,6 +675,14 @@ export class StorefrontCustomerService {
           ),
         )
       : dto.shippingAddressSnapshot;
+    const courierSelection = dto.courierConfigId
+      ? await this.couriers.prepareStorefrontOrderCourier(
+          currentCustomer.businessId,
+          dto.courierConfigId,
+          dto.courierQuote,
+          dto.paymentMethod === StorefrontCheckoutPaymentMethod.COD,
+        )
+      : null;
 
     const createdOrderResponse = await this.orders.createStorefrontOrder(
       currentCustomer.businessId,
@@ -682,9 +692,20 @@ export class StorefrontCustomerService {
         customerPhone: customerRow.phone ?? undefined,
         customerEmail: currentCustomer.email,
         shippingAddressSnapshot,
-        shippingCharge: 0,
+        shippingCharge: courierSelection?.shippingCharge ?? 0,
         isCod: dto.paymentMethod === StorefrontCheckoutPaymentMethod.COD,
         note: dto.note,
+        ...(courierSelection && {
+          courier: {
+            ...courierSelection.courier,
+            recipientName: customerRow.name,
+            recipientPhone: customerRow.phone ?? undefined,
+            deliveryAddressSnapshot: this.withCourierQuoteSnapshot(
+              shippingAddressSnapshot,
+              dto.courierQuote,
+            ),
+          },
+        }),
         items: cartItems.map((row) => ({
           productId: row.productId,
           variantId: row.variantId ?? undefined,
@@ -1256,23 +1277,17 @@ export class StorefrontCustomerService {
       .innerJoin(product, eq(product.id, customerWishlist.productId))
       .innerJoin(
         inventoryStock,
-        and(
+        or(
           eq(inventoryStock.productId, customerWishlist.productId),
           eq(inventoryStock.variantId, customerWishlist.variantId),
         ),
       )
+      .leftJoin(productImage, eq(product.id, productImage.productId))
       .leftJoin(
         productVariant,
         and(
           eq(productVariant.id, customerWishlist.variantId),
           eq(productVariant.productId, product.id),
-        ),
-      )
-      .leftJoin(
-        productImage,
-        or(
-          eq(product.id, productImage.productId),
-          eq(productVariant.id, productImage.variantId),
         ),
       )
       .where(eq(customerWishlist.id, wishlistItem.id))
@@ -1385,15 +1400,33 @@ export class StorefrontCustomerService {
   private async hydrateOrder(orderRow: typeof order.$inferSelect) {
     const [items, payments, statusLogs, returns] = await Promise.all([
       this.db
-        .select()
+        .select({
+          item: orderItem,
+          product,
+          variant: productVariant,
+          image: productImage,
+        })
         .from(orderItem)
-        .where(eq(orderItem.orderId, orderRow.id))
-        .innerJoin(
-          productImage,
-          eq(productImage.productId, orderItem.productId),
-        )
         .innerJoin(product, eq(product.id, orderItem.productId))
-        .leftJoin(productVariant, eq(productVariant.id, orderItem.variantId))
+        .leftJoin(
+          productVariant,
+          and(
+            eq(productVariant.id, orderItem.variantId),
+            eq(productVariant.productId, product.id),
+          ),
+        )
+        .leftJoin(
+          productImage,
+          and(
+            eq(productImage.productId, orderItem.productId),
+            isNull(productImage.deletedAt),
+            or(
+              eq(productImage.variantId, orderItem.variantId),
+              and(isNull(orderItem.variantId), isNull(productImage.variantId)),
+            ),
+          ),
+        )
+        .where(eq(orderItem.orderId, orderRow.id))
         .orderBy(asc(orderItem.createdAt)),
       this.db
         .select()
@@ -1417,14 +1450,40 @@ export class StorefrontCustomerService {
         .orderBy(desc(orderReturn.createdAt)),
     ]);
 
+    const itemsById = new Map<
+      string,
+      typeof orderItem.$inferSelect & {
+        product: typeof product.$inferSelect;
+        variant: typeof productVariant.$inferSelect | null;
+        images: (typeof productImage.$inferSelect)[];
+      }
+    >();
+
+    for (const row of items) {
+      let item = itemsById.get(row.item.id);
+
+      if (!item) {
+        item = {
+          ...row.item,
+          product: row.product,
+          variant: row.variant,
+          images: [],
+        };
+
+        itemsById.set(row.item.id, item);
+      }
+
+      if (
+        row.image &&
+        !item.images.some((image) => image.id === row.image!.id)
+      ) {
+        item.images.push(row.image);
+      }
+    }
+
     return {
       ...orderRow,
-      items: items.map((item) => ({
-        ...item.order_items,
-        product: item.products,
-        variant: item.product_variants,
-        image: item.product_images,
-      })),
+      items: Array.from(itemsById.values()),
       payments,
       statusLogs,
       returns,
@@ -1492,6 +1551,31 @@ export class StorefrontCustomerService {
       address: address.address,
       city: address.city,
       country: address.country,
+    };
+  }
+
+  private withCourierQuoteSnapshot(
+    snapshot: unknown,
+    courierQuote: PlaceStorefrontOrderDto["courierQuote"],
+  ) {
+    if (!courierQuote) {
+      return snapshot;
+    }
+
+    if (
+      typeof snapshot !== "object" ||
+      snapshot === null ||
+      Array.isArray(snapshot)
+    ) {
+      return {
+        address: snapshot,
+        courierQuote,
+      };
+    }
+
+    return {
+      ...snapshot,
+      courierQuote,
     };
   }
 

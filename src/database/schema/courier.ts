@@ -74,6 +74,21 @@ export const courierDeliveryZoneStatusEnum = pgEnum(
   ["ACTIVE", "INACTIVE"],
 );
 
+export const CourierAreaType = {
+  DIVISION: "DIVISION",
+  DISTRICT: "DISTRICT",
+  UPAZILA: "UPAZILA",
+  UNION: "UNION",
+} as const;
+export type CourierAreaType =
+  (typeof CourierAreaType)[keyof typeof CourierAreaType];
+export const courierAreaTypeEnum = pgEnum("CourierAreaType", [
+  "DIVISION",
+  "DISTRICT",
+  "UPAZILA",
+  "UNION",
+]);
+
 export const CourierShippingChargeStatus = {
   ACTIVE: "ACTIVE",
   INACTIVE: "INACTIVE",
@@ -231,6 +246,46 @@ export const courierDeliveryZone = pgTable(
 export type CourierDeliveryZone = typeof courierDeliveryZone.$inferSelect;
 export type NewCourierDeliveryZone = typeof courierDeliveryZone.$inferInsert;
 
+export const courierAreaCatalog = pgTable(
+  "courier_area_catalog",
+  {
+    id: uuid().primaryKey().defaultRandom().notNull(),
+    source: varchar({ length: 50 }).notNull(),
+    externalId: varchar("external_id", { length: 80 }).notNull(),
+    areaType: courierAreaTypeEnum("area_type").notNull(),
+    name: varchar({ length: 150 }).notNull(),
+    bnName: varchar("bn_name", { length: 150 }),
+    divisionName: varchar("division_name", { length: 150 }),
+    districtName: varchar("district_name", { length: 150 }),
+    upazilaName: varchar("upazila_name", { length: 150 }),
+    parentExternalId: varchar("parent_external_id", { length: 80 }),
+    rawData: jsonb("raw_data")
+      .$type<JsonValue>()
+      .default(sql`'{}'::jsonb`)
+      .notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("courier_area_catalog_source_type_external_id_unique").on(
+      table.source,
+      table.areaType,
+      table.externalId,
+    ),
+    index("courier_area_catalog_source_idx").on(table.source),
+    index("courier_area_catalog_area_type_idx").on(table.areaType),
+    index("courier_area_catalog_name_idx").on(table.name),
+    index("courier_area_catalog_division_name_idx").on(table.divisionName),
+    index("courier_area_catalog_district_name_idx").on(table.districtName),
+    index("courier_area_catalog_upazila_name_idx").on(table.upazilaName),
+  ],
+);
+export type CourierAreaCatalog = typeof courierAreaCatalog.$inferSelect;
+export type NewCourierAreaCatalog = typeof courierAreaCatalog.$inferInsert;
+
 export const courierDeliveryZoneArea = pgTable(
   "courier_delivery_zone_areas",
   {
@@ -240,6 +295,10 @@ export const courierDeliveryZoneArea = pgTable(
       .references((): AnyPgColumn => courierDeliveryZone.id, {
         onDelete: "cascade",
       }),
+    catalogAreaId: uuid("catalog_area_id").references(
+      (): AnyPgColumn => courierAreaCatalog.id,
+      { onDelete: "set null" },
+    ),
     areaName: varchar("area_name", { length: 150 }).notNull(),
     city: varchar({ length: 100 }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
@@ -251,6 +310,13 @@ export const courierDeliveryZoneArea = pgTable(
   (table) => [
     index("courier_delivery_zone_areas_delivery_zone_id_idx").on(
       table.deliveryZoneId,
+    ),
+    uniqueIndex("courier_delivery_zone_areas_zone_catalog_area_unique").on(
+      table.deliveryZoneId,
+      table.catalogAreaId,
+    ),
+    index("courier_delivery_zone_areas_catalog_area_id_idx").on(
+      table.catalogAreaId,
     ),
     index("courier_delivery_zone_areas_city_idx").on(table.city),
   ],

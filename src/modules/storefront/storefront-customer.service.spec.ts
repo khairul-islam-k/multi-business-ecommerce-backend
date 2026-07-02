@@ -72,14 +72,27 @@ function createService() {
   const orderCodes = {
     generateUniqueReturnNo: jest.fn(),
   };
+  const couriers = {
+    prepareStorefrontOrderCourier: jest.fn(),
+  };
   const service = new StorefrontCustomerService(
     { db } as never,
     websites as never,
     orders as never,
     orderCodes as never,
+    couriers as never,
   );
 
-  return { db, deletes, inserts, orderCodes, orders, service, updates };
+  return {
+    couriers,
+    db,
+    deletes,
+    inserts,
+    orderCodes,
+    orders,
+    service,
+    updates,
+  };
 }
 
 describe("StorefrontCustomerService", () => {

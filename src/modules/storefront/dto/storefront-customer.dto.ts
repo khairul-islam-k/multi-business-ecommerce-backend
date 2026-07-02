@@ -27,6 +27,7 @@ import {
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 import { SortedPaginationQueryDto } from "../../../common/http/query.dto";
+import { StorefrontCourierQuoteDto } from "../../couriers/dto/courier.dto";
 import { OrderSortBy } from "../../orders/dto/order.dto";
 
 export const StorefrontCheckoutPaymentMethod = {
@@ -228,6 +229,17 @@ export class PlaceStorefrontOrderDto {
   @IsOptional()
   @IsUUID()
   shippingAddressId?: string;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  courierConfigId?: string;
+
+  @ApiPropertyOptional({ type: StorefrontCourierQuoteDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => StorefrontCourierQuoteDto)
+  courierQuote?: StorefrontCourierQuoteDto;
 
   @ApiPropertyOptional({ example: { address: "House 42, Dhaka" } })
   @IsOptional()

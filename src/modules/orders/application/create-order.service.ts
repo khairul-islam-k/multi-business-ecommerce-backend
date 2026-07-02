@@ -358,6 +358,7 @@ export class CreateOrderService {
         businessId: params.businessId,
         orderId: params.order.id,
         courierId: params.courier.courierId,
+        courierConfigId: params.courier.courierConfigId,
         deliveryZoneId: params.courier.deliveryZoneId,
         shipmentNo,
         shippingCharge: params.order.shippingCharge,
