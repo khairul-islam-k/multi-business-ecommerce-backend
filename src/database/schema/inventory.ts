@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  AnyPgColumn,
   index,
   pgEnum,
   pgTable,
@@ -7,9 +9,7 @@ import {
   uniqueIndex,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
 import { business } from "./business";
 import { decimal } from "./common";
@@ -143,6 +143,10 @@ export const warehouse = pgTable(
     name: varchar({ length: 150 }).notNull(),
     phone: varchar({ length: 30 }),
     address: text(),
+    redxAreaId: varchar("redx_area_id", { length: 80 }),
+    redxAreaName: varchar("redx_area_name", { length: 150 }),
+    redxPostCode: varchar("redx_post_code", { length: 20 }),
+    redxPickupStoreId: varchar("redx_pickup_store_id", { length: 80 }),
     status: warehouseStatusEnum().notNull(),
     createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
       onDelete: "set null",
@@ -166,6 +170,10 @@ export const warehouse = pgTable(
       .where(sql`${table.deletedAt} IS NULL`),
     index("inventory_warehouses_business_id_idx").on(table.businessId),
     index("inventory_warehouses_status_idx").on(table.status),
+    index("inventory_warehouses_redx_area_id_idx").on(table.redxAreaId),
+    index("inventory_warehouses_redx_pickup_store_id_idx").on(
+      table.redxPickupStoreId,
+    ),
     index("inventory_warehouses_deleted_at_idx").on(table.deletedAt),
   ],
 );

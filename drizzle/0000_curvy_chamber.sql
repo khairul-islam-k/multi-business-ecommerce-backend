@@ -3,14 +3,10 @@ CREATE TYPE "public"."BusinessMemberStatus" AS ENUM('ACTIVE', 'INACTIVE', 'SUSPE
 CREATE TYPE "public"."BusinessStatus" AS ENUM('ACTIVE', 'INACTIVE', 'SUSPENDED');--> statement-breakpoint
 CREATE TYPE "public"."CatalogProductStatus" AS ENUM('DRAFT', 'ACTIVE', 'INACTIVE', 'ARCHIVED');--> statement-breakpoint
 CREATE TYPE "public"."CommonStatus" AS ENUM('ACTIVE', 'INACTIVE');--> statement-breakpoint
-CREATE TYPE "public"."CourierConfigMode" AS ENUM('SANDBOX', 'LIVE');--> statement-breakpoint
+CREATE TYPE "public"."CourierConfigMode" AS ENUM('LIVE');--> statement-breakpoint
 CREATE TYPE "public"."CourierConfigStatus" AS ENUM('ACTIVE', 'INACTIVE');--> statement-breakpoint
-CREATE TYPE "public"."CourierDeliveryZoneStatus" AS ENUM('ACTIVE', 'INACTIVE');--> statement-breakpoint
-CREATE TYPE "public"."CourierProvider" AS ENUM('PATHAO', 'REDX', 'STEADFAST');--> statement-breakpoint
-CREATE TYPE "public"."CourierReceivableStatus" AS ENUM('PENDING', 'PARTIALLY_SETTLED', 'SETTLED', 'DISPUTED');--> statement-breakpoint
-CREATE TYPE "public"."CourierSettlementStatus" AS ENUM('DRAFT', 'CONFIRMED', 'CANCELLED');--> statement-breakpoint
+CREATE TYPE "public"."CourierProvider" AS ENUM('REDX');--> statement-breakpoint
 CREATE TYPE "public"."CourierShipmentStatus" AS ENUM('PENDING', 'BOOKED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'FAILED', 'RETURNED', 'CANCELLED');--> statement-breakpoint
-CREATE TYPE "public"."CourierShippingChargeStatus" AS ENUM('ACTIVE', 'INACTIVE');--> statement-breakpoint
 CREATE TYPE "public"."CourierStatus" AS ENUM('ACTIVE', 'INACTIVE');--> statement-breakpoint
 CREATE TYPE "public"."CustomerAddressType" AS ENUM('HOME', 'OFFICE', 'SHIPPING', 'BILLING', 'OTHER');--> statement-breakpoint
 CREATE TYPE "public"."CustomerOtpPurpose" AS ENUM('EMAIL_VERIFICATION', 'PASSWORD_RESET', 'EMAIL_CHANGE');--> statement-breakpoint
@@ -200,7 +196,6 @@ CREATE TABLE "couriers" (
 	"code" "CourierProvider" NOT NULL,
 	"description" text,
 	"status" "CourierStatus" DEFAULT 'ACTIVE' NOT NULL,
-	"sort_order" integer DEFAULT 0 NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
@@ -210,7 +205,8 @@ CREATE TABLE "courier_configs" (
 	"business_id" uuid NOT NULL,
 	"courier_id" uuid NOT NULL,
 	"config_data" jsonb NOT NULL,
-	"mode" "CourierConfigMode" DEFAULT 'SANDBOX' NOT NULL,
+	"webhook_token_hash" varchar(128),
+	"mode" "CourierConfigMode" DEFAULT 'LIVE' NOT NULL,
 	"status" "CourierConfigStatus" DEFAULT 'INACTIVE' NOT NULL,
 	"created_by" uuid,
 	"updated_by" uuid,
@@ -220,92 +216,37 @@ CREATE TABLE "courier_configs" (
 	"deleted_at" timestamp
 );
 --> statement-breakpoint
-CREATE TABLE "courier_delivery_zones" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"business_id" uuid NOT NULL,
-	"name" varchar(150) NOT NULL,
-	"description" text,
-	"status" "CourierDeliveryZoneStatus" DEFAULT 'ACTIVE' NOT NULL,
-	"sort_order" integer DEFAULT 0 NOT NULL,
-	"deleted_by" uuid,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL,
-	"deleted_at" timestamp
-);
---> statement-breakpoint
-CREATE TABLE "courier_delivery_zone_areas" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"delivery_zone_id" uuid NOT NULL,
-	"area_name" varchar(150) NOT NULL,
-	"city" varchar(100),
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "courier_receivables" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"business_id" uuid NOT NULL,
-	"courier_id" uuid NOT NULL,
-	"shipment_id" uuid NOT NULL,
-	"order_id" uuid NOT NULL,
-	"cod_amount" numeric(12, 2) DEFAULT 0 NOT NULL,
-	"courier_fee" numeric(12, 2) DEFAULT 0 NOT NULL,
-	"net_receivable" numeric(12, 2) DEFAULT 0 NOT NULL,
-	"status" "CourierReceivableStatus" DEFAULT 'PENDING' NOT NULL,
-	"expected_settlement_date" timestamp,
-	"settled_at" timestamp,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL,
-	CONSTRAINT "courier_receivables_shipment_id_unique" UNIQUE("shipment_id")
-);
---> statement-breakpoint
-CREATE TABLE "courier_settlements" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"business_id" uuid NOT NULL,
-	"courier_id" uuid NOT NULL,
-	"settlement_no" varchar(100) NOT NULL,
-	"settlement_date" timestamp NOT NULL,
-	"total_cod_amount" numeric(12, 2) DEFAULT 0 NOT NULL,
-	"total_courier_fee" numeric(12, 2) DEFAULT 0 NOT NULL,
-	"total_settlement_amount" numeric(12, 2) DEFAULT 0 NOT NULL,
-	"status" "CourierSettlementStatus" DEFAULT 'DRAFT' NOT NULL,
-	"reference_no" varchar(150),
-	"note" text,
-	"created_by" uuid,
-	"deleted_by" uuid,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL,
-	"deleted_at" timestamp
-);
---> statement-breakpoint
-CREATE TABLE "courier_settlement_items" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"settlement_id" uuid NOT NULL,
-	"receivable_id" uuid NOT NULL,
-	"shipment_id" uuid NOT NULL,
-	"cod_amount" numeric(12, 2) DEFAULT 0 NOT NULL,
-	"courier_fee" numeric(12, 2) DEFAULT 0 NOT NULL,
-	"settlement_amount" numeric(12, 2) DEFAULT 0 NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL
-);
---> statement-breakpoint
 CREATE TABLE "courier_shipments" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"business_id" uuid NOT NULL,
 	"order_id" uuid NOT NULL,
 	"courier_id" uuid,
 	"courier_config_id" uuid,
-	"delivery_zone_id" uuid,
+	"pickup_warehouse_id" uuid,
 	"shipment_no" varchar(100) NOT NULL,
 	"consignment_id" varchar(150),
 	"tracking_code" varchar(150),
+	"provider_status" varchar(100),
 	"status" "CourierShipmentStatus" DEFAULT 'PENDING' NOT NULL,
 	"shipping_charge" numeric(12, 2) DEFAULT 0 NOT NULL,
 	"cod_amount" numeric(12, 2) DEFAULT 0 NOT NULL,
+	"delivery_charge" numeric(12, 2) DEFAULT 0 NOT NULL,
+	"cod_charge" numeric(12, 2) DEFAULT 0 NOT NULL,
 	"courier_fee" numeric(12, 2) DEFAULT 0 NOT NULL,
 	"recipient_name" varchar(150),
 	"recipient_phone" varchar(30),
+	"delivery_area_id" varchar(80),
+	"delivery_area_name" varchar(150),
+	"delivery_post_code" varchar(20),
+	"delivery_division_name" varchar(150),
+	"pickup_area_id" varchar(80),
+	"pickup_area_name" varchar(150),
+	"pickup_post_code" varchar(20),
+	"pickup_store_id" varchar(80),
 	"delivery_address_snapshot" jsonb,
+	"provider_request" jsonb,
+	"provider_response" jsonb,
+	"last_webhook_payload" jsonb,
 	"shipped_at" timestamp,
 	"delivered_at" timestamp,
 	"cancelled_at" timestamp,
@@ -323,20 +264,6 @@ CREATE TABLE "courier_shipment_items" (
 	"product_id" uuid NOT NULL,
 	"variant_id" uuid,
 	"quantity" numeric(14, 3) NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "courier_shipping_charges" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"business_id" uuid NOT NULL,
-	"delivery_zone_id" uuid NOT NULL,
-	"courier_id" uuid,
-	"min_weight" numeric(10, 3),
-	"max_weight" numeric(10, 3),
-	"shipping_charge" numeric(12, 2) DEFAULT 0 NOT NULL,
-	"cod_charge" numeric(12, 2) DEFAULT 0 NOT NULL,
-	"status" "CourierShippingChargeStatus" DEFAULT 'ACTIVE' NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
@@ -937,7 +864,6 @@ CREATE TABLE "package_plans" (
 	"free_trial_days" integer NOT NULL,
 	"is_default" boolean NOT NULL,
 	"status" "PackageStatus" NOT NULL,
-	"sort_order" integer DEFAULT 0 NOT NULL,
 	"deleted_by" uuid,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
@@ -949,7 +875,6 @@ CREATE TABLE "package_plan_features" (
 	"package_id" uuid NOT NULL,
 	"title" varchar(255) NOT NULL,
 	"description" text,
-	"sort_order" integer DEFAULT 0 NOT NULL,
 	"is_active" boolean NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
@@ -1016,7 +941,6 @@ CREATE TABLE "payment_gateways" (
 	"code" "PaymentGatewayProvider" NOT NULL,
 	"description" text,
 	"status" "PaymentGatewayStatus" NOT NULL,
-	"sort_order" integer NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
@@ -1106,7 +1030,6 @@ CREATE TABLE "product_brands" (
 	"description" text,
 	"logo_url" text,
 	"status" "ProductSimpleStatus" NOT NULL,
-	"sort_order" integer DEFAULT 0 NOT NULL,
 	"created_by" uuid,
 	"updated_by" uuid,
 	"deleted_by" uuid,
@@ -1123,7 +1046,6 @@ CREATE TABLE "product_categories" (
 	"description" text,
 	"image_url" text,
 	"status" "ProductSimpleStatus" NOT NULL,
-	"sort_order" integer DEFAULT 0 NOT NULL,
 	"created_by" uuid,
 	"updated_by" uuid,
 	"deleted_by" uuid,
@@ -1140,7 +1062,6 @@ CREATE TABLE "product_images" (
 	"image_url" text NOT NULL,
 	"alt_text" text,
 	"is_thumbnail" boolean NOT NULL,
-	"sort_order" integer DEFAULT 0 NOT NULL,
 	"created_by" uuid,
 	"updated_by" uuid,
 	"deleted_by" uuid,
@@ -1536,6 +1457,10 @@ CREATE TABLE "inventory_warehouses" (
 	"name" varchar(150) NOT NULL,
 	"phone" varchar(30),
 	"address" text,
+	"redx_area_id" varchar(80),
+	"redx_area_name" varchar(150),
+	"redx_post_code" varchar(20),
+	"redx_pickup_store_id" varchar(80),
 	"status" "WarehouseStatus" NOT NULL,
 	"created_by" uuid,
 	"updated_by" uuid,
@@ -1646,29 +1571,13 @@ ALTER TABLE "courier_configs" ADD CONSTRAINT "courier_configs_courier_id_courier
 ALTER TABLE "courier_configs" ADD CONSTRAINT "courier_configs_created_by_system_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."system_users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "courier_configs" ADD CONSTRAINT "courier_configs_updated_by_system_users_id_fk" FOREIGN KEY ("updated_by") REFERENCES "public"."system_users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "courier_configs" ADD CONSTRAINT "courier_configs_deleted_by_system_users_id_fk" FOREIGN KEY ("deleted_by") REFERENCES "public"."system_users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "courier_delivery_zones" ADD CONSTRAINT "courier_delivery_zones_business_id_businesses_id_fk" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "courier_delivery_zones" ADD CONSTRAINT "courier_delivery_zones_deleted_by_system_users_id_fk" FOREIGN KEY ("deleted_by") REFERENCES "public"."system_users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "courier_delivery_zone_areas" ADD CONSTRAINT "courier_delivery_zone_areas_delivery_zone_id_courier_delivery_zones_id_fk" FOREIGN KEY ("delivery_zone_id") REFERENCES "public"."courier_delivery_zones"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "courier_receivables" ADD CONSTRAINT "courier_receivables_business_id_businesses_id_fk" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "courier_receivables" ADD CONSTRAINT "courier_receivables_courier_id_couriers_id_fk" FOREIGN KEY ("courier_id") REFERENCES "public"."couriers"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "courier_receivables" ADD CONSTRAINT "courier_receivables_shipment_id_courier_shipments_id_fk" FOREIGN KEY ("shipment_id") REFERENCES "public"."courier_shipments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "courier_settlements" ADD CONSTRAINT "courier_settlements_business_id_businesses_id_fk" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "courier_settlements" ADD CONSTRAINT "courier_settlements_courier_id_couriers_id_fk" FOREIGN KEY ("courier_id") REFERENCES "public"."couriers"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "courier_settlements" ADD CONSTRAINT "courier_settlements_created_by_system_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."system_users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "courier_settlements" ADD CONSTRAINT "courier_settlements_deleted_by_system_users_id_fk" FOREIGN KEY ("deleted_by") REFERENCES "public"."system_users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "courier_settlement_items" ADD CONSTRAINT "courier_settlement_items_settlement_id_courier_settlements_id_fk" FOREIGN KEY ("settlement_id") REFERENCES "public"."courier_settlements"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "courier_settlement_items" ADD CONSTRAINT "courier_settlement_items_receivable_id_courier_receivables_id_fk" FOREIGN KEY ("receivable_id") REFERENCES "public"."courier_receivables"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "courier_settlement_items" ADD CONSTRAINT "courier_settlement_items_shipment_id_courier_shipments_id_fk" FOREIGN KEY ("shipment_id") REFERENCES "public"."courier_shipments"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "courier_shipments" ADD CONSTRAINT "courier_shipments_business_id_businesses_id_fk" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "courier_shipments" ADD CONSTRAINT "courier_shipments_courier_id_couriers_id_fk" FOREIGN KEY ("courier_id") REFERENCES "public"."couriers"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "courier_shipments" ADD CONSTRAINT "courier_shipments_courier_config_id_courier_configs_id_fk" FOREIGN KEY ("courier_config_id") REFERENCES "public"."courier_configs"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "courier_shipments" ADD CONSTRAINT "courier_shipments_delivery_zone_id_courier_delivery_zones_id_fk" FOREIGN KEY ("delivery_zone_id") REFERENCES "public"."courier_delivery_zones"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "courier_shipments" ADD CONSTRAINT "courier_shipments_pickup_warehouse_id_inventory_warehouses_id_fk" FOREIGN KEY ("pickup_warehouse_id") REFERENCES "public"."inventory_warehouses"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "courier_shipments" ADD CONSTRAINT "courier_shipments_created_by_system_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."system_users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "courier_shipments" ADD CONSTRAINT "courier_shipments_deleted_by_system_users_id_fk" FOREIGN KEY ("deleted_by") REFERENCES "public"."system_users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "courier_shipment_items" ADD CONSTRAINT "courier_shipment_items_shipment_id_courier_shipments_id_fk" FOREIGN KEY ("shipment_id") REFERENCES "public"."courier_shipments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "courier_shipping_charges" ADD CONSTRAINT "courier_shipping_charges_business_id_businesses_id_fk" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "courier_shipping_charges" ADD CONSTRAINT "courier_shipping_charges_delivery_zone_id_courier_delivery_zones_id_fk" FOREIGN KEY ("delivery_zone_id") REFERENCES "public"."courier_delivery_zones"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "courier_shipping_charges" ADD CONSTRAINT "courier_shipping_charges_courier_id_couriers_id_fk" FOREIGN KEY ("courier_id") REFERENCES "public"."couriers"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "customers" ADD CONSTRAINT "customers_business_id_businesses_id_fk" FOREIGN KEY ("business_id") REFERENCES "public"."businesses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "customers" ADD CONSTRAINT "customers_created_by_system_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."system_users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "customers" ADD CONSTRAINT "customers_updated_by_system_users_id_fk" FOREIGN KEY ("updated_by") REFERENCES "public"."system_users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -1939,44 +1848,24 @@ CREATE UNIQUE INDEX "courier_couriers_name_unique" ON "couriers" USING btree ("n
 CREATE UNIQUE INDEX "courier_couriers_code_unique" ON "couriers" USING btree ("code");--> statement-breakpoint
 CREATE INDEX "courier_couriers_status_idx" ON "couriers" USING btree ("status");--> statement-breakpoint
 CREATE UNIQUE INDEX "courier_configs_business_courier_active_unique" ON "courier_configs" USING btree ("business_id","courier_id") WHERE "courier_configs"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "courier_configs_webhook_token_hash_unique" ON "courier_configs" USING btree ("webhook_token_hash") WHERE "courier_configs"."webhook_token_hash" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "courier_configs_business_id_idx" ON "courier_configs" USING btree ("business_id");--> statement-breakpoint
 CREATE INDEX "courier_configs_courier_id_idx" ON "courier_configs" USING btree ("courier_id");--> statement-breakpoint
 CREATE INDEX "courier_configs_status_idx" ON "courier_configs" USING btree ("status");--> statement-breakpoint
-CREATE UNIQUE INDEX "courier_delivery_zones_business_id_name_active_unique" ON "courier_delivery_zones" USING btree ("business_id","name") WHERE "courier_delivery_zones"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX "courier_delivery_zones_business_id_idx" ON "courier_delivery_zones" USING btree ("business_id");--> statement-breakpoint
-CREATE INDEX "courier_delivery_zones_status_idx" ON "courier_delivery_zones" USING btree ("status");--> statement-breakpoint
-CREATE INDEX "courier_delivery_zone_areas_delivery_zone_id_idx" ON "courier_delivery_zone_areas" USING btree ("delivery_zone_id");--> statement-breakpoint
-CREATE INDEX "courier_delivery_zone_areas_city_idx" ON "courier_delivery_zone_areas" USING btree ("city");--> statement-breakpoint
-CREATE INDEX "courier_receivables_business_id_idx" ON "courier_receivables" USING btree ("business_id");--> statement-breakpoint
-CREATE INDEX "courier_receivables_courier_id_idx" ON "courier_receivables" USING btree ("courier_id");--> statement-breakpoint
-CREATE INDEX "courier_receivables_order_id_idx" ON "courier_receivables" USING btree ("order_id");--> statement-breakpoint
-CREATE INDEX "courier_receivables_status_idx" ON "courier_receivables" USING btree ("status");--> statement-breakpoint
-CREATE INDEX "courier_receivables_expected_settlement_date_idx" ON "courier_receivables" USING btree ("expected_settlement_date");--> statement-breakpoint
-CREATE UNIQUE INDEX "courier_settlements_business_settlement_no_active_unique" ON "courier_settlements" USING btree ("business_id","settlement_no") WHERE "courier_settlements"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX "courier_settlements_business_id_idx" ON "courier_settlements" USING btree ("business_id");--> statement-breakpoint
-CREATE INDEX "courier_settlements_courier_id_idx" ON "courier_settlements" USING btree ("courier_id");--> statement-breakpoint
-CREATE INDEX "courier_settlements_settlement_date_idx" ON "courier_settlements" USING btree ("settlement_date");--> statement-breakpoint
-CREATE INDEX "courier_settlements_status_idx" ON "courier_settlements" USING btree ("status");--> statement-breakpoint
-CREATE UNIQUE INDEX "courier_settlement_items_receivable_id_unique" ON "courier_settlement_items" USING btree ("receivable_id");--> statement-breakpoint
-CREATE INDEX "courier_settlement_items_settlement_id_idx" ON "courier_settlement_items" USING btree ("settlement_id");--> statement-breakpoint
-CREATE INDEX "courier_settlement_items_shipment_id_idx" ON "courier_settlement_items" USING btree ("shipment_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "courier_shipments_business_id_shipment_no_active_unique" ON "courier_shipments" USING btree ("business_id","shipment_no") WHERE "courier_shipments"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX "courier_shipments_consignment_id_active_unique" ON "courier_shipments" USING btree ("consignment_id") WHERE "courier_shipments"."consignment_id" IS NOT NULL AND "courier_shipments"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX "courier_shipments_business_id_idx" ON "courier_shipments" USING btree ("business_id");--> statement-breakpoint
 CREATE INDEX "courier_shipments_order_id_idx" ON "courier_shipments" USING btree ("order_id");--> statement-breakpoint
 CREATE INDEX "courier_shipments_courier_id_idx" ON "courier_shipments" USING btree ("courier_id");--> statement-breakpoint
 CREATE INDEX "courier_shipments_courier_config_id_idx" ON "courier_shipments" USING btree ("courier_config_id");--> statement-breakpoint
-CREATE INDEX "courier_shipments_delivery_zone_id_idx" ON "courier_shipments" USING btree ("delivery_zone_id");--> statement-breakpoint
+CREATE INDEX "courier_shipments_pickup_warehouse_id_idx" ON "courier_shipments" USING btree ("pickup_warehouse_id");--> statement-breakpoint
 CREATE INDEX "courier_shipments_status_idx" ON "courier_shipments" USING btree ("status");--> statement-breakpoint
+CREATE INDEX "courier_shipments_provider_status_idx" ON "courier_shipments" USING btree ("provider_status");--> statement-breakpoint
 CREATE INDEX "courier_shipments_tracking_code_idx" ON "courier_shipments" USING btree ("tracking_code");--> statement-breakpoint
 CREATE INDEX "courier_shipment_items_shipment_id_idx" ON "courier_shipment_items" USING btree ("shipment_id");--> statement-breakpoint
 CREATE INDEX "courier_shipment_items_order_item_id_idx" ON "courier_shipment_items" USING btree ("order_item_id");--> statement-breakpoint
 CREATE INDEX "courier_shipment_items_product_id_idx" ON "courier_shipment_items" USING btree ("product_id");--> statement-breakpoint
 CREATE INDEX "courier_shipment_items_variant_id_idx" ON "courier_shipment_items" USING btree ("variant_id");--> statement-breakpoint
-CREATE INDEX "courier_shipping_charges_business_id_idx" ON "courier_shipping_charges" USING btree ("business_id");--> statement-breakpoint
-CREATE INDEX "courier_shipping_charges_delivery_zone_id_idx" ON "courier_shipping_charges" USING btree ("delivery_zone_id");--> statement-breakpoint
-CREATE INDEX "courier_shipping_charges_courier_id_idx" ON "courier_shipping_charges" USING btree ("courier_id");--> statement-breakpoint
-CREATE INDEX "courier_shipping_charges_status_idx" ON "courier_shipping_charges" USING btree ("status");--> statement-breakpoint
 CREATE UNIQUE INDEX "customers_business_id_email_active_unique" ON "customers" USING btree ("business_id","email") WHERE "customers"."email" IS NOT NULL AND "customers"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX "customers_business_id_phone_active_unique" ON "customers" USING btree ("business_id","phone") WHERE "customers"."phone" IS NOT NULL AND "customers"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX "customers_business_id_idx" ON "customers" USING btree ("business_id");--> statement-breakpoint
@@ -2179,7 +2068,6 @@ CREATE UNIQUE INDEX "package_plans_name_unique" ON "package_plans" USING btree (
 CREATE INDEX "package_plans_is_default_idx" ON "package_plans" USING btree ("is_default");--> statement-breakpoint
 CREATE INDEX "package_plans_status_idx" ON "package_plans" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "package_plan_features_package_id_idx" ON "package_plan_features" USING btree ("package_id");--> statement-breakpoint
-CREATE INDEX "package_plan_features_package_id_sort_order_idx" ON "package_plan_features" USING btree ("package_id","sort_order");--> statement-breakpoint
 CREATE INDEX "package_plan_features_is_active_idx" ON "package_plan_features" USING btree ("is_active");--> statement-breakpoint
 CREATE UNIQUE INDEX "package_plan_limits_package_id_limit_key_unique" ON "package_plan_limits" USING btree ("package_id","limit_key");--> statement-breakpoint
 CREATE INDEX "package_plan_limits_limit_key_idx" ON "package_plan_limits" USING btree ("limit_key");--> statement-breakpoint
@@ -2353,6 +2241,8 @@ CREATE INDEX "system_user_profiles_deleted_at_idx" ON "system_user_profiles" USI
 CREATE UNIQUE INDEX "inventory_warehouses_business_id_name_deleted_at_unique" ON "inventory_warehouses" USING btree ("business_id","name") WHERE "inventory_warehouses"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE INDEX "inventory_warehouses_business_id_idx" ON "inventory_warehouses" USING btree ("business_id");--> statement-breakpoint
 CREATE INDEX "inventory_warehouses_status_idx" ON "inventory_warehouses" USING btree ("status");--> statement-breakpoint
+CREATE INDEX "inventory_warehouses_redx_area_id_idx" ON "inventory_warehouses" USING btree ("redx_area_id");--> statement-breakpoint
+CREATE INDEX "inventory_warehouses_redx_pickup_store_id_idx" ON "inventory_warehouses" USING btree ("redx_pickup_store_id");--> statement-breakpoint
 CREATE INDEX "inventory_warehouses_deleted_at_idx" ON "inventory_warehouses" USING btree ("deleted_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "website_websites_business_id_unique" ON "websites" USING btree ("business_id") WHERE "websites"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX "website_websites_slug_unique" ON "websites" USING btree ("slug") WHERE "websites"."deleted_at" IS NULL;--> statement-breakpoint

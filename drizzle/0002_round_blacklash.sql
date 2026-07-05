@@ -1,1 +1,0 @@
-ALTER TABLE "courier_configs" ALTER COLUMN "config_data" DROP DEFAULT;

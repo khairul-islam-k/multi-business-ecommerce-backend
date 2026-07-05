@@ -675,14 +675,14 @@ export class StorefrontCustomerService {
           ),
         )
       : dto.shippingAddressSnapshot;
-    const courierSelection = dto.courierConfigId
-      ? await this.couriers.prepareStorefrontOrderCourier(
-          currentCustomer.businessId,
-          dto.courierConfigId,
-          dto.courierQuote,
-          dto.paymentMethod === StorefrontCheckoutPaymentMethod.COD,
-        )
-      : null;
+    // const courierSelection = dto.courierConfigId
+    //   ? await this.couriers.prepareStorefrontOrderCourier(
+    //       currentCustomer.businessId,
+    //       dto.courierConfigId,
+    //       dto.courierQuote,
+    //       dto.paymentMethod === StorefrontCheckoutPaymentMethod.COD,
+    //     )
+    //   : null;
 
     const createdOrderResponse = await this.orders.createStorefrontOrder(
       currentCustomer.businessId,
@@ -692,20 +692,20 @@ export class StorefrontCustomerService {
         customerPhone: customerRow.phone ?? undefined,
         customerEmail: currentCustomer.email,
         shippingAddressSnapshot,
-        shippingCharge: courierSelection?.shippingCharge ?? 0,
+        // shippingCharge: courierSelection?.shippingCharge ?? 0,
         isCod: dto.paymentMethod === StorefrontCheckoutPaymentMethod.COD,
         note: dto.note,
-        ...(courierSelection && {
-          courier: {
-            ...courierSelection.courier,
-            recipientName: customerRow.name,
-            recipientPhone: customerRow.phone ?? undefined,
-            deliveryAddressSnapshot: this.withCourierQuoteSnapshot(
-              shippingAddressSnapshot,
-              dto.courierQuote,
-            ),
-          },
-        }),
+        // ...(courierSelection && {
+        //   courier: {
+        //     ...courierSelection.courier,
+        //     recipientName: customerRow.name,
+        //     recipientPhone: customerRow.phone ?? undefined,
+        //     deliveryAddressSnapshot: this.withCourierQuoteSnapshot(
+        //       shippingAddressSnapshot,
+        //       dto.courierQuote,
+        //     ),
+        //   },
+        // }),
         items: cartItems.map((row) => ({
           productId: row.productId,
           variantId: row.variantId ?? undefined,
@@ -713,6 +713,13 @@ export class StorefrontCustomerService {
         })),
       },
     );
+
+    // if (courierSelection) {
+    //   await this.couriers.bookShipmentForOrder(
+    //     currentCustomer.businessId,
+    //     createdOrderResponse.data.id,
+    //   );
+    // }
 
     await this.db
       .update(orderCart)
@@ -1277,10 +1284,15 @@ export class StorefrontCustomerService {
       .innerJoin(product, eq(product.id, customerWishlist.productId))
       .innerJoin(
         inventoryStock,
-        or(
-          eq(inventoryStock.productId, customerWishlist.productId),
-          eq(inventoryStock.variantId, customerWishlist.variantId),
-        ),
+        wishlistItem.variantId
+          ? and(
+              eq(inventoryStock.productId, customerWishlist.productId),
+              eq(inventoryStock.variantId, customerWishlist.variantId),
+            )
+          : or(
+              eq(inventoryStock.productId, customerWishlist.productId),
+              eq(inventoryStock.variantId, customerWishlist.variantId),
+            ),
       )
       .leftJoin(productImage, eq(product.id, productImage.productId))
       .leftJoin(
@@ -1554,30 +1566,30 @@ export class StorefrontCustomerService {
     };
   }
 
-  private withCourierQuoteSnapshot(
-    snapshot: unknown,
-    courierQuote: PlaceStorefrontOrderDto["courierQuote"],
-  ) {
-    if (!courierQuote) {
-      return snapshot;
-    }
+  // private withCourierQuoteSnapshot(
+  //   snapshot: unknown,
+  //   courierQuote: PlaceStorefrontOrderDto["courierQuote"],
+  // ) {
+  //   if (!courierQuote) {
+  //     return snapshot;
+  //   }
 
-    if (
-      typeof snapshot !== "object" ||
-      snapshot === null ||
-      Array.isArray(snapshot)
-    ) {
-      return {
-        address: snapshot,
-        courierQuote,
-      };
-    }
+  //   if (
+  //     typeof snapshot !== "object" ||
+  //     snapshot === null ||
+  //     Array.isArray(snapshot)
+  //   ) {
+  //     return {
+  //       address: snapshot,
+  //       courierQuote,
+  //     };
+  //   }
 
-    return {
-      ...snapshot,
-      courierQuote,
-    };
-  }
+  //   return {
+  //     ...snapshot,
+  //     courierQuote,
+  //   };
+  // }
 
   private async getCustomerOrderReturnOrThrow(
     currentCustomer: CurrentCustomerPayload,

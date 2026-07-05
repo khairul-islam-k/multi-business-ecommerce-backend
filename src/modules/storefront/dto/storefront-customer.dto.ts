@@ -230,16 +230,16 @@ export class PlaceStorefrontOrderDto {
   @IsUUID()
   shippingAddressId?: string;
 
-  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
-  @IsOptional()
-  @IsUUID()
-  courierConfigId?: string;
+  // @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  // @IsOptional()
+  // @IsUUID()
+  // courierConfigId?: string;
 
-  @ApiPropertyOptional({ type: StorefrontCourierQuoteDto })
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => StorefrontCourierQuoteDto)
-  courierQuote?: StorefrontCourierQuoteDto;
+  // @ApiPropertyOptional({ type: StorefrontCourierQuoteDto })
+  // @IsOptional()
+  // @ValidateNested()
+  // @Type(() => StorefrontCourierQuoteDto)
+  // courierQuote?: StorefrontCourierQuoteDto;
 
   @ApiPropertyOptional({ example: { address: "House 42, Dhaka" } })
   @IsOptional()

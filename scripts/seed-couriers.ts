@@ -15,19 +15,9 @@ const logger = new Logger("CourierSeedScript");
 
 const couriers = [
   {
-    code: CourierProvider.PATHAO,
-    name: "Pathao",
-    description: "Courier delivery provider by Pathao.",
-  },
-  {
     code: CourierProvider.REDX,
     name: "REDX",
     description: "Courier delivery provider by REDX.",
-  },
-  {
-    code: CourierProvider.STEADFAST,
-    name: "Steadfast",
-    description: "Courier delivery provider by Steadfast.",
   },
 ] as const;
 

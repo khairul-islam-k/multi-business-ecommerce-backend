@@ -99,7 +99,7 @@ export class WebsiteService {
               domain: null,
               subdomain: `${subdomain}.${domain}`,
               domainType: WebsiteDomainType.SUBDOMAIN,
-              isPrimary: false,
+              isPrimary: true,
               verificationStatus: WebsiteDomainVerificationStatus.VERIFIED,
               sslStatus: WebsiteDomainSslStatus.ACTIVE,
               verifiedAt: new Date(),

@@ -1,930 +1,383 @@
 import Decimal from "decimal.js";
 
+import { CourierShipmentStatus } from "@/database/schema";
 import {
-  CourierConfigMode,
-  CourierProvider,
-  CourierShipmentStatus,
-} from "@/database/schema";
-import {
-  BadGatewayException,
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
 } from "@nestjs/common";
 
-type PathaoConfig = {
-  clientId: string;
-  clientSecret: string;
-  username: string;
-  password: string;
-  storeId: number;
-  accessToken?: string;
-  refreshToken?: string;
-  accessTokenExpiresAt?: string;
-  deliveryType?: 12 | 48;
-  itemType?: 1 | 2;
-  itemWeight?: number;
-  specialInstruction?: string;
-  itemDescription?: string;
-};
+export const REDX_PRODUCTION_BASE_URL = "https://openapi.redx.com.bd";
 
-type SteadfastConfig = {
-  apiKey: string;
-  secretKey: string;
-  deliveryType?: 0 | 1;
-  note?: string;
-  itemDescription?: string;
-};
-
-type RedxConfig = {
+export type RedxConfig = {
   apiAccessToken: string;
   baseUrl: string;
-  pickupStoreId?: number;
-  parcelWeight?: number;
-  parcelValue?: number;
-  deliveryArea?: string;
-  deliveryAreaId?: number;
+  defaultParcelWeight?: number;
+  defaultParcelValue?: number;
+  isClosedBox?: boolean;
   instruction?: string;
+};
+
+export type RedxAreaQuery = {
+  postCode?: string | number;
+  districtName?: string;
+};
+
+export type RedxChargeRequest = {
+  pickupAreaId: string | number;
+  deliveryAreaId: string | number;
+  weight: number;
+  cashCollectionAmount: Decimal.Value;
+};
+
+export type RedxParcelRequest = {
+  merchantParcelId: string;
+  customerName: string;
+  customerPhone: string;
+  deliveryAreaId: string | number;
+  deliveryAreaName?: string | null;
+  deliveryAddress: string;
+  cashCollectionAmount: Decimal.Value;
+  parcelWeight: number;
+  parcelValue?: Decimal.Value;
+  instruction?: string | null;
+  pickupAreaId: string | number;
+  pickupAreaName?: string | null;
+  pickupStoreId?: string | number | null;
   isClosedBox?: boolean;
 };
 
-type PathaoTokenResponse = {
-  token_type?: string;
-  expires_in?: number;
-  access_token?: string;
-  refresh_token?: string;
-};
-
-type PathaoResponse<T> = {
-  message?: string;
-  type?: string;
-  code?: number;
-  data?: T;
-};
-
-export type PathaoCreateStoreParams = {
+export type RedxPickupStoreRequest = {
   name: string;
-  contactName: string;
-  contactNumber: string;
-  secondaryContact?: string;
-  otpNumber?: string;
+  phone: string;
   address: string;
-  cityId: number;
-  zoneId: number;
-  areaId: number;
+  areaId: string | number;
 };
 
-export type PathaoPricePlanParams = {
-  itemType: 1 | 2;
-  deliveryType: 12 | 48;
-  itemWeight: number;
-  recipientCity: number;
-  recipientZone: number;
-};
-
-export type PathaoCreateOrderParams = {
-  shipmentNo: string;
-  merchantOrderId?: string;
-  recipientName: string;
-  recipientPhone: string;
-  recipientSecondaryPhone?: string;
-  recipientAddress: string;
-  recipientCity?: number;
-  recipientZone?: number;
-  recipientArea?: number;
-  deliveryType?: 12 | 48;
-  itemType?: 1 | 2;
-  specialInstruction?: string;
-  itemQuantity: number;
-  itemWeight?: number;
-  itemDescription?: string;
-  amountToCollect: Decimal.Value;
-};
-
-export type PathaoRuntime = {
-  config: PathaoConfig;
-  accessToken: string;
-};
-
-export type CourierBookingParams = {
-  shipmentNo: string;
-  orderNo: string;
-  recipientName: string;
-  recipientPhone: string;
-  recipientSecondaryPhone?: string;
-  recipientAddress: string;
-  codAmount: Decimal.Value;
-  itemQuantity: number;
-  itemWeight?: number;
-  itemDescription?: string;
-  specialInstruction?: string;
-  pathao?: {
-    recipientCity?: number;
-    recipientZone?: number;
-    recipientArea?: number;
-    deliveryType?: 12 | 48;
-    itemType?: 1 | 2;
-  };
-  steadfast?: {
-    deliveryType?: 0 | 1;
-  };
-  redx?: {
-    deliveryArea?: string;
-    deliveryAreaId?: number;
-    pickupStoreId?: number;
-    parcelWeight?: number;
-    parcelValue?: number;
-    isClosedBox?: boolean;
-  };
-};
-
-const PATHAO_BASE_URLS: Record<CourierConfigMode, string> = {
-  [CourierConfigMode.SANDBOX]: "https://courier-api-sandbox.pathao.com",
-  [CourierConfigMode.LIVE]: "https://api-hermes.pathao.com",
+export type RedxWebhookPayload = {
+  tracking_number?: string;
+  timestamp?: string;
+  status?: string;
+  message_en?: string;
+  message_bn?: string;
+  invoice_number?: string;
+  delivery_type?: string;
+  [key: string]: unknown;
 };
 
 @Injectable()
 export class CourierProviderService {
-  normalizeConfig(
-    provider: CourierProvider,
-    rawConfig: Record<string, unknown>,
-  ): Record<string, unknown> {
-    switch (provider) {
-      case CourierProvider.PATHAO:
-        return this.normalizePathaoConfig(rawConfig);
-      case CourierProvider.STEADFAST:
-        return this.normalizeSteadfastConfig(rawConfig);
-      case CourierProvider.REDX:
-        return this.normalizeRedxConfig(rawConfig);
-    }
-  }
+  normalizeRedxConfig(config: Record<string, unknown>): RedxConfig {
+    const apiAccessToken = this.requiredString(
+      config.apiAccessToken,
+      "REDX API access token is required before activating or using REDX.",
+    );
+    const baseUrl =
+      this.optionalString(config.baseUrl) ?? REDX_PRODUCTION_BASE_URL;
 
-  normalizePathaoConfig(rawConfig: Record<string, unknown>): PathaoConfig {
     return {
-      clientId: this.requiredString(rawConfig, "clientId"),
-      clientSecret: this.requiredString(rawConfig, "clientSecret"),
-      username: this.requiredString(rawConfig, "username"),
-      password: this.requiredString(rawConfig, "password"),
-      storeId: this.requiredInteger(rawConfig, "storeId"),
-      accessToken: this.optionalString(rawConfig, "accessToken") ?? undefined,
-      refreshToken: this.optionalString(rawConfig, "refreshToken") ?? undefined,
-      accessTokenExpiresAt:
-        this.optionalString(rawConfig, "accessTokenExpiresAt") ?? undefined,
-      deliveryType: this.optionalEnum(rawConfig, "deliveryType", [12, 48]),
-      itemType: this.optionalEnum(rawConfig, "itemType", [1, 2]),
-      itemWeight: this.optionalWeight(rawConfig, "itemWeight"),
-      specialInstruction:
-        this.optionalString(rawConfig, "specialInstruction") ?? undefined,
-      itemDescription:
-        this.optionalString(rawConfig, "itemDescription") ?? undefined,
+      apiAccessToken,
+      baseUrl: baseUrl.replace(/\/+$/, ""),
+      defaultParcelWeight: this.optionalNumber(config.defaultParcelWeight),
+      defaultParcelValue: this.optionalNumber(config.defaultParcelValue),
+      isClosedBox:
+        typeof config.isClosedBox === "boolean" ? config.isClosedBox : true,
+      instruction: this.optionalString(config.instruction),
     };
   }
 
-  normalizeSteadfastConfig(
-    rawConfig: Record<string, unknown>,
-  ): SteadfastConfig {
+  redactRedxConfig(config: Record<string, unknown>) {
     return {
-      apiKey: this.requiredString(rawConfig, "apiKey"),
-      secretKey: this.requiredString(rawConfig, "secretKey"),
-      deliveryType: this.optionalEnum(rawConfig, "deliveryType", [0, 1]),
-      note: this.optionalString(rawConfig, "note") ?? undefined,
-      itemDescription:
-        this.optionalString(rawConfig, "itemDescription") ?? undefined,
+      ...config,
+      ...(config.apiAccessToken ? { apiAccessToken: "********" } : {}),
     };
   }
 
-  normalizeRedxConfig(rawConfig: Record<string, unknown>): RedxConfig {
-    const baseUrl = this.requiredString(rawConfig, "baseUrl").replace(
-      /\/$/,
-      "",
-    );
+  async getAreas(config: RedxConfig, query: RedxAreaQuery = {}) {
+    const params = new URLSearchParams();
 
-    return {
-      apiAccessToken: this.requiredString(rawConfig, "apiAccessToken"),
-      baseUrl,
-      pickupStoreId: this.optionalPositiveInteger(rawConfig, "pickupStoreId"),
-      parcelWeight: this.optionalPositiveNumber(rawConfig, "parcelWeight"),
-      parcelValue: this.optionalPositiveNumber(rawConfig, "parcelValue"),
-      deliveryArea: this.optionalString(rawConfig, "deliveryArea") ?? undefined,
-      deliveryAreaId: this.optionalPositiveInteger(rawConfig, "deliveryAreaId"),
-      instruction: this.optionalString(rawConfig, "instruction") ?? undefined,
-      isClosedBox: this.optionalBoolean(rawConfig, "isClosedBox"),
-    };
-  }
-
-  async ensurePathaoToken(
-    mode: CourierConfigMode,
-    config: PathaoConfig,
-  ): Promise<PathaoRuntime> {
-    if (this.hasUsableToken(config)) {
-      return {
-        config,
-        accessToken: config.accessToken,
-      };
+    if (query.postCode !== undefined) {
+      params.set("post_code", String(query.postCode));
     }
 
-    if (config.refreshToken) {
-      try {
-        return await this.refreshPathaoToken(mode, config);
-      } catch {
-        return this.issuePathaoToken(mode, config);
-      }
+    if (query.districtName) {
+      params.set("district_name", query.districtName);
     }
 
-    return this.issuePathaoToken(mode, config);
+    const suffix = params.toString() ? `?${params.toString()}` : "";
+    return this.request(config, `/v1.0.0-beta/areas${suffix}`);
   }
 
-  async refreshPathaoToken(
-    mode: CourierConfigMode,
-    config: PathaoConfig,
-  ): Promise<PathaoRuntime> {
-    if (!config.refreshToken) {
-      throw new BadRequestException("Pathao refreshToken is required");
-    }
-
-    const response = await this.pathaoRequest<PathaoTokenResponse>(
-      mode,
-      "/aladdin/api/v1/issue-token",
-      {
-        method: "POST",
-        body: {
-          client_id: config.clientId,
-          client_secret: config.clientSecret,
-          grant_type: "refresh_token",
-          refresh_token: config.refreshToken,
-        },
-      },
-    );
-
-    return this.applyToken(config, response);
-  }
-
-  async issuePathaoToken(
-    mode: CourierConfigMode,
-    config: PathaoConfig,
-  ): Promise<PathaoRuntime> {
-    const response = await this.pathaoRequest<PathaoTokenResponse>(
-      mode,
-      "/aladdin/api/v1/issue-token",
-      {
-        method: "POST",
-        body: {
-          client_id: config.clientId,
-          client_secret: config.clientSecret,
-          grant_type: "password",
-          username: config.username,
-          password: config.password,
-        },
-      },
-    );
-
-    return this.applyToken(config, response);
-  }
-
-  async getPathaoStores(mode: CourierConfigMode, runtime: PathaoRuntime) {
-    return this.pathaoRequest(mode, "/aladdin/api/v1/stores", {
-      method: "GET",
-      token: runtime.accessToken,
-    });
-  }
-
-  async createPathaoStore(
-    mode: CourierConfigMode,
-    runtime: PathaoRuntime,
-    params: PathaoCreateStoreParams,
-  ) {
-    return this.pathaoRequest(mode, "/aladdin/api/v1/stores", {
-      method: "POST",
-      token: runtime.accessToken,
-      body: {
-        name: params.name,
-        contact_name: params.contactName,
-        contact_number: params.contactNumber,
-        secondary_contact: params.secondaryContact,
-        otp_number: params.otpNumber,
-        address: params.address,
-        city_id: params.cityId,
-        zone_id: params.zoneId,
-        area_id: params.areaId,
-      },
-    });
-  }
-
-  async getPathaoCities(mode: CourierConfigMode, runtime: PathaoRuntime) {
-    return this.pathaoRequest(mode, "/aladdin/api/v1/city-list", {
-      method: "GET",
-      token: runtime.accessToken,
-    });
-  }
-
-  async getPathaoZones(
-    mode: CourierConfigMode,
-    runtime: PathaoRuntime,
-    cityId: number,
-  ) {
-    return this.pathaoRequest(
-      mode,
-      `/aladdin/api/v1/cities/${cityId}/zone-list`,
+  async calculateCharge(config: RedxConfig, dto: RedxChargeRequest) {
+    const response = await this.request(
+      config,
+      "/v1.0.0-beta/charge/charge_calculator",
       {
         method: "GET",
-        token: runtime.accessToken,
-      },
-    );
-  }
-
-  async getPathaoAreas(
-    mode: CourierConfigMode,
-    runtime: PathaoRuntime,
-    zoneId: number,
-  ) {
-    return this.pathaoRequest(
-      mode,
-      `/aladdin/api/v1/zones/${zoneId}/area-list`,
-      {
-        method: "GET",
-        token: runtime.accessToken,
-      },
-    );
-  }
-
-  async calculatePathaoPrice(
-    mode: CourierConfigMode,
-    runtime: PathaoRuntime,
-    params: PathaoPricePlanParams,
-  ) {
-    return await this.pathaoRequest(
-      mode,
-      "/aladdin/api/v1/merchant/price-plan",
-      {
-        method: "POST",
-        token: runtime.accessToken,
-        body: {
-          store_id: runtime.config.storeId,
-          item_type: params.itemType,
-          delivery_type: params.deliveryType,
-          item_weight: params.itemWeight,
-          recipient_city: params.recipientCity,
-          recipient_zone: params.recipientZone,
-        },
-      },
-    );
-  }
-
-  async createPathaoOrder(
-    mode: CourierConfigMode,
-    runtime: PathaoRuntime,
-    params: PathaoCreateOrderParams,
-  ) {
-    const deliveryType =
-      params.deliveryType ?? runtime.config.deliveryType ?? 48;
-    const itemType = params.itemType ?? runtime.config.itemType ?? 2;
-    const itemWeight = params.itemWeight ?? runtime.config.itemWeight ?? 0.5;
-
-    return this.pathaoRequest<PathaoResponse<Record<string, unknown>>>(
-      mode,
-      "/aladdin/api/v1/orders",
-      {
-        method: "POST",
-        token: runtime.accessToken,
-        body: {
-          store_id: runtime.config.storeId,
-          merchant_order_id: params.merchantOrderId ?? params.shipmentNo,
-          recipient_name: params.recipientName,
-          recipient_phone: params.recipientPhone,
-          recipient_secondary_phone: params.recipientSecondaryPhone,
-          recipient_address: params.recipientAddress,
-          recipient_city: params.recipientCity,
-          recipient_zone: params.recipientZone,
-          recipient_area: params.recipientArea,
-          delivery_type: deliveryType,
-          item_type: itemType,
-          special_instruction:
-            params.specialInstruction ?? runtime.config.specialInstruction,
-          item_quantity: params.itemQuantity,
-          item_weight: itemWeight,
-          item_description:
-            params.itemDescription ?? runtime.config.itemDescription,
-          amount_to_collect: Number(
-            new Decimal(params.amountToCollect).toDecimalPlaces(2).toString(),
+        query: {
+          pickup_area_id: String(dto.pickupAreaId),
+          delivery_area_id: String(dto.deliveryAreaId),
+          weight: String(dto.weight),
+          cash_collection_amount: new Decimal(dto.cashCollectionAmount).toFixed(
+            2,
           ),
         },
       },
     );
+
+    const deliveryCharge = this.moneyFromPayload(response, [
+      "delivery_charge",
+      "deliveryCharge",
+      "charge",
+      "total_charge",
+    ]);
+    const codCharge = this.moneyFromPayload(response, [
+      "cod_charge",
+      "codCharge",
+    ]);
+
+    return {
+      raw: response,
+      deliveryCharge,
+      codCharge,
+      courierFee: deliveryCharge.plus(codCharge),
+    };
   }
 
-  async getPathaoOrderInfo(
-    mode: CourierConfigMode,
-    runtime: PathaoRuntime,
-    consignmentId: string,
-  ) {
-    return this.pathaoRequest<PathaoResponse<Record<string, unknown>>>(
-      mode,
-      `/aladdin/api/v1/orders/${encodeURIComponent(consignmentId)}/info`,
-      {
-        method: "GET",
-        token: runtime.accessToken,
-      },
-    );
+  async createParcel(config: RedxConfig, dto: RedxParcelRequest) {
+    const payload = {
+      merchant_parcel_id: dto.merchantParcelId,
+      customer_name: dto.customerName,
+      customer_phone: dto.customerPhone,
+      delivery_area: dto.deliveryAreaName,
+      delivery_area_id: Number(dto.deliveryAreaId),
+      delivery_address: dto.deliveryAddress,
+      cash_collection_amount: Number(
+        new Decimal(dto.cashCollectionAmount).toFixed(2),
+      ),
+      parcel_weight: dto.parcelWeight,
+      parcel_value:
+        dto.parcelValue === undefined
+          ? undefined
+          : Number(new Decimal(dto.parcelValue).toFixed(2)),
+      instruction: dto.instruction ?? undefined,
+      pickup_area_id: Number(dto.pickupAreaId),
+      pickup_area: dto.pickupAreaName ?? undefined,
+      pickup_store_id: dto.pickupStoreId
+        ? Number(dto.pickupStoreId)
+        : undefined,
+      is_closed_box: dto.isClosedBox ?? true,
+    };
+
+    return this.request(config, "/v1.0.0-beta/parcel", {
+      method: "POST",
+      body: payload,
+    });
   }
 
-  async createSteadfastOrder(
-    config: SteadfastConfig,
-    params: CourierBookingParams,
-  ) {
-    return this.steadfastRequest<Record<string, unknown>>(
+  getParcelInfo(config: RedxConfig, trackingId: string) {
+    return this.request(
       config,
-      "/create_order",
-      {
-        method: "POST",
-        body: {
-          invoice: params.orderNo,
-          recipient_name: params.recipientName,
-          recipient_phone: params.recipientPhone,
-          alternative_phone: params.recipientSecondaryPhone,
-          recipient_address: params.recipientAddress,
-          cod_amount: Number(
-            new Decimal(params.codAmount).toDecimalPlaces(2).toString(),
-          ),
-          note: params.specialInstruction ?? config.note,
-          item_description: params.itemDescription ?? config.itemDescription,
-          total_lot: params.itemQuantity,
-          delivery_type:
-            params.steadfast?.deliveryType ?? config.deliveryType ?? 0,
-        },
-      },
+      `/v1.0.0-beta/parcel/info/${encodeURIComponent(trackingId)}`,
     );
   }
 
-  async getSteadfastStatus(config: SteadfastConfig, trackingCode: string) {
-    return this.steadfastRequest<Record<string, unknown>>(
+  trackParcel(config: RedxConfig, trackingId: string) {
+    return this.request(
       config,
-      `/status_by_trackingcode/${encodeURIComponent(trackingCode)}`,
-      { method: "GET" },
+      `/v1.0.0-beta/parcel/track/${encodeURIComponent(trackingId)}`,
     );
   }
 
-  async getSteadfastBalance(config: SteadfastConfig) {
-    return this.steadfastRequest<Record<string, unknown>>(
-      config,
-      "/get_balance",
-      {
-        method: "GET",
-      },
-    );
+  updateParcel(config: RedxConfig, payload: Record<string, unknown>) {
+    return this.request(config, "/v1.0.0-beta/parcels", {
+      method: "PATCH",
+      body: payload,
+    });
   }
 
-  async getSteadfastPoliceStations(config: SteadfastConfig) {
-    return this.steadfastRequest<Record<string, unknown>>(
-      config,
-      "/police_stations",
-      { method: "GET" },
-    );
-  }
-
-  async createRedxParcel(config: RedxConfig, params: CourierBookingParams) {
-    const deliveryArea =
-      params.redx?.deliveryArea ?? config.deliveryArea ?? null;
-    const deliveryAreaId =
-      params.redx?.deliveryAreaId ?? config.deliveryAreaId ?? null;
-
-    if (!deliveryArea || !deliveryAreaId) {
-      throw new BadRequestException(
-        "REDX deliveryArea and deliveryAreaId are required to create a parcel",
-      );
-    }
-
-    return this.redxRequest<Record<string, unknown>>(config, "/parcel", {
+  createPickupStore(config: RedxConfig, dto: RedxPickupStoreRequest) {
+    return this.request(config, "/v1.0.0-beta/pickup/store", {
       method: "POST",
       body: {
-        customer_name: params.recipientName,
-        customer_phone: params.recipientPhone,
-        delivery_area: deliveryArea,
-        delivery_area_id: deliveryAreaId,
-        customer_address: params.recipientAddress,
-        merchant_invoice_id: params.orderNo,
-        cash_collection_amount: new Decimal(params.codAmount)
-          .toDecimalPlaces(2)
-          .toString(),
-        parcel_weight:
-          params.redx?.parcelWeight ?? params.itemWeight ?? config.parcelWeight,
-        instruction: params.specialInstruction ?? config.instruction,
-        value:
-          params.redx?.parcelValue ??
-          config.parcelValue ??
-          Number(new Decimal(params.codAmount).toDecimalPlaces(2).toString()),
-        is_closed_box: params.redx?.isClosedBox ?? config.isClosedBox,
-        pickup_store_id: params.redx?.pickupStoreId ?? config.pickupStoreId,
+        name: dto.name,
+        phone: dto.phone,
+        address: dto.address,
+        area_id: Number(dto.areaId),
       },
     });
   }
 
-  async getRedxParcelDetails(config: RedxConfig, trackingId: string) {
-    return this.redxRequest<Record<string, unknown>>(
+  listPickupStores(config: RedxConfig) {
+    return this.request(config, "/v1.0.0-beta/pickup/stores");
+  }
+
+  getPickupStoreDetails(config: RedxConfig, storeId: string) {
+    return this.request(
       config,
-      `/parcel/info/${encodeURIComponent(trackingId)}`,
-      { method: "GET" },
+      `/v1.0.0-beta/pickup/stores/${encodeURIComponent(storeId)}`,
     );
   }
 
-  async trackRedxParcel(config: RedxConfig, trackingId: string) {
-    return this.redxRequest<Record<string, unknown>>(
-      config,
-      `/parcel/track/${encodeURIComponent(trackingId)}`,
-      { method: "GET" },
-    );
-  }
-
-  async getRedxAreas(config: RedxConfig, postCode?: number) {
-    const query = postCode ? `?post_code=${postCode}` : "";
-
-    return this.redxRequest<Record<string, unknown>>(config, `/areas${query}`, {
-      method: "GET",
-    });
-  }
-
-  mapPathaoStatus(
-    rawStatus: unknown,
-    fallback: CourierShipmentStatus,
-  ): CourierShipmentStatus {
-    const status = this.stringValue(rawStatus)?.toLowerCase();
-
-    switch (status) {
-      case "pending":
+  mapWebhookStatus(status?: string | null) {
+    switch (status?.trim().toLowerCase()) {
+      case "ready-for-delivery":
         return CourierShipmentStatus.BOOKED;
-      case "delivered":
-        return CourierShipmentStatus.DELIVERED;
-      case "returned":
-        return CourierShipmentStatus.RETURNED;
-      case "cancelled":
-      case "canceled":
-        return CourierShipmentStatus.CANCELLED;
-      default:
-        return fallback;
-    }
-  }
-
-  mapSteadfastStatus(
-    rawStatus: unknown,
-    fallback: CourierShipmentStatus,
-  ): CourierShipmentStatus {
-    const status = this.stringValue(rawStatus)?.toLowerCase();
-
-    switch (status) {
-      case "pending":
-      case "in_review":
-        return CourierShipmentStatus.BOOKED;
-      case "delivered":
-      case "partial_delivered":
-        return CourierShipmentStatus.DELIVERED;
-      case "cancelled":
-        return CourierShipmentStatus.CANCELLED;
-      default:
-        return fallback;
-    }
-  }
-
-  mapRedxStatus(
-    rawStatus: unknown,
-    fallback: CourierShipmentStatus,
-  ): CourierShipmentStatus {
-    const status = this.stringValue(rawStatus)?.toLowerCase();
-
-    switch (status) {
-      case "pickup-pending":
-        return CourierShipmentStatus.BOOKED;
-      case "picked":
-      case "picked-up":
-        return CourierShipmentStatus.PICKED_UP;
-      case "in-transit":
-      case "in_transit":
+      case "delivery-in-progress":
+      case "agent-hold":
+      case "agent-area-change":
         return CourierShipmentStatus.IN_TRANSIT;
       case "delivered":
         return CourierShipmentStatus.DELIVERED;
-      case "cancelled":
-      case "canceled":
-        return CourierShipmentStatus.CANCELLED;
+      case "agent-returning":
+      case "returned":
+        return CourierShipmentStatus.RETURNED;
       default:
-        return fallback;
+        return CourierShipmentStatus.PENDING;
     }
   }
 
-  stringValue(value: unknown) {
-    if (value === null || value === undefined) {
-      return null;
-    }
-
-    if (typeof value === "string") {
-      return value.trim() || null;
-    }
-
-    if (typeof value === "number" || typeof value === "boolean") {
-      return String(value);
-    }
-
-    return null;
-  }
-
-  private async pathaoRequest<T>(
-    mode: CourierConfigMode,
-    endpoint: string,
-    options: {
-      method: "GET" | "POST";
-      token?: string;
-      body?: Record<string, unknown>;
-    },
-  ): Promise<T> {
-    const headers: Record<string, string> = {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    };
-
-    if (options.token) {
-      headers.Authorization = `Bearer ${options.token}`;
-    }
-
-    const response = await fetch(`${PATHAO_BASE_URLS[mode]}${endpoint}`, {
-      method: options.method,
-      headers,
-      body:
-        options.body === undefined
-          ? undefined
-          : JSON.stringify(this.omitUndefined(options.body)),
-    });
-    const text = await response.text();
-
-    if (!response.ok) {
-      throw new BadGatewayException(
-        `Pathao request failed with HTTP ${response.status}: ${this.extractErrorMessage(text)}`,
-      );
-    }
-
-    try {
-      return JSON.parse(text) as T;
-    } catch {
-      throw new BadGatewayException("Pathao returned invalid JSON");
-    }
-  }
-
-  private async steadfastRequest<T>(
-    config: SteadfastConfig,
-    endpoint: string,
-    options: {
-      method: "GET" | "POST";
-      body?: Record<string, unknown>;
-    },
-  ): Promise<T> {
-    return this.jsonRequest<T>(`https://portal.packzy.com/api/v1${endpoint}`, {
-      method: options.method,
-      headers: {
-        "Api-Key": config.apiKey,
-        "Secret-Key": config.secretKey,
-      },
-      body: options.body,
-      errorPrefix: "Steadfast",
-    });
-  }
-
-  private async redxRequest<T>(
-    config: RedxConfig,
-    endpoint: string,
-    options: {
-      method: "GET" | "POST" | "PATCH";
-      body?: Record<string, unknown>;
-    },
-  ): Promise<T> {
-    return this.jsonRequest<T>(`${config.baseUrl}/v1.0.0-beta${endpoint}`, {
-      method: options.method,
-      headers: {
-        "API-ACCESS-TOKEN": `Bearer ${config.apiAccessToken}`,
-      },
-      body: options.body,
-      errorPrefix: "REDX",
-    });
-  }
-
-  private async jsonRequest<T>(
-    url: string,
-    options: {
-      method: "GET" | "POST" | "PATCH";
-      headers?: Record<string, string>;
-      body?: Record<string, unknown>;
-      errorPrefix: string;
-    },
-  ): Promise<T> {
-    const response = await fetch(url, {
-      method: options.method,
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
-      body:
-        options.body === undefined
-          ? undefined
-          : JSON.stringify(this.omitUndefined(options.body)),
-    });
-    const text = await response.text();
-
-    if (!response.ok) {
-      throw new BadGatewayException(
-        `${options.errorPrefix} request failed with HTTP ${response.status}: ${this.extractErrorMessage(text)}`,
-      );
-    }
-
-    try {
-      return JSON.parse(text) as T;
-    } catch {
-      throw new BadGatewayException(
-        `${options.errorPrefix} returned invalid JSON`,
-      );
-    }
-  }
-
-  private applyToken(
-    config: PathaoConfig,
-    response: PathaoTokenResponse,
-  ): PathaoRuntime {
-    const accessToken = this.stringValue(response.access_token);
-
-    if (!accessToken) {
-      throw new BadGatewayException(
-        "Pathao token response did not include access_token",
-      );
-    }
-
-    const expiresIn =
-      typeof response.expires_in === "number" && response.expires_in > 0
-        ? response.expires_in
-        : 0;
-    const accessTokenExpiresAt =
-      expiresIn > 0
-        ? new Date(
-            Date.now() + Math.max(expiresIn - 60, 0) * 1000,
-          ).toISOString()
-        : undefined;
-
-    return {
-      accessToken,
-      config: {
-        ...config,
-        accessToken,
-        refreshToken:
-          this.stringValue(response.refresh_token) ?? config.refreshToken,
-        accessTokenExpiresAt,
-      },
-    };
-  }
-
-  private hasUsableToken(
-    config: PathaoConfig,
-  ): config is PathaoConfig & { accessToken: string } {
-    if (!config.accessToken || !config.accessTokenExpiresAt) {
-      return false;
-    }
-
-    return new Date(config.accessTokenExpiresAt).getTime() > Date.now();
-  }
-
-  private requiredString(config: Record<string, unknown>, key: string) {
-    const value = this.optionalString(config, key);
-
-    if (!value) {
-      throw new BadRequestException(`Pathao ${key} is required`);
-    }
-
-    return value;
-  }
-
-  private optionalString(config: Record<string, unknown>, key: string) {
-    const value = config[key];
-
-    return typeof value === "string" ? value.trim() || null : null;
-  }
-
-  private requiredInteger(config: Record<string, unknown>, key: string) {
-    const value = this.numberValue(config[key]);
-
-    if (value === null || !Number.isInteger(value) || value <= 0) {
-      throw new BadRequestException(`Pathao ${key} must be a positive integer`);
-    }
-
-    return value;
-  }
-
-  private optionalEnum<T extends number>(
-    config: Record<string, unknown>,
-    key: string,
-    allowed: readonly T[],
-  ) {
-    const value = this.numberValue(config[key]);
-
-    if (value === null) {
-      return undefined;
-    }
-
-    if (!allowed.includes(value as T)) {
-      throw new BadRequestException(
-        `Pathao ${key} must be one of: ${allowed.join(", ")}`,
-      );
-    }
-
-    return value as T;
-  }
-
-  private optionalWeight(config: Record<string, unknown>, key: string) {
-    const value = this.numberValue(config[key]);
-
-    if (value === null) {
-      return undefined;
-    }
-
-    if (value < 0.5 || value > 10) {
-      throw new BadRequestException(
-        "Pathao itemWeight must be between 0.5 and 10",
-      );
-    }
-
-    return value;
-  }
-
-  private optionalPositiveInteger(
-    config: Record<string, unknown>,
-    key: string,
-  ) {
-    const value = this.numberValue(config[key]);
-
-    if (value === null) {
-      return undefined;
-    }
-
-    if (!Number.isInteger(value) || value <= 0) {
-      throw new BadRequestException(
-        `Courier ${key} must be a positive integer`,
-      );
-    }
-
-    return value;
-  }
-
-  private optionalPositiveNumber(config: Record<string, unknown>, key: string) {
-    const value = this.numberValue(config[key]);
-
-    if (value === null) {
-      return undefined;
-    }
-
-    if (value <= 0) {
-      throw new BadRequestException(`Courier ${key} must be greater than 0`);
-    }
-
-    return value;
-  }
-
-  private optionalBoolean(config: Record<string, unknown>, key: string) {
-    const value = config[key];
-
-    return typeof value === "boolean" ? value : undefined;
-  }
-
-  private numberValue(value: unknown): number | null {
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return value;
-    }
-
-    if (typeof value === "string" && value.trim() !== "") {
-      const number = Number(value);
-      return Number.isFinite(number) ? number : null;
-    }
-
-    return null;
-  }
-
-  private omitUndefined(value: Record<string, unknown>) {
-    return Object.entries(value).reduce<Record<string, unknown>>(
-      (result, [key, entry]) => {
-        if (entry !== undefined) {
-          result[key] = entry;
-        }
-
-        return result;
-      },
-      {},
+  extractTrackingId(payload: unknown) {
+    return (
+      this.findString(payload, [
+        "tracking_id",
+        "trackingId",
+        "tracking_number",
+        "trackingNumber",
+        "consignment_id",
+      ]) ?? null
     );
   }
 
-  private extractErrorMessage(text: string) {
+  private async request(
+    config: RedxConfig,
+    endpoint: string,
+    options: {
+      method?: "GET" | "POST" | "PATCH";
+      query?: Record<string, string>;
+      body?: Record<string, unknown>;
+    } = {},
+  ) {
+    const query = options.query
+      ? `?${new URLSearchParams(options.query).toString()}`
+      : "";
+    const response = await fetch(`${config.baseUrl}${endpoint}${query}`, {
+      method: options.method ?? "GET",
+      headers: {
+        "API-ACCESS-TOKEN": `Bearer ${config.apiAccessToken}`,
+        Accept: "application/json",
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+      },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+
+    const payload = await this.parseResponse(response);
+
+    if (!response.ok) {
+      throw new BadRequestException({
+        message: "REDX request failed",
+        statusCode: response.status,
+        response: payload,
+      });
+    }
+
+    return payload;
+  }
+
+  private async parseResponse(response: Response) {
+    const text = await response.text();
+
+    if (!text) {
+      return null;
+    }
+
     try {
-      const payload = JSON.parse(text) as Record<string, unknown>;
-      return (
-        this.stringValue(payload.message) ??
-        this.stringValue(payload.error) ??
-        "Pathao rejected the request"
-      );
+      return JSON.parse(text) as unknown;
     } catch {
-      return text.trim() || "Pathao rejected the request";
+      throw new InternalServerErrorException("REDX returned invalid JSON");
     }
   }
 
-  toJsonConfig(config: PathaoConfig): Record<string, unknown> {
-    return { ...config };
+  private moneyFromPayload(payload: unknown, keys: string[]) {
+    const value = this.findNumber(payload, keys);
+    return new Decimal(value ?? 0).toDecimalPlaces(2);
+  }
+
+  private findString(payload: unknown, keys: string[]): string | undefined {
+    if (typeof payload !== "object" || payload === null) {
+      return undefined;
+    }
+
+    for (const [key, value] of Object.entries(payload)) {
+      if (keys.includes(key) && typeof value === "string" && value.trim()) {
+        return value.trim();
+      }
+
+      if (typeof value === "object" && value !== null) {
+        const nested = this.findString(value, keys);
+
+        if (nested) {
+          return nested;
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  private findNumber(payload: unknown, keys: string[]): number | undefined {
+    if (typeof payload !== "object" || payload === null) {
+      return undefined;
+    }
+
+    for (const [key, value] of Object.entries(payload)) {
+      if (keys.includes(key)) {
+        if (typeof value === "number") {
+          return value;
+        }
+
+        if (typeof value === "string" && value.trim()) {
+          return Number(value);
+        }
+      }
+
+      if (typeof value === "object" && value !== null) {
+        const nested = this.findNumber(value, keys);
+
+        if (nested !== undefined) {
+          return nested;
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  private requiredString(value: unknown, message: string) {
+    const normalized = this.optionalString(value);
+
+    if (!normalized) {
+      throw new BadRequestException(message);
+    }
+
+    return normalized;
+  }
+
+  private optionalString(value: unknown) {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+
+    return value.trim() || undefined;
+  }
+
+  private optionalNumber(value: unknown) {
+    if (value === undefined || value === null || value === "") {
+      return undefined;
+    }
+
+    const numberValue = Number(value);
+
+    return Number.isFinite(numberValue) ? numberValue : undefined;
   }
 }

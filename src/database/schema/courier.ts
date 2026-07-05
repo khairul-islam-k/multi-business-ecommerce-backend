@@ -3,7 +3,6 @@ import { sql } from "drizzle-orm";
 import {
   AnyPgColumn,
   index,
-  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -16,20 +15,15 @@ import {
 
 import { business } from "./business";
 import { decimal, JsonValue } from "./common";
+import { warehouse } from "./inventory";
 import { systemUser } from "./system";
 
 export const CourierProvider = {
-  PATHAO: "PATHAO",
   REDX: "REDX",
-  STEADFAST: "STEADFAST",
 } as const;
 export type CourierProvider =
   (typeof CourierProvider)[keyof typeof CourierProvider];
-export const courierProviderEnum = pgEnum("CourierProvider", [
-  "PATHAO",
-  "REDX",
-  "STEADFAST",
-]);
+export const courierProviderEnum = pgEnum("CourierProvider", ["REDX"]);
 
 export const CourierStatus = {
   ACTIVE: "ACTIVE",
@@ -42,15 +36,11 @@ export const courierStatusEnum = pgEnum("CourierStatus", [
 ]);
 
 export const CourierConfigMode = {
-  SANDBOX: "SANDBOX",
   LIVE: "LIVE",
 } as const;
 export type CourierConfigMode =
   (typeof CourierConfigMode)[keyof typeof CourierConfigMode];
-export const courierConfigModeEnum = pgEnum("CourierConfigMode", [
-  "SANDBOX",
-  "LIVE",
-]);
+export const courierConfigModeEnum = pgEnum("CourierConfigMode", ["LIVE"]);
 
 export const CourierConfigStatus = {
   ACTIVE: "ACTIVE",
@@ -62,43 +52,6 @@ export const courierConfigStatusEnum = pgEnum("CourierConfigStatus", [
   "ACTIVE",
   "INACTIVE",
 ]);
-
-export const CourierDeliveryZoneStatus = {
-  ACTIVE: "ACTIVE",
-  INACTIVE: "INACTIVE",
-} as const;
-export type CourierDeliveryZoneStatus =
-  (typeof CourierDeliveryZoneStatus)[keyof typeof CourierDeliveryZoneStatus];
-export const courierDeliveryZoneStatusEnum = pgEnum(
-  "CourierDeliveryZoneStatus",
-  ["ACTIVE", "INACTIVE"],
-);
-
-export const CourierAreaType = {
-  DIVISION: "DIVISION",
-  DISTRICT: "DISTRICT",
-  UPAZILA: "UPAZILA",
-  UNION: "UNION",
-} as const;
-export type CourierAreaType =
-  (typeof CourierAreaType)[keyof typeof CourierAreaType];
-export const courierAreaTypeEnum = pgEnum("CourierAreaType", [
-  "DIVISION",
-  "DISTRICT",
-  "UPAZILA",
-  "UNION",
-]);
-
-export const CourierShippingChargeStatus = {
-  ACTIVE: "ACTIVE",
-  INACTIVE: "INACTIVE",
-} as const;
-export type CourierShippingChargeStatus =
-  (typeof CourierShippingChargeStatus)[keyof typeof CourierShippingChargeStatus];
-export const courierShippingChargeStatusEnum = pgEnum(
-  "CourierShippingChargeStatus",
-  ["ACTIVE", "INACTIVE"],
-);
 
 export const CourierShipmentStatus = {
   PENDING: "PENDING",
@@ -120,34 +73,6 @@ export const courierShipmentStatusEnum = pgEnum("CourierShipmentStatus", [
   "DELIVERED",
   "FAILED",
   "RETURNED",
-  "CANCELLED",
-]);
-
-export const CourierReceivableStatus = {
-  PENDING: "PENDING",
-  PARTIALLY_SETTLED: "PARTIALLY_SETTLED",
-  SETTLED: "SETTLED",
-  DISPUTED: "DISPUTED",
-} as const;
-export type CourierReceivableStatus =
-  (typeof CourierReceivableStatus)[keyof typeof CourierReceivableStatus];
-export const courierReceivableStatusEnum = pgEnum("CourierReceivableStatus", [
-  "PENDING",
-  "PARTIALLY_SETTLED",
-  "SETTLED",
-  "DISPUTED",
-]);
-
-export const CourierSettlementStatus = {
-  DRAFT: "DRAFT",
-  CONFIRMED: "CONFIRMED",
-  CANCELLED: "CANCELLED",
-} as const;
-export type CourierSettlementStatus =
-  (typeof CourierSettlementStatus)[keyof typeof CourierSettlementStatus];
-export const courierSettlementStatusEnum = pgEnum("CourierSettlementStatus", [
-  "DRAFT",
-  "CONFIRMED",
   "CANCELLED",
 ]);
 
@@ -185,7 +110,8 @@ export const courierConfig = pgTable(
       .notNull()
       .references((): AnyPgColumn => courier.id, { onDelete: "restrict" }),
     configData: jsonb("config_data").$type<JsonValue>().notNull(),
-    mode: courierConfigModeEnum().default("SANDBOX").notNull(),
+    webhookTokenHash: varchar("webhook_token_hash", { length: 128 }),
+    mode: courierConfigModeEnum().default("LIVE").notNull(),
     status: courierConfigStatusEnum().default("INACTIVE").notNull(),
     createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
       onDelete: "set null",
@@ -207,6 +133,9 @@ export const courierConfig = pgTable(
     uniqueIndex("courier_configs_business_courier_active_unique")
       .on(table.businessId, table.courierId)
       .where(sql`${table.deletedAt} IS NULL`),
+    uniqueIndex("courier_configs_webhook_token_hash_unique")
+      .on(table.webhookTokenHash)
+      .where(sql`${table.webhookTokenHash} IS NOT NULL`),
     index("courier_configs_business_id_idx").on(table.businessId),
     index("courier_configs_courier_id_idx").on(table.courierId),
     index("courier_configs_status_idx").on(table.status),
@@ -214,160 +143,6 @@ export const courierConfig = pgTable(
 );
 export type CourierConfig = typeof courierConfig.$inferSelect;
 export type NewCourierConfig = typeof courierConfig.$inferInsert;
-
-export const courierDeliveryZone = pgTable(
-  "courier_delivery_zones",
-  {
-    id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id")
-      .notNull()
-      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
-    name: varchar({ length: 150 }).notNull(),
-    description: text(),
-    status: courierDeliveryZoneStatusEnum().default("ACTIVE").notNull(),
-    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
-      onDelete: "set null",
-    }),
-    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-    updatedAt: timestamp("updated_at", { mode: "date" })
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-    deletedAt: timestamp("deleted_at", { mode: "date" }),
-  },
-  (table) => [
-    uniqueIndex("courier_delivery_zones_business_id_name_active_unique")
-      .on(table.businessId, table.name)
-      .where(sql`${table.deletedAt} IS NULL`),
-    index("courier_delivery_zones_business_id_idx").on(table.businessId),
-    index("courier_delivery_zones_status_idx").on(table.status),
-  ],
-);
-export type CourierDeliveryZone = typeof courierDeliveryZone.$inferSelect;
-export type NewCourierDeliveryZone = typeof courierDeliveryZone.$inferInsert;
-
-export const courierAreaCatalog = pgTable(
-  "courier_area_catalog",
-  {
-    id: uuid().primaryKey().defaultRandom().notNull(),
-    source: varchar({ length: 50 }).notNull(),
-    externalId: varchar("external_id", { length: 80 }).notNull(),
-    areaType: courierAreaTypeEnum("area_type").notNull(),
-    name: varchar({ length: 150 }).notNull(),
-    bnName: varchar("bn_name", { length: 150 }),
-    divisionName: varchar("division_name", { length: 150 }),
-    districtName: varchar("district_name", { length: 150 }),
-    upazilaName: varchar("upazila_name", { length: 150 }),
-    parentExternalId: varchar("parent_external_id", { length: 80 }),
-    rawData: jsonb("raw_data")
-      .$type<JsonValue>()
-      .default(sql`'{}'::jsonb`)
-      .notNull(),
-    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-    updatedAt: timestamp("updated_at", { mode: "date" })
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex("courier_area_catalog_source_type_external_id_unique").on(
-      table.source,
-      table.areaType,
-      table.externalId,
-    ),
-    index("courier_area_catalog_source_idx").on(table.source),
-    index("courier_area_catalog_area_type_idx").on(table.areaType),
-    index("courier_area_catalog_name_idx").on(table.name),
-    index("courier_area_catalog_division_name_idx").on(table.divisionName),
-    index("courier_area_catalog_district_name_idx").on(table.districtName),
-    index("courier_area_catalog_upazila_name_idx").on(table.upazilaName),
-  ],
-);
-export type CourierAreaCatalog = typeof courierAreaCatalog.$inferSelect;
-export type NewCourierAreaCatalog = typeof courierAreaCatalog.$inferInsert;
-
-export const courierDeliveryZoneArea = pgTable(
-  "courier_delivery_zone_areas",
-  {
-    id: uuid().primaryKey().defaultRandom().notNull(),
-    deliveryZoneId: uuid("delivery_zone_id")
-      .notNull()
-      .references((): AnyPgColumn => courierDeliveryZone.id, {
-        onDelete: "cascade",
-      }),
-    catalogAreaId: uuid("catalog_area_id").references(
-      (): AnyPgColumn => courierAreaCatalog.id,
-      { onDelete: "set null" },
-    ),
-    areaName: varchar("area_name", { length: 150 }).notNull(),
-    city: varchar({ length: 100 }),
-    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-    updatedAt: timestamp("updated_at", { mode: "date" })
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (table) => [
-    index("courier_delivery_zone_areas_delivery_zone_id_idx").on(
-      table.deliveryZoneId,
-    ),
-    uniqueIndex("courier_delivery_zone_areas_zone_catalog_area_unique").on(
-      table.deliveryZoneId,
-      table.catalogAreaId,
-    ),
-    index("courier_delivery_zone_areas_catalog_area_id_idx").on(
-      table.catalogAreaId,
-    ),
-    index("courier_delivery_zone_areas_city_idx").on(table.city),
-  ],
-);
-export type CourierDeliveryZoneArea =
-  typeof courierDeliveryZoneArea.$inferSelect;
-export type NewCourierDeliveryZoneArea =
-  typeof courierDeliveryZoneArea.$inferInsert;
-
-export const courierShippingCharge = pgTable(
-  "courier_shipping_charges",
-  {
-    id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id")
-      .notNull()
-      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
-    deliveryZoneId: uuid("delivery_zone_id")
-      .notNull()
-      .references((): AnyPgColumn => courierDeliveryZone.id, {
-        onDelete: "cascade",
-      }),
-    courierId: uuid("courier_id").references((): AnyPgColumn => courier.id, {
-      onDelete: "set null",
-    }),
-    minWeight: decimal("min_weight", { precision: 10, scale: 3 }),
-    maxWeight: decimal("max_weight", { precision: 10, scale: 3 }),
-    shippingCharge: decimal("shipping_charge", { precision: 12, scale: 2 })
-      .default(new Decimal(0))
-      .notNull(),
-    codCharge: decimal("cod_charge", { precision: 12, scale: 2 })
-      .default(new Decimal(0))
-      .notNull(),
-    status: courierShippingChargeStatusEnum().default("ACTIVE").notNull(),
-    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-    updatedAt: timestamp("updated_at", { mode: "date" })
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (table) => [
-    index("courier_shipping_charges_business_id_idx").on(table.businessId),
-    index("courier_shipping_charges_delivery_zone_id_idx").on(
-      table.deliveryZoneId,
-    ),
-    index("courier_shipping_charges_courier_id_idx").on(table.courierId),
-    index("courier_shipping_charges_status_idx").on(table.status),
-  ],
-);
-export type CourierShippingCharge = typeof courierShippingCharge.$inferSelect;
-export type NewCourierShippingCharge =
-  typeof courierShippingCharge.$inferInsert;
 
 export const courierShipment = pgTable(
   "courier_shipments",
@@ -384,13 +159,14 @@ export const courierShipment = pgTable(
       (): AnyPgColumn => courierConfig.id,
       { onDelete: "set null" },
     ),
-    deliveryZoneId: uuid("delivery_zone_id").references(
-      (): AnyPgColumn => courierDeliveryZone.id,
+    pickupWarehouseId: uuid("pickup_warehouse_id").references(
+      (): AnyPgColumn => warehouse.id,
       { onDelete: "set null" },
     ),
     shipmentNo: varchar("shipment_no", { length: 100 }).notNull(),
     consignmentId: varchar("consignment_id", { length: 150 }),
     trackingCode: varchar("tracking_code", { length: 150 }),
+    providerStatus: varchar("provider_status", { length: 100 }),
     status: courierShipmentStatusEnum().default("PENDING").notNull(),
     shippingCharge: decimal("shipping_charge", { precision: 12, scale: 2 })
       .default(new Decimal(0))
@@ -398,14 +174,31 @@ export const courierShipment = pgTable(
     codAmount: decimal("cod_amount", { precision: 12, scale: 2 })
       .default(new Decimal(0))
       .notNull(),
+    deliveryCharge: decimal("delivery_charge", { precision: 12, scale: 2 })
+      .default(new Decimal(0))
+      .notNull(),
+    codCharge: decimal("cod_charge", { precision: 12, scale: 2 })
+      .default(new Decimal(0))
+      .notNull(),
     courierFee: decimal("courier_fee", { precision: 12, scale: 2 })
       .default(new Decimal(0))
       .notNull(),
     recipientName: varchar("recipient_name", { length: 150 }),
     recipientPhone: varchar("recipient_phone", { length: 30 }),
+    deliveryAreaId: varchar("delivery_area_id", { length: 80 }),
+    deliveryAreaName: varchar("delivery_area_name", { length: 150 }),
+    deliveryPostCode: varchar("delivery_post_code", { length: 20 }),
+    deliveryDivisionName: varchar("delivery_division_name", { length: 150 }),
+    pickupAreaId: varchar("pickup_area_id", { length: 80 }),
+    pickupAreaName: varchar("pickup_area_name", { length: 150 }),
+    pickupPostCode: varchar("pickup_post_code", { length: 20 }),
+    pickupStoreId: varchar("pickup_store_id", { length: 80 }),
     deliveryAddressSnapshot: jsonb(
       "delivery_address_snapshot",
     ).$type<JsonValue>(),
+    providerRequest: jsonb("provider_request").$type<JsonValue>(),
+    providerResponse: jsonb("provider_response").$type<JsonValue>(),
+    lastWebhookPayload: jsonb("last_webhook_payload").$type<JsonValue>(),
     shippedAt: timestamp("shipped_at", { mode: "date" }),
     deliveredAt: timestamp("delivered_at", { mode: "date" }),
     cancelledAt: timestamp("cancelled_at", { mode: "date" }),
@@ -435,8 +228,11 @@ export const courierShipment = pgTable(
     index("courier_shipments_order_id_idx").on(table.orderId),
     index("courier_shipments_courier_id_idx").on(table.courierId),
     index("courier_shipments_courier_config_id_idx").on(table.courierConfigId),
-    index("courier_shipments_delivery_zone_id_idx").on(table.deliveryZoneId),
+    index("courier_shipments_pickup_warehouse_id_idx").on(
+      table.pickupWarehouseId,
+    ),
     index("courier_shipments_status_idx").on(table.status),
+    index("courier_shipments_provider_status_idx").on(table.providerStatus),
     index("courier_shipments_tracking_code_idx").on(table.trackingCode),
   ],
 );
@@ -471,148 +267,3 @@ export const courierShipmentItem = pgTable(
 );
 export type CourierShipmentItem = typeof courierShipmentItem.$inferSelect;
 export type NewCourierShipmentItem = typeof courierShipmentItem.$inferInsert;
-
-export const courierReceivable = pgTable(
-  "courier_receivables",
-  {
-    id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id")
-      .notNull()
-      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
-    courierId: uuid("courier_id")
-      .notNull()
-      .references((): AnyPgColumn => courier.id, { onDelete: "restrict" }),
-    shipmentId: uuid("shipment_id")
-      .unique()
-      .notNull()
-      .references((): AnyPgColumn => courierShipment.id, {
-        onDelete: "cascade",
-      }),
-    orderId: uuid("order_id").notNull(),
-    codAmount: decimal("cod_amount", { precision: 12, scale: 2 })
-      .default(new Decimal(0))
-      .notNull(),
-    courierFee: decimal("courier_fee", { precision: 12, scale: 2 })
-      .default(new Decimal(0))
-      .notNull(),
-    netReceivable: decimal("net_receivable", { precision: 12, scale: 2 })
-      .default(new Decimal(0))
-      .notNull(),
-    status: courierReceivableStatusEnum().default("PENDING").notNull(),
-    expectedSettlementDate: timestamp("expected_settlement_date", {
-      mode: "date",
-    }),
-    settledAt: timestamp("settled_at", { mode: "date" }),
-    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-    updatedAt: timestamp("updated_at", { mode: "date" })
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (table) => [
-    index("courier_receivables_business_id_idx").on(table.businessId),
-    index("courier_receivables_courier_id_idx").on(table.courierId),
-    index("courier_receivables_order_id_idx").on(table.orderId),
-    index("courier_receivables_status_idx").on(table.status),
-    index("courier_receivables_expected_settlement_date_idx").on(
-      table.expectedSettlementDate,
-    ),
-  ],
-);
-export type CourierReceivable = typeof courierReceivable.$inferSelect;
-export type NewCourierReceivable = typeof courierReceivable.$inferInsert;
-
-export const courierSettlement = pgTable(
-  "courier_settlements",
-  {
-    id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id")
-      .notNull()
-      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
-    courierId: uuid("courier_id")
-      .notNull()
-      .references((): AnyPgColumn => courier.id, { onDelete: "restrict" }),
-    settlementNo: varchar("settlement_no", { length: 100 }).notNull(),
-    settlementDate: timestamp("settlement_date", { mode: "date" }).notNull(),
-    totalCodAmount: decimal("total_cod_amount", { precision: 12, scale: 2 })
-      .default(new Decimal(0))
-      .notNull(),
-    totalCourierFee: decimal("total_courier_fee", { precision: 12, scale: 2 })
-      .default(new Decimal(0))
-      .notNull(),
-    totalSettlementAmount: decimal("total_settlement_amount", {
-      precision: 12,
-      scale: 2,
-    })
-      .default(new Decimal(0))
-      .notNull(),
-    status: courierSettlementStatusEnum().default("DRAFT").notNull(),
-    referenceNo: varchar("reference_no", { length: 150 }),
-    note: text(),
-    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
-      onDelete: "set null",
-    }),
-    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
-      onDelete: "set null",
-    }),
-    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-    updatedAt: timestamp("updated_at", { mode: "date" })
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-    deletedAt: timestamp("deleted_at", { mode: "date" }),
-  },
-  (table) => [
-    uniqueIndex("courier_settlements_business_settlement_no_active_unique")
-      .on(table.businessId, table.settlementNo)
-      .where(sql`${table.deletedAt} IS NULL`),
-    index("courier_settlements_business_id_idx").on(table.businessId),
-    index("courier_settlements_courier_id_idx").on(table.courierId),
-    index("courier_settlements_settlement_date_idx").on(table.settlementDate),
-    index("courier_settlements_status_idx").on(table.status),
-  ],
-);
-export type CourierSettlement = typeof courierSettlement.$inferSelect;
-export type NewCourierSettlement = typeof courierSettlement.$inferInsert;
-
-export const courierSettlementItem = pgTable(
-  "courier_settlement_items",
-  {
-    id: uuid().primaryKey().defaultRandom().notNull(),
-    settlementId: uuid("settlement_id")
-      .notNull()
-      .references((): AnyPgColumn => courierSettlement.id, {
-        onDelete: "cascade",
-      }),
-    receivableId: uuid("receivable_id")
-      .notNull()
-      .references((): AnyPgColumn => courierReceivable.id, {
-        onDelete: "restrict",
-      }),
-    shipmentId: uuid("shipment_id")
-      .notNull()
-      .references((): AnyPgColumn => courierShipment.id, {
-        onDelete: "restrict",
-      }),
-    codAmount: decimal("cod_amount", { precision: 12, scale: 2 })
-      .default(new Decimal(0))
-      .notNull(),
-    courierFee: decimal("courier_fee", { precision: 12, scale: 2 })
-      .default(new Decimal(0))
-      .notNull(),
-    settlementAmount: decimal("settlement_amount", { precision: 12, scale: 2 })
-      .default(new Decimal(0))
-      .notNull(),
-    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-  },
-  (table) => [
-    uniqueIndex("courier_settlement_items_receivable_id_unique").on(
-      table.receivableId,
-    ),
-    index("courier_settlement_items_settlement_id_idx").on(table.settlementId),
-    index("courier_settlement_items_shipment_id_idx").on(table.shipmentId),
-  ],
-);
-export type CourierSettlementItem = typeof courierSettlementItem.$inferSelect;
-export type NewCourierSettlementItem =
-  typeof courierSettlementItem.$inferInsert;

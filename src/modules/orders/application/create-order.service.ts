@@ -351,6 +351,27 @@ export class CreateOrderService {
     const codAmount = params.isCod
       ? new Decimal(params.order.totalAmount).minus(params.order.paidAmount)
       : new Decimal(0);
+    const [pickupWarehouse] = await tx
+      .select()
+      .from(warehouse)
+      .where(
+        and(
+          eq(
+            warehouse.id,
+            params.courier.pickupWarehouseId ?? params.order.warehouseId,
+          ),
+          eq(warehouse.businessId, params.businessId),
+          eq(warehouse.status, WarehouseStatus.ACTIVE),
+          isNull(warehouse.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!pickupWarehouse?.redxAreaId || !pickupWarehouse.redxAreaName) {
+      throw new BadRequestException(
+        "Pickup warehouse must have REDX area metadata before a REDX shipment can be created.",
+      );
+    }
 
     const [shipment] = await tx
       .insert(courierShipment)
@@ -359,10 +380,13 @@ export class CreateOrderService {
         orderId: params.order.id,
         courierId: params.courier.courierId,
         courierConfigId: params.courier.courierConfigId,
-        deliveryZoneId: params.courier.deliveryZoneId,
+        pickupWarehouseId:
+          params.courier.pickupWarehouseId ?? params.order.warehouseId,
         shipmentNo,
         shippingCharge: params.order.shippingCharge,
         codAmount,
+        deliveryCharge: new Decimal(params.courier.deliveryCharge ?? 0),
+        codCharge: new Decimal(params.courier.codCharge ?? 0),
         courierFee: new Decimal(params.courier.courierFee ?? 0),
         recipientName:
           this.normalizeNullableText(params.courier.recipientName) ??
@@ -370,10 +394,32 @@ export class CreateOrderService {
         recipientPhone:
           this.normalizeNullableText(params.courier.recipientPhone) ??
           params.order.customerPhone,
+        deliveryAreaId: this.normalizeNullableText(
+          params.courier.deliveryAreaId,
+        ),
+        deliveryAreaName: this.normalizeNullableText(
+          params.courier.deliveryAreaName,
+        ),
+        deliveryPostCode: this.normalizeNullableText(
+          params.courier.deliveryPostCode,
+        ),
+        deliveryDivisionName: this.normalizeNullableText(
+          params.courier.deliveryDivisionName,
+        ),
+        pickupAreaId: pickupWarehouse.redxAreaId,
+        pickupAreaName: pickupWarehouse.redxAreaName,
+        pickupPostCode: pickupWarehouse.redxPostCode,
+        pickupStoreId: pickupWarehouse.redxPickupStoreId,
         deliveryAddressSnapshot:
           (params.courier.deliveryAddressSnapshot as JsonValue | undefined) ??
           params.order.shippingAddressSnapshot ??
           undefined,
+        providerRequest: {
+          parcelWeight: params.courier.weight ?? 1,
+          instruction:
+            this.normalizeNullableText(params.courier.specialInstruction) ??
+            null,
+        } as JsonValue,
         createdBy: params.currentUserId,
       })
       .returning();

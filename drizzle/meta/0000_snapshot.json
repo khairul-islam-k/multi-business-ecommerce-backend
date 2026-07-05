@@ -1,5 +1,5 @@
 {
-  "id": "76aa9b74-e1ab-4a73-b5fa-0aa26ebed3cd",
+  "id": "d4ceb8f3-30f1-44bf-97a3-97530a346161",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1108,13 +1108,6 @@
           "notNull": true,
           "default": "'ACTIVE'"
         },
-        "sort_order": {
-          "name": "sort_order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -1213,13 +1206,19 @@
           "primaryKey": false,
           "notNull": true
         },
+        "webhook_token_hash": {
+          "name": "webhook_token_hash",
+          "type": "varchar(128)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "mode": {
           "name": "mode",
           "type": "CourierConfigMode",
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
-          "default": "'SANDBOX'"
+          "default": "'LIVE'"
         },
         "status": {
           "name": "status",
@@ -1287,6 +1286,22 @@
           ],
           "isUnique": true,
           "where": "\"courier_configs\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "courier_configs_webhook_token_hash_unique": {
+          "name": "courier_configs_webhook_token_hash_unique",
+          "columns": [
+            {
+              "expression": "webhook_token_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"courier_configs\".\"webhook_token_hash\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1410,890 +1425,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.courier_delivery_zones": {
-      "name": "courier_delivery_zones",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "business_id": {
-          "name": "business_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "varchar(150)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "CourierDeliveryZoneStatus",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'ACTIVE'"
-        },
-        "sort_order": {
-          "name": "sort_order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "deleted_by": {
-          "name": "deleted_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "courier_delivery_zones_business_id_name_active_unique": {
-          "name": "courier_delivery_zones_business_id_name_active_unique",
-          "columns": [
-            {
-              "expression": "business_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"courier_delivery_zones\".\"deleted_at\" IS NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "courier_delivery_zones_business_id_idx": {
-          "name": "courier_delivery_zones_business_id_idx",
-          "columns": [
-            {
-              "expression": "business_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "courier_delivery_zones_status_idx": {
-          "name": "courier_delivery_zones_status_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "courier_delivery_zones_business_id_businesses_id_fk": {
-          "name": "courier_delivery_zones_business_id_businesses_id_fk",
-          "tableFrom": "courier_delivery_zones",
-          "tableTo": "businesses",
-          "columnsFrom": [
-            "business_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "courier_delivery_zones_deleted_by_system_users_id_fk": {
-          "name": "courier_delivery_zones_deleted_by_system_users_id_fk",
-          "tableFrom": "courier_delivery_zones",
-          "tableTo": "system_users",
-          "columnsFrom": [
-            "deleted_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.courier_delivery_zone_areas": {
-      "name": "courier_delivery_zone_areas",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "delivery_zone_id": {
-          "name": "delivery_zone_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "area_name": {
-          "name": "area_name",
-          "type": "varchar(150)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "city": {
-          "name": "city",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "courier_delivery_zone_areas_delivery_zone_id_idx": {
-          "name": "courier_delivery_zone_areas_delivery_zone_id_idx",
-          "columns": [
-            {
-              "expression": "delivery_zone_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "courier_delivery_zone_areas_city_idx": {
-          "name": "courier_delivery_zone_areas_city_idx",
-          "columns": [
-            {
-              "expression": "city",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "courier_delivery_zone_areas_delivery_zone_id_courier_delivery_zones_id_fk": {
-          "name": "courier_delivery_zone_areas_delivery_zone_id_courier_delivery_zones_id_fk",
-          "tableFrom": "courier_delivery_zone_areas",
-          "tableTo": "courier_delivery_zones",
-          "columnsFrom": [
-            "delivery_zone_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.courier_receivables": {
-      "name": "courier_receivables",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "business_id": {
-          "name": "business_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "courier_id": {
-          "name": "courier_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "shipment_id": {
-          "name": "shipment_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "order_id": {
-          "name": "order_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "cod_amount": {
-          "name": "cod_amount",
-          "type": "numeric(12, 2)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "0"
-        },
-        "courier_fee": {
-          "name": "courier_fee",
-          "type": "numeric(12, 2)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "0"
-        },
-        "net_receivable": {
-          "name": "net_receivable",
-          "type": "numeric(12, 2)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "0"
-        },
-        "status": {
-          "name": "status",
-          "type": "CourierReceivableStatus",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'PENDING'"
-        },
-        "expected_settlement_date": {
-          "name": "expected_settlement_date",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "settled_at": {
-          "name": "settled_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "courier_receivables_business_id_idx": {
-          "name": "courier_receivables_business_id_idx",
-          "columns": [
-            {
-              "expression": "business_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "courier_receivables_courier_id_idx": {
-          "name": "courier_receivables_courier_id_idx",
-          "columns": [
-            {
-              "expression": "courier_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "courier_receivables_order_id_idx": {
-          "name": "courier_receivables_order_id_idx",
-          "columns": [
-            {
-              "expression": "order_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "courier_receivables_status_idx": {
-          "name": "courier_receivables_status_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "courier_receivables_expected_settlement_date_idx": {
-          "name": "courier_receivables_expected_settlement_date_idx",
-          "columns": [
-            {
-              "expression": "expected_settlement_date",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "courier_receivables_business_id_businesses_id_fk": {
-          "name": "courier_receivables_business_id_businesses_id_fk",
-          "tableFrom": "courier_receivables",
-          "tableTo": "businesses",
-          "columnsFrom": [
-            "business_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "courier_receivables_courier_id_couriers_id_fk": {
-          "name": "courier_receivables_courier_id_couriers_id_fk",
-          "tableFrom": "courier_receivables",
-          "tableTo": "couriers",
-          "columnsFrom": [
-            "courier_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "courier_receivables_shipment_id_courier_shipments_id_fk": {
-          "name": "courier_receivables_shipment_id_courier_shipments_id_fk",
-          "tableFrom": "courier_receivables",
-          "tableTo": "courier_shipments",
-          "columnsFrom": [
-            "shipment_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "courier_receivables_shipment_id_unique": {
-          "name": "courier_receivables_shipment_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "shipment_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.courier_settlements": {
-      "name": "courier_settlements",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "business_id": {
-          "name": "business_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "courier_id": {
-          "name": "courier_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "settlement_no": {
-          "name": "settlement_no",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "settlement_date": {
-          "name": "settlement_date",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "total_cod_amount": {
-          "name": "total_cod_amount",
-          "type": "numeric(12, 2)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "0"
-        },
-        "total_courier_fee": {
-          "name": "total_courier_fee",
-          "type": "numeric(12, 2)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "0"
-        },
-        "total_settlement_amount": {
-          "name": "total_settlement_amount",
-          "type": "numeric(12, 2)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "0"
-        },
-        "status": {
-          "name": "status",
-          "type": "CourierSettlementStatus",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'DRAFT'"
-        },
-        "reference_no": {
-          "name": "reference_no",
-          "type": "varchar(150)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "note": {
-          "name": "note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "deleted_by": {
-          "name": "deleted_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "courier_settlements_business_settlement_no_active_unique": {
-          "name": "courier_settlements_business_settlement_no_active_unique",
-          "columns": [
-            {
-              "expression": "business_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "settlement_no",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"courier_settlements\".\"deleted_at\" IS NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "courier_settlements_business_id_idx": {
-          "name": "courier_settlements_business_id_idx",
-          "columns": [
-            {
-              "expression": "business_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "courier_settlements_courier_id_idx": {
-          "name": "courier_settlements_courier_id_idx",
-          "columns": [
-            {
-              "expression": "courier_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "courier_settlements_settlement_date_idx": {
-          "name": "courier_settlements_settlement_date_idx",
-          "columns": [
-            {
-              "expression": "settlement_date",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "courier_settlements_status_idx": {
-          "name": "courier_settlements_status_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "courier_settlements_business_id_businesses_id_fk": {
-          "name": "courier_settlements_business_id_businesses_id_fk",
-          "tableFrom": "courier_settlements",
-          "tableTo": "businesses",
-          "columnsFrom": [
-            "business_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "courier_settlements_courier_id_couriers_id_fk": {
-          "name": "courier_settlements_courier_id_couriers_id_fk",
-          "tableFrom": "courier_settlements",
-          "tableTo": "couriers",
-          "columnsFrom": [
-            "courier_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "courier_settlements_created_by_system_users_id_fk": {
-          "name": "courier_settlements_created_by_system_users_id_fk",
-          "tableFrom": "courier_settlements",
-          "tableTo": "system_users",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "courier_settlements_deleted_by_system_users_id_fk": {
-          "name": "courier_settlements_deleted_by_system_users_id_fk",
-          "tableFrom": "courier_settlements",
-          "tableTo": "system_users",
-          "columnsFrom": [
-            "deleted_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.courier_settlement_items": {
-      "name": "courier_settlement_items",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "settlement_id": {
-          "name": "settlement_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "receivable_id": {
-          "name": "receivable_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "shipment_id": {
-          "name": "shipment_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "cod_amount": {
-          "name": "cod_amount",
-          "type": "numeric(12, 2)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "0"
-        },
-        "courier_fee": {
-          "name": "courier_fee",
-          "type": "numeric(12, 2)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "0"
-        },
-        "settlement_amount": {
-          "name": "settlement_amount",
-          "type": "numeric(12, 2)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "0"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "courier_settlement_items_receivable_id_unique": {
-          "name": "courier_settlement_items_receivable_id_unique",
-          "columns": [
-            {
-              "expression": "receivable_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "courier_settlement_items_settlement_id_idx": {
-          "name": "courier_settlement_items_settlement_id_idx",
-          "columns": [
-            {
-              "expression": "settlement_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "courier_settlement_items_shipment_id_idx": {
-          "name": "courier_settlement_items_shipment_id_idx",
-          "columns": [
-            {
-              "expression": "shipment_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "courier_settlement_items_settlement_id_courier_settlements_id_fk": {
-          "name": "courier_settlement_items_settlement_id_courier_settlements_id_fk",
-          "tableFrom": "courier_settlement_items",
-          "tableTo": "courier_settlements",
-          "columnsFrom": [
-            "settlement_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "courier_settlement_items_receivable_id_courier_receivables_id_fk": {
-          "name": "courier_settlement_items_receivable_id_courier_receivables_id_fk",
-          "tableFrom": "courier_settlement_items",
-          "tableTo": "courier_receivables",
-          "columnsFrom": [
-            "receivable_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "courier_settlement_items_shipment_id_courier_shipments_id_fk": {
-          "name": "courier_settlement_items_shipment_id_courier_shipments_id_fk",
-          "tableFrom": "courier_settlement_items",
-          "tableTo": "courier_shipments",
-          "columnsFrom": [
-            "shipment_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.courier_shipments": {
       "name": "courier_shipments",
       "schema": "",
@@ -2329,8 +1460,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "delivery_zone_id": {
-          "name": "delivery_zone_id",
+        "pickup_warehouse_id": {
+          "name": "pickup_warehouse_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -2350,6 +1481,12 @@
         "tracking_code": {
           "name": "tracking_code",
           "type": "varchar(150)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provider_status": {
+          "name": "provider_status",
+          "type": "varchar(100)",
           "primaryKey": false,
           "notNull": false
         },
@@ -2375,6 +1512,20 @@
           "notNull": true,
           "default": "0"
         },
+        "delivery_charge": {
+          "name": "delivery_charge",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "cod_charge": {
+          "name": "cod_charge",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
         "courier_fee": {
           "name": "courier_fee",
           "type": "numeric(12, 2)",
@@ -2394,8 +1545,74 @@
           "primaryKey": false,
           "notNull": false
         },
+        "delivery_area_id": {
+          "name": "delivery_area_id",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "delivery_area_name": {
+          "name": "delivery_area_name",
+          "type": "varchar(150)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "delivery_post_code": {
+          "name": "delivery_post_code",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "delivery_division_name": {
+          "name": "delivery_division_name",
+          "type": "varchar(150)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pickup_area_id": {
+          "name": "pickup_area_id",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pickup_area_name": {
+          "name": "pickup_area_name",
+          "type": "varchar(150)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pickup_post_code": {
+          "name": "pickup_post_code",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pickup_store_id": {
+          "name": "pickup_store_id",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "delivery_address_snapshot": {
           "name": "delivery_address_snapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provider_request": {
+          "name": "provider_request",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provider_response": {
+          "name": "provider_response",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_webhook_payload": {
+          "name": "last_webhook_payload",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
@@ -2550,11 +1767,11 @@
           "method": "btree",
           "with": {}
         },
-        "courier_shipments_delivery_zone_id_idx": {
-          "name": "courier_shipments_delivery_zone_id_idx",
+        "courier_shipments_pickup_warehouse_id_idx": {
+          "name": "courier_shipments_pickup_warehouse_id_idx",
           "columns": [
             {
-              "expression": "delivery_zone_id",
+              "expression": "pickup_warehouse_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2570,6 +1787,21 @@
           "columns": [
             {
               "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "courier_shipments_provider_status_idx": {
+          "name": "courier_shipments_provider_status_idx",
+          "columns": [
+            {
+              "expression": "provider_status",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2636,12 +1868,12 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "courier_shipments_delivery_zone_id_courier_delivery_zones_id_fk": {
-          "name": "courier_shipments_delivery_zone_id_courier_delivery_zones_id_fk",
+        "courier_shipments_pickup_warehouse_id_inventory_warehouses_id_fk": {
+          "name": "courier_shipments_pickup_warehouse_id_inventory_warehouses_id_fk",
           "tableFrom": "courier_shipments",
-          "tableTo": "courier_delivery_zones",
+          "tableTo": "inventory_warehouses",
           "columnsFrom": [
-            "delivery_zone_id"
+            "pickup_warehouse_id"
           ],
           "columnsTo": [
             "id"
@@ -2812,193 +2044,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.courier_shipping_charges": {
-      "name": "courier_shipping_charges",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "business_id": {
-          "name": "business_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "delivery_zone_id": {
-          "name": "delivery_zone_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "courier_id": {
-          "name": "courier_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "min_weight": {
-          "name": "min_weight",
-          "type": "numeric(10, 3)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "max_weight": {
-          "name": "max_weight",
-          "type": "numeric(10, 3)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "shipping_charge": {
-          "name": "shipping_charge",
-          "type": "numeric(12, 2)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "0"
-        },
-        "cod_charge": {
-          "name": "cod_charge",
-          "type": "numeric(12, 2)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "0"
-        },
-        "status": {
-          "name": "status",
-          "type": "CourierShippingChargeStatus",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'ACTIVE'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "courier_shipping_charges_business_id_idx": {
-          "name": "courier_shipping_charges_business_id_idx",
-          "columns": [
-            {
-              "expression": "business_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "courier_shipping_charges_delivery_zone_id_idx": {
-          "name": "courier_shipping_charges_delivery_zone_id_idx",
-          "columns": [
-            {
-              "expression": "delivery_zone_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "courier_shipping_charges_courier_id_idx": {
-          "name": "courier_shipping_charges_courier_id_idx",
-          "columns": [
-            {
-              "expression": "courier_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "courier_shipping_charges_status_idx": {
-          "name": "courier_shipping_charges_status_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "courier_shipping_charges_business_id_businesses_id_fk": {
-          "name": "courier_shipping_charges_business_id_businesses_id_fk",
-          "tableFrom": "courier_shipping_charges",
-          "tableTo": "businesses",
-          "columnsFrom": [
-            "business_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "courier_shipping_charges_delivery_zone_id_courier_delivery_zones_id_fk": {
-          "name": "courier_shipping_charges_delivery_zone_id_courier_delivery_zones_id_fk",
-          "tableFrom": "courier_shipping_charges",
-          "tableTo": "courier_delivery_zones",
-          "columnsFrom": [
-            "delivery_zone_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "courier_shipping_charges_courier_id_couriers_id_fk": {
-          "name": "courier_shipping_charges_courier_id_couriers_id_fk",
-          "tableFrom": "courier_shipping_charges",
-          "tableTo": "couriers",
-          "columnsFrom": [
-            "courier_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -11251,13 +10296,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "sort_order": {
-          "name": "sort_order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "deleted_by": {
           "name": "deleted_by",
           "type": "uuid",
@@ -11383,13 +10421,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "sort_order": {
-          "name": "sort_order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "is_active": {
           "name": "is_active",
           "type": "boolean",
@@ -11417,27 +10448,6 @@
           "columns": [
             {
               "expression": "package_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "package_plan_features_package_id_sort_order_idx": {
-          "name": "package_plan_features_package_id_sort_order_idx",
-          "columns": [
-            {
-              "expression": "package_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "sort_order",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -12156,12 +11166,6 @@
           "name": "status",
           "type": "PaymentGatewayStatus",
           "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "sort_order": {
-          "name": "sort_order",
-          "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
@@ -13563,13 +12567,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "sort_order": {
-          "name": "sort_order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "created_by": {
           "name": "created_by",
           "type": "uuid",
@@ -13785,13 +12782,6 @@
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
-        },
-        "sort_order": {
-          "name": "sort_order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
         },
         "created_by": {
           "name": "created_by",
@@ -14035,13 +13025,6 @@
           "type": "boolean",
           "primaryKey": false,
           "notNull": true
-        },
-        "sort_order": {
-          "name": "sort_order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
         },
         "created_by": {
           "name": "created_by",
@@ -19453,6 +18436,30 @@
           "primaryKey": false,
           "notNull": false
         },
+        "redx_area_id": {
+          "name": "redx_area_id",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "redx_area_name": {
+          "name": "redx_area_name",
+          "type": "varchar(150)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "redx_post_code": {
+          "name": "redx_post_code",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "redx_pickup_store_id": {
+          "name": "redx_pickup_store_id",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status": {
           "name": "status",
           "type": "WarehouseStatus",
@@ -19542,6 +18549,36 @@
           "columns": [
             {
               "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_warehouses_redx_area_id_idx": {
+          "name": "inventory_warehouses_redx_area_id_idx",
+          "columns": [
+            {
+              "expression": "redx_area_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_warehouses_redx_pickup_store_id_idx": {
+          "name": "inventory_warehouses_redx_pickup_store_id_idx",
+          "columns": [
+            {
+              "expression": "redx_pickup_store_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -20613,7 +19650,6 @@
       "name": "CourierConfigMode",
       "schema": "public",
       "values": [
-        "SANDBOX",
         "LIVE"
       ]
     },
@@ -20625,40 +19661,11 @@
         "INACTIVE"
       ]
     },
-    "public.CourierDeliveryZoneStatus": {
-      "name": "CourierDeliveryZoneStatus",
-      "schema": "public",
-      "values": [
-        "ACTIVE",
-        "INACTIVE"
-      ]
-    },
     "public.CourierProvider": {
       "name": "CourierProvider",
       "schema": "public",
       "values": [
-        "PATHAO",
-        "REDX",
-        "STEADFAST"
-      ]
-    },
-    "public.CourierReceivableStatus": {
-      "name": "CourierReceivableStatus",
-      "schema": "public",
-      "values": [
-        "PENDING",
-        "PARTIALLY_SETTLED",
-        "SETTLED",
-        "DISPUTED"
-      ]
-    },
-    "public.CourierSettlementStatus": {
-      "name": "CourierSettlementStatus",
-      "schema": "public",
-      "values": [
-        "DRAFT",
-        "CONFIRMED",
-        "CANCELLED"
+        "REDX"
       ]
     },
     "public.CourierShipmentStatus": {
@@ -20673,14 +19680,6 @@
         "FAILED",
         "RETURNED",
         "CANCELLED"
-      ]
-    },
-    "public.CourierShippingChargeStatus": {
-      "name": "CourierShippingChargeStatus",
-      "schema": "public",
-      "values": [
-        "ACTIVE",
-        "INACTIVE"
       ]
     },
     "public.CourierStatus": {

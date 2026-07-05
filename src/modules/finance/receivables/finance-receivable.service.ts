@@ -126,12 +126,6 @@ export class FinanceReceivableService {
       );
     }
 
-    if (receivable.sourceType === FinanceSourceType.COURIER_RECEIVABLE) {
-      throw new BadRequestException(
-        "This receivable came from a courier collection, so it must be settled from the courier module. Use the courier settlement flow so courier balances stay correct.",
-      );
-    }
-
     const dueAmount = new Decimal(receivable.totalAmount).minus(
       receivable.receivedAmount,
     );

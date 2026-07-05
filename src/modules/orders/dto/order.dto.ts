@@ -93,7 +93,52 @@ export class OrderCourierInputDto {
   @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsOptional()
   @IsUUID()
-  deliveryZoneId?: string;
+  pickupWarehouseId?: string;
+
+  @ApiPropertyOptional({ example: "115" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  deliveryAreaId?: string;
+
+  @ApiPropertyOptional({ example: "Dhanmondi" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  deliveryAreaName?: string;
+
+  @ApiPropertyOptional({ example: "1209" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  deliveryPostCode?: string;
+
+  @ApiPropertyOptional({ example: "Dhaka" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  deliveryDivisionName?: string;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.001)
+  weight?: number;
+
+  @ApiPropertyOptional({ example: 80 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  deliveryCharge?: number;
+
+  @ApiPropertyOptional({ example: 10 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  codCharge?: number;
 
   @ApiPropertyOptional({ example: 80 })
   @IsOptional()
@@ -101,6 +146,11 @@ export class OrderCourierInputDto {
   @IsNumber()
   @Min(0)
   courierFee?: number;
+
+  @ApiPropertyOptional({ example: "Please call before delivery" })
+  @IsOptional()
+  @IsString()
+  specialInstruction?: string;
 
   @ApiPropertyOptional({ example: "Customer Name" })
   @IsOptional()

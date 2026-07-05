@@ -58,6 +58,12 @@ export class WarehouseService {
           name: this.lookup.normalizeName(dto.name),
           phone: this.lookup.normalizeNullableText(dto.phone),
           address: this.lookup.normalizeNullableText(dto.address),
+          redxAreaId: this.lookup.normalizeNullableText(dto.redxAreaId),
+          redxAreaName: this.lookup.normalizeNullableText(dto.redxAreaName),
+          redxPostCode: this.lookup.normalizeNullableText(dto.redxPostCode),
+          redxPickupStoreId: this.lookup.normalizeNullableText(
+            dto.redxPickupStoreId,
+          ),
           status: dto.status ?? WarehouseStatus.ACTIVE,
           createdBy: currentUser.id,
           updatedBy: currentUser.id,
@@ -166,6 +172,20 @@ export class WarehouseService {
           }),
           ...(dto.address !== undefined && {
             address: this.lookup.normalizeNullableText(dto.address),
+          }),
+          ...(dto.redxAreaId !== undefined && {
+            redxAreaId: this.lookup.normalizeNullableText(dto.redxAreaId),
+          }),
+          ...(dto.redxAreaName !== undefined && {
+            redxAreaName: this.lookup.normalizeNullableText(dto.redxAreaName),
+          }),
+          ...(dto.redxPostCode !== undefined && {
+            redxPostCode: this.lookup.normalizeNullableText(dto.redxPostCode),
+          }),
+          ...(dto.redxPickupStoreId !== undefined && {
+            redxPickupStoreId: this.lookup.normalizeNullableText(
+              dto.redxPickupStoreId,
+            ),
           }),
           ...(dto.status !== undefined && { status: dto.status }),
           updatedBy: currentUser.id,

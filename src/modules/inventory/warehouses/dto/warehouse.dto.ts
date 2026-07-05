@@ -31,6 +31,30 @@ export class CreateWarehouseDto {
   @IsString()
   address?: string;
 
+  @ApiPropertyOptional({ example: "115" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  redxAreaId?: string;
+
+  @ApiPropertyOptional({ example: "Dhanmondi" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  redxAreaName?: string;
+
+  @ApiPropertyOptional({ example: "1209" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  redxPostCode?: string;
+
+  @ApiPropertyOptional({ example: "store_123" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  redxPickupStoreId?: string;
+
   @ApiPropertyOptional({ enum: WarehouseStatus })
   @IsOptional()
   @IsEnum(WarehouseStatus)

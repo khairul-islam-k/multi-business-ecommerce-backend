@@ -2,9 +2,9 @@ import Decimal from "decimal.js";
 import { and, eq, isNull } from "drizzle-orm";
 
 import {
-  courierReceivable,
   courierShipment,
   CourierShipmentStatus,
+  FinancePartyType,
   financeReceivable,
   FinanceReceivableStatus,
   FinanceSourceType,
@@ -20,6 +20,7 @@ import { Injectable } from "@nestjs/common";
 
 import { apiResponse } from "../../../common/utils/api-response.util";
 import { DatabaseService } from "../../../database/database.service";
+import { FinanceCodeService } from "../../finance/application/finance-code.service";
 import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
 import {
   assertCanCancelOrder,
@@ -36,6 +37,7 @@ export class OrderStatusService {
     private readonly database: DatabaseService,
     private readonly inventory: InventoryLookupService,
     private readonly orders: OrderRepository,
+    private readonly financeCodes: FinanceCodeService,
   ) {}
 
   private get db() {
@@ -156,22 +158,41 @@ export class OrderStatusService {
 
         if (new Decimal(shipment.codAmount).greaterThan(0)) {
           const [existingReceivable] = await tx
-            .select({ id: courierReceivable.id })
-            .from(courierReceivable)
-            .where(eq(courierReceivable.shipmentId, shipment.id));
+            .select({ id: financeReceivable.id })
+            .from(financeReceivable)
+            .where(
+              and(
+                eq(financeReceivable.businessId, businessId),
+                eq(
+                  financeReceivable.sourceType,
+                  FinanceSourceType.COURIER_RECEIVABLE,
+                ),
+                eq(financeReceivable.sourceId, shipment.id),
+              ),
+            );
 
           if (!existingReceivable && shipment.courierId) {
-            await tx.insert(courierReceivable).values({
-              businessId,
-              courierId: shipment.courierId,
-              shipmentId: shipment.id,
-              orderId,
-              codAmount: shipment.codAmount,
-              courierFee: shipment.courierFee,
-              netReceivable: new Decimal(shipment.codAmount).minus(
-                shipment.courierFee,
-              ),
-            });
+            const netReceivable = new Decimal(shipment.codAmount)
+              .minus(shipment.courierFee)
+              .toDecimalPlaces(2);
+
+            if (netReceivable.greaterThan(0)) {
+              await tx.insert(financeReceivable).values({
+                businessId,
+                receivableNo:
+                  await this.financeCodes.generateUniqueReceivableNo(
+                    businessId,
+                  ),
+                partyType: FinancePartyType.COURIER,
+                partyId: shipment.courierId,
+                sourceType: FinanceSourceType.COURIER_RECEIVABLE,
+                sourceId: shipment.id,
+                totalAmount: netReceivable,
+                receivedAmount: new Decimal(0),
+                status: FinanceReceivableStatus.PENDING,
+                note: `COD receivable for shipment ${shipment.shipmentNo}`,
+              });
+            }
           }
         }
       }

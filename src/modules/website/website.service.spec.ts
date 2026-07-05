@@ -103,7 +103,7 @@ describe("WebsiteService", () => {
         domain: null,
         subdomain: "acme-store.localhost",
         domainType: WebsiteDomainType.SUBDOMAIN,
-        isPrimary: false,
+        isPrimary: true,
         verificationStatus: WebsiteDomainVerificationStatus.VERIFIED,
         sslStatus: WebsiteDomainSslStatus.ACTIVE,
         verifiedAt: expect.any(Date),
