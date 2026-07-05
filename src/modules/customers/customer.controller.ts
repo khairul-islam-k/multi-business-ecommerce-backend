@@ -1,3 +1,4 @@
+import { PermissionAction, RbacFeature } from "@/database/schema";
 import {
   Body,
   Controller,
@@ -10,12 +11,11 @@ import {
   Query,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { PermissionAction, RbacFeature } from "@/database/schema";
 
 import { SecuredBusinessRoute } from "../access/decorators/secured-business-route.decorator";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { RequirePermission } from "../permissions/decorators/require-permission.decorator";
+import { CustomerService } from "./customer.service";
 import {
   CreateCustomerDto,
   CustomerAddressDto,
@@ -24,7 +24,8 @@ import {
   UpdateCustomerAddressDto,
   UpdateCustomerDto,
 } from "./dto/customer.dto";
-import { CustomerService } from "./customer.service";
+
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 @ApiTags("Customers")
 @ApiBearerAuth()
@@ -160,11 +161,17 @@ export class CustomerController {
       "Deletes customer address from normal day-to-day use. Records may be kept internally when the system needs history for reporting or auditing.",
   })
   removeAddress(
+    @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("customerId", ParseUUIDPipe) customerId: string,
     @Param("addressId", ParseUUIDPipe) addressId: string,
   ) {
-    return this.customers.removeAddress(businessId, customerId, addressId);
+    return this.customers.removeAddress(
+      user,
+      businessId,
+      customerId,
+      addressId,
+    );
   }
 
   @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.READ)

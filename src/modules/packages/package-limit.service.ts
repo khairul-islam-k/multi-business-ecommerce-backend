@@ -1,20 +1,3 @@
-import { ForbiddenException, Injectable } from "@nestjs/common";
-import {
-  type JsonValue,
-  BusinessStatus,
-  MediaAssetStatus,
-  MediaFileType,
-  PackageLimitKey,
-  SystemUserStatus,
-  SystemUserType,
-  business,
-  mediaAsset,
-  packageSubscription,
-  packageUsageCounter,
-  product,
-  systemUser,
-  website,
-} from "@/database/schema";
 import {
   and,
   count,
@@ -28,9 +11,28 @@ import {
   sql,
 } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
+import {
+  business,
+  BusinessStatus,
+  JsonValue,
+  mediaAsset,
+  MediaAssetStatus,
+  MediaFileType,
+  PackageLimitKey,
+  packageSubscription,
+  packageUsageCounter,
+  product,
+  systemUser,
+  SystemUserStatus,
+  SystemUserType,
+  website,
+} from "@/database/schema";
+import { ForbiddenException, Injectable } from "@nestjs/common";
+
 import { DatabaseService } from "../../database/database.service";
 import { PackageSubscriptionService } from "./package-subscription.service";
+
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 type LimitUsage = {
   limitKey: PackageLimitKey;
@@ -265,31 +267,6 @@ export class PackageLimitService {
                 .where(
                   and(
                     eq(business.id, product.businessId),
-                    eq(business.ownerUserId, tenantId),
-                    isNull(business.deletedAt),
-                    eq(business.status, BusinessStatus.ACTIVE),
-                  ),
-                ),
-            ),
-          ),
-        )
-        .then(([row]) => row?.value ?? 0);
-    }
-
-    if (limitKey === PackageLimitKey.MAX_WEBSITES) {
-      return this.db
-        .select({ value: count() })
-        .from(website)
-        .where(
-          and(
-            isNull(website.deletedAt),
-            exists(
-              this.db
-                .select({ id: business.id })
-                .from(business)
-                .where(
-                  and(
-                    eq(business.id, website.businessId),
                     eq(business.ownerUserId, tenantId),
                     isNull(business.deletedAt),
                     eq(business.status, BusinessStatus.ACTIVE),

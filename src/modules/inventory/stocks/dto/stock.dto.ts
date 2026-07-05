@@ -1,4 +1,3 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
   IsNumber,
@@ -8,6 +7,8 @@ import {
   Max,
   Min,
 } from "class-validator";
+
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class QueryStockDto {
   @ApiPropertyOptional({ example: 1 })

@@ -35,9 +35,17 @@ export class EnvironmentVariables {
   @IsNotEmpty()
   APP_IP!: string;
 
+  @IsOptional()
+  @IsString()
+  APP_PUBLIC_API_URL?: string;
+
   @IsString()
   @IsNotEmpty()
   APP_CORS_ORIGINS!: string;
+
+  @IsOptional()
+  @IsString()
+  APP_CORS_SUBDOMAIN_BASES!: string;
 
   @IsString()
   @IsNotEmpty()
@@ -123,6 +131,10 @@ export class EnvironmentVariables {
   @IsNotEmpty()
   OTP_SECRET!: string;
 
+  @IsOptional()
+  @IsString()
+  PAYMENT_CONFIG_ENCRYPTION_KEY!: string;
+
   @Type(() => Number)
   @IsInt()
   @Min(1)
@@ -161,11 +173,16 @@ function withDefaults(config: RawConfig) {
     config.APP_CORS_ORIGINS.trim()
       ? config.APP_CORS_ORIGINS
       : undefined;
+  const appCorsSubdomainBases =
+    typeof config.APP_CORS_SUBDOMAIN_BASES === "string"
+      ? config.APP_CORS_SUBDOMAIN_BASES
+      : "";
 
   return normalizeOptionalBlankValues({
     ...config,
     NODE_ENV: nodeEnv,
     APP_CORS_ORIGINS: appCorsOrigins,
+    APP_CORS_SUBDOMAIN_BASES: appCorsSubdomainBases,
   });
 }
 
@@ -183,6 +200,19 @@ function validateCorsOrigins(config: EnvironmentVariables) {
   }
 
   return origins.join(",");
+}
+
+function validateCorsSubdomainBases(config: EnvironmentVariables) {
+  const domains = (config.APP_CORS_SUBDOMAIN_BASES ?? "")
+    .split(",")
+    .map((domain) => domain.trim())
+    .filter(Boolean);
+
+  if (domains.includes("*")) {
+    throw new Error("APP_CORS_SUBDOMAIN_BASES cannot include *");
+  }
+
+  return domains.join(",");
 }
 
 function formatValidationErrors(errors: ReturnType<typeof validateSync>) {
@@ -210,6 +240,8 @@ export function validateAppConfig(config: RawConfig) {
   }
 
   validatedConfig.APP_CORS_ORIGINS = validateCorsOrigins(validatedConfig);
+  validatedConfig.APP_CORS_SUBDOMAIN_BASES =
+    validateCorsSubdomainBases(validatedConfig);
 
   return validatedConfig;
 }

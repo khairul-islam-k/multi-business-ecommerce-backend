@@ -4,12 +4,12 @@ export type PurchaseOrderTotalItem = {
   quantityOrdered: number;
   unitCost: number;
   discountAmount?: number;
+  taxRate: Decimal.Value;
 };
 
 export function calculatePurchaseOrderTotals(
   items: PurchaseOrderTotalItem[],
   shippingCost: number,
-  taxRate: Decimal.Value,
 ) {
   const subtotal = items.reduce(
     (total, item) => total + item.quantityOrdered * item.unitCost,
@@ -20,7 +20,7 @@ export function calculatePurchaseOrderTotals(
     0,
   );
   const taxTotal = items.reduce(
-    (total, item) => total + Number(calculateLineTax(item, taxRate).toString()),
+    (total, item) => total + Number(calculateLineTax(item).toString()),
     0,
   );
 
@@ -33,24 +33,17 @@ export function calculatePurchaseOrderTotals(
   };
 }
 
-export function calculateLineTotal(
-  item: PurchaseOrderTotalItem,
-  taxRate: Decimal.Value,
-) {
+export function calculateLineTotal(item: PurchaseOrderTotalItem) {
   const subtotal = new Decimal(item.quantityOrdered).mul(item.unitCost);
   const discountAmount = new Decimal(item.discountAmount ?? 0);
 
-  return subtotal.minus(discountAmount).plus(calculateLineTax(item, taxRate));
+  return subtotal.minus(discountAmount).plus(calculateLineTax(item));
 }
 
-export function calculateLineTax(
-  item: PurchaseOrderTotalItem,
-  taxRate: Decimal.Value,
-) {
+export function calculateLineTax(item: PurchaseOrderTotalItem) {
   const subtotal = new Decimal(item.quantityOrdered).mul(item.unitCost);
   const discountAmount = new Decimal(item.discountAmount ?? 0);
   const taxableAmount = subtotal.minus(discountAmount);
 
-  return taxableAmount.mul(taxRate).div(100).toDecimalPlaces(2);
+  return taxableAmount.mul(item.taxRate).div(100).toDecimalPlaces(2);
 }
-

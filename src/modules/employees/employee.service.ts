@@ -1,34 +1,8 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
-import {
-  type BusinessMember,
-  type RbacRole,
-  type RbacRolePermission,
-  type RbacUserRoleMap,
-  type SystemUser,
-  type SystemUserProfile,
-  BusinessMemberStatus,
-  CommonStatus,
-  SystemUserStatus,
-  SystemUserType,
-  UserRoleMapStatus,
-  businessMember,
-  rbacRole,
-  rbacRolePermission,
-  rbacUserRoleMap,
-  systemUser,
-  systemUserProfile,
-} from "@/database/schema";
 import * as argon2 from "argon2";
 import {
   and,
   asc,
   count,
-  desc,
   eq,
   exists,
   ilike,
@@ -38,19 +12,47 @@ import {
   or,
 } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
-import { AssignEmployeeRolesDto } from "./dto/assign-employee-roles.dto";
-import { CreateEmployeeDto } from "./dto/create-employee.dto";
-import { EmployeeProfileDto } from "./dto/employee-profile.dto";
-import { QueryEmployeesDto } from "./dto/query-employees.dto";
-import { UpdateEmployeeStatusDto } from "./dto/update-employee-status.dto";
-import { UpdateEmployeeDto } from "./dto/update-employee.dto";
-import { DatabaseService } from "../../database/database.service";
+import {
+  BusinessMember,
+  businessMember,
+  BusinessMemberStatus,
+  CommonStatus,
+  RbacRole,
+  rbacRole,
+  RbacRolePermission,
+  rbacRolePermission,
+  RbacUserRoleMap,
+  rbacUserRoleMap,
+  SystemUser,
+  systemUser,
+  SystemUserProfile,
+  systemUserProfile,
+  SystemUserStatus,
+  SystemUserType,
+  UserRoleMapStatus,
+} from "@/database/schema";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+
 import { isUniqueConstraintError } from "../../common/database/db-error.util";
+import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
+import { DatabaseService } from "../../database/database.service";
+import { AssignEmployeeRolesDto } from "./dto/assign-employee-roles.dto";
+import { CreateEmployeeDto } from "./dto/create-employee.dto";
+import { EmployeeProfileDto } from "./dto/employee-profile.dto";
+import { EmployeeSortBy, QueryEmployeesDto } from "./dto/query-employees.dto";
+import { UpdateEmployeeStatusDto } from "./dto/update-employee-status.dto";
+import { UpdateEmployeeDto } from "./dto/update-employee.dto";
+
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 type UserSummary = Pick<SystemUser, "id" | "name" | "email" | "type">;
 
@@ -117,7 +119,7 @@ export class EmployeeService {
     });
 
     try {
-      return await this.db.transaction(async (tx) => {
+      const employee = await this.db.transaction(async (tx) => {
         const [employee] = await tx
           .insert(systemUser)
           .values({
@@ -161,13 +163,18 @@ export class EmployeeService {
             .onConflictDoNothing();
         }
 
-        const createdEmployee = await this.getEmployeeByIdOrThrow(
-          businessId,
-          employee.id,
-        );
-
-        return apiResponse(createdEmployee, "Employee created successfully");
+        return employee;
       });
+
+      const createdEmployee = await this.getEmployeeByIdOrThrow(
+        businessId,
+        employee.id,
+      );
+
+      return apiResponse(
+        createdEmployee,
+        "Employee was created successfully. The user account, employee membership, profile, and requested role assignments were saved for this business.",
+      );
     } catch (error) {
       this.handleDatabaseError(error);
     }
@@ -177,8 +184,6 @@ export class EmployeeService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const sortBy = query.sortBy ?? "createdAt";
-    const sortOrder = query.sortOrder ?? "desc";
     const where = and(
       eq(systemUser.type, SystemUserType.EMPLOYEE),
       exists(
@@ -210,7 +215,22 @@ export class EmployeeService {
         .select()
         .from(systemUser)
         .where(where)
-        .orderBy(this.employeeOrderBy(sortBy, sortOrder))
+        .orderBy(
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [EmployeeSortBy.NAME]: systemUser.name,
+                [EmployeeSortBy.EMAIL]: systemUser.email,
+                [EmployeeSortBy.STATUS]: systemUser.status,
+                [EmployeeSortBy.CREATED_AT]: systemUser.createdAt,
+                [EmployeeSortBy.UPDATED_AT]: systemUser.updatedAt,
+              },
+              EmployeeSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
+          ),
+        )
         .limit(limit)
         .offset(skip)
         .then((rows) => this.withEmployeesDetails(rows, businessId)),
@@ -221,12 +241,16 @@ export class EmployeeService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Employees were loaded successfully. The response includes the requested page of employee accounts for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, employeeId: string) {
@@ -294,7 +318,10 @@ export class EmployeeService {
           employeeId,
         );
 
-        return apiResponse(employee, "Employee updated successfully");
+        return apiResponse(
+          employee,
+          "Employee was updated successfully. The latest account, profile, membership, and role details are included in the response.",
+        );
       });
     } catch (error) {
       this.handleDatabaseError(error);
@@ -319,7 +346,10 @@ export class EmployeeService {
 
     const employee = await this.getEmployeeByIdOrThrow(businessId, employeeId);
 
-    return apiResponse(employee, "Employee status updated successfully");
+    return apiResponse(
+      employee,
+      "Employee status was updated successfully. The employee account and business membership now reflect the requested status change.",
+    );
   }
 
   async replaceRoles(
@@ -391,7 +421,10 @@ export class EmployeeService {
 
     const employee = await this.getEmployeeByIdOrThrow(businessId, employeeId);
 
-    return apiResponse(employee, "Employee roles updated successfully");
+    return apiResponse(
+      employee,
+      "Employee roles were updated successfully. Previous active assignments were replaced with the selected roles for this business.",
+    );
   }
 
   async remove(
@@ -413,6 +446,7 @@ export class EmployeeService {
         .set({
           status: BusinessMemberStatus.INACTIVE,
           deletedAt: now,
+          deletedById: currentUser.id,
         })
         .where(
           and(
@@ -460,7 +494,7 @@ export class EmployeeService {
 
       await tx
         .update(systemUserProfile)
-        .set({ deletedAt: now })
+        .set({ deletedAt: now, deletedById: currentUser.id })
         .where(
           and(
             eq(systemUserProfile.userId, employeeId),
@@ -479,7 +513,10 @@ export class EmployeeService {
         .where(eq(systemUser.id, employeeId));
     });
 
-    return apiResponse(null, "Employee deleted successfully");
+    return apiResponse(
+      null,
+      "Employee was deleted successfully. The employee membership, active role assignments, profile, and account were soft-deleted or deactivated as appropriate.",
+    );
   }
 
   private async getEmployeeByIdOrThrow(businessId: string, employeeId: string) {
@@ -509,7 +546,9 @@ export class EmployeeService {
       .limit(1);
 
     if (!employee) {
-      throw new NotFoundException("Employee not found");
+      throw new NotFoundException(
+        "Employee could not be found. The account may not exist, may have been deleted, or may not be assigned to the requested business.",
+      );
     }
 
     return this.withEmployeeDetails(employee, businessId);
@@ -545,7 +584,9 @@ export class EmployeeService {
       .limit(1);
 
     if (!employee) {
-      throw new NotFoundException("Employee not found in this business");
+      throw new NotFoundException(
+        "Employee could not be found in this business. Confirm the employee ID and make sure the account is assigned to the selected business.",
+      );
     }
   }
 
@@ -585,7 +626,9 @@ export class EmployeeService {
       .limit(1);
 
     if (existingUser) {
-      throw new ConflictException("Email already exists");
+      throw new ConflictException(
+        "Email already exists. Please use a different email address or update the existing account that owns this email.",
+      );
     }
   }
 
@@ -602,7 +645,9 @@ export class EmployeeService {
       .limit(1);
 
     if (existingUser) {
-      throw new ConflictException("Phone already exists");
+      throw new ConflictException(
+        "Phone number already exists. Please use a different phone number or update the existing account that owns this phone number.",
+      );
     }
   }
 
@@ -712,7 +757,9 @@ export class EmployeeService {
       .limit(1);
 
     if (!role) {
-      throw new NotFoundException("Role not found");
+      throw new NotFoundException(
+        "Role could not be found. It may not exist, may have been deleted, or may not belong to the requested business.",
+      );
     }
 
     const permissions = await this.db
@@ -743,24 +790,6 @@ export class EmployeeService {
       .where(eq(systemUser.id, userId))
       .limit(1)
       .then(([user]) => user ?? null);
-  }
-
-  private employeeOrderBy(
-    sortBy: NonNullable<QueryEmployeesDto["sortBy"]>,
-    sortOrder: NonNullable<QueryEmployeesDto["sortOrder"]>,
-  ) {
-    const column =
-      sortBy === "name"
-        ? systemUser.name
-        : sortBy === "email"
-          ? systemUser.email
-          : sortBy === "status"
-            ? systemUser.status
-            : sortBy === "updatedAt"
-              ? systemUser.updatedAt
-              : systemUser.createdAt;
-
-    return sortOrder === "asc" ? asc(column) : desc(column);
   }
 
   private normalizeEmail(email: string) {

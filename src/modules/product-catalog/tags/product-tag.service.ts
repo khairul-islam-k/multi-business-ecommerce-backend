@@ -1,38 +1,38 @@
+import { and, count, eq, exists, ilike, isNull } from "drizzle-orm";
+
+import {
+  product,
+  ProductSimpleStatus,
+  ProductTag,
+  productTag,
+  productTagMap,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  type ProductTag,
-  ProductSimpleStatus,
-  product,
-  productTag,
-  productTagMap,
-} from "@/database/schema";
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  exists,
-  ilike,
-  isNull,
-} from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { QueryCatalogDto } from "../common/dto/query-catalog.dto";
 import {
-  CreateProductTagDto,
-  UpdateProductTagDto,
-} from "./dto/product-tag.dto";
-import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
-import { DatabaseService } from "../../../database/database.service";
+  buildOrderBy,
+  resolveSortColumn,
+} from "../../../common/http/sort.util";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import {
+  CatalogSortBy,
+  QueryCatalogDto,
+} from "../common/dto/query-catalog.dto";
+import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import {
+  CreateProductTagDto,
+  UpdateProductTagDto,
+} from "./dto/product-tag.dto";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 type TagWithCount = ProductTag & {
   _count: { products: number };
@@ -60,13 +60,17 @@ export class ProductTagService {
         .values({
           businessId,
           name: this.lookup.normalizeName(dto.name),
+          isFeatured: dto.isFeatured,
           status: dto.status ?? ProductSimpleStatus.ACTIVE,
           createdBy: currentUser.id,
           updatedBy: currentUser.id,
         })
         .returning();
 
-      return apiResponse(await this.withTagCount(tag), "Tag created successfully");
+      return apiResponse(
+        await this.withTagCount(tag),
+        "Tag created successfully",
+      );
     } catch (error) {
       this.lookup.handleUniqueError(error, "Tag name already exists");
     }
@@ -89,9 +93,18 @@ export class ProductTagService {
         .from(productTag)
         .where(where)
         .orderBy(
-          query.sortOrder === "asc"
-            ? asc(productTag.createdAt)
-            : desc(productTag.createdAt),
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [CatalogSortBy.NAME]: productTag.name,
+                [CatalogSortBy.CREATED_AT]: productTag.createdAt,
+                [CatalogSortBy.UPDATED_AT]: productTag.updatedAt,
+              },
+              CatalogSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
+          ),
         )
         .limit(limit)
         .offset(skip)
@@ -103,19 +116,25 @@ export class ProductTagService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Product tags were loaded successfully. The response includes the requested page of tags for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, tagId: string) {
     const tag = await this.findTagRow(businessId, tagId);
 
     if (!tag) {
-      throw new NotFoundException("Tag not found");
+      throw new NotFoundException(
+        "Tag could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return apiResponse(await this.withTagCount(tag));
@@ -136,13 +155,17 @@ export class ProductTagService {
           ...(dto.name !== undefined && {
             name: this.lookup.normalizeName(dto.name),
           }),
+          ...(dto.isFeatured !== undefined && { isFeatured: dto.isFeatured }),
           ...(dto.status !== undefined && { status: dto.status }),
           updatedBy: currentUser.id,
         })
         .where(eq(productTag.id, tagId))
         .returning();
 
-      return apiResponse(await this.withTagCount(tag), "Tag updated successfully");
+      return apiResponse(
+        await this.withTagCount(tag),
+        "Tag updated successfully",
+      );
     } catch (error) {
       this.lookup.handleUniqueError(error, "Tag name already exists");
     }
@@ -161,6 +184,7 @@ export class ProductTagService {
       .set({
         status: ProductSimpleStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
         updatedBy: currentUser.id,
       })
       .where(eq(productTag.id, tagId));
@@ -172,11 +196,13 @@ export class ProductTagService {
     const tag = await this.findTagRow(businessId, tagId);
 
     if (!tag) {
-      throw new NotFoundException("Tag not found");
+      throw new NotFoundException(
+        "Tag could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
   }
 
-  private findTagRow(businessId: string, tagId: string) {
+  private async findTagRow(businessId: string, tagId: string) {
     return this.db
       .select()
       .from(productTag)

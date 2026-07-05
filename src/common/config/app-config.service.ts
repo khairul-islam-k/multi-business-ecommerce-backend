@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
-import { parseCorsOrigins } from "./cors.config";
+import { parseCorsDomainBases, parseCorsOrigins } from "./cors.config";
 
 @Injectable()
 export class AppConfigService {
@@ -27,9 +27,24 @@ export class AppConfigService {
     return this.configService.getOrThrow<string>("APP_IP");
   }
 
+  get publicApiUrl() {
+    const configured = this.configService.get<string>("APP_PUBLIC_API_URL");
+
+    return (
+      configured?.replace(/\/+$/, "") ||
+      `http://${this.appIp}:${this.appPort}/api/v1`
+    );
+  }
+
   get corsOrigins() {
     return parseCorsOrigins(
       `http://${this.appIp}:${this.appPort},${this.configService.getOrThrow<string>("APP_CORS_ORIGINS")}`,
+    );
+  }
+
+  get corsSubdomainBases() {
+    return parseCorsDomainBases(
+      this.configService.getOrThrow<string>("APP_CORS_SUBDOMAIN_BASES"),
     );
   }
 
@@ -89,5 +104,11 @@ export class AppConfigService {
         "OTP_EXPIRES_IN_MINS",
       ),
     };
+  }
+
+  get paymentConfigEncryptionKey() {
+    return this.configService.getOrThrow<string>(
+      "PAYMENT_CONFIG_ENCRYPTION_KEY",
+    );
   }
 }

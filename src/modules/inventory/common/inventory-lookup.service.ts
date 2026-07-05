@@ -3,6 +3,7 @@ import { and, count, eq, isNull } from "drizzle-orm";
 
 import {
   CatalogProductStatus,
+  businessSetting,
   InventoryMovementType,
   InventoryReferenceType,
   inventoryStock,
@@ -61,7 +62,9 @@ export class InventoryLookupService {
       );
 
     if (!warehouseRow) {
-      throw new NotFoundException("Warehouse not found");
+      throw new NotFoundException(
+        "Warehouse could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return warehouseRow;
@@ -197,6 +200,10 @@ export class InventoryLookupService {
     },
   ) {
     const stockItemKey = buildStockItemKey(params.productId, params.variantId);
+    const lowStockAlertQty = await this.resolveLowStockThreshold(
+      tx,
+      params.businessId,
+    );
     const [stock] = await tx
       .insert(inventoryStock)
       .values({
@@ -204,7 +211,7 @@ export class InventoryLookupService {
         productId: params.productId,
         variantId: params.variantId ?? null,
         stockItemKey,
-        lowStockAlertQty: new Decimal(0),
+        lowStockAlertQty,
         quantityReserved: new Decimal(0),
         totalQuantity: new Decimal(0),
       })
@@ -370,6 +377,19 @@ export class InventoryLookupService {
 
   normalizeName(value: string) {
     return value.trim();
+  }
+
+  private async resolveLowStockThreshold(
+    tx: DatabaseTransaction,
+    businessId: string,
+  ) {
+    const [settings] = await tx
+      .select({ lowStockThreshold: businessSetting.lowStockThreshold })
+      .from(businessSetting)
+      .where(eq(businessSetting.businessId, businessId))
+      .limit(1);
+
+    return new Decimal(settings?.lowStockThreshold ?? 0);
   }
 
   normalizeNullableText(value?: string | null) {

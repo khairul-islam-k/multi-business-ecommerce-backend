@@ -1,32 +1,34 @@
+import Decimal from "decimal.js";
+import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+
+import {
+  financeAccount,
+  FinanceAccountStatus,
+  financeExpense,
+  financeExpenseCategory,
+  FinanceExpenseCategoryStatus,
+  FinanceExpenseStatus,
+  FinanceSourceType,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  FinanceAccountStatus,
-  FinanceExpenseCategoryStatus,
-  FinanceExpenseStatus,
-  FinanceSourceType,
-  financeAccount,
-  financeExpense,
-  financeExpenseCategory,
-} from "@/database/schema";
-import Decimal from "decimal.js";
-import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import { FinanceLedgerService } from "../common/finance-ledger.service";
 import {
   CreateExpenseDto,
   QueryExpenseDto,
   UpdateExpenseDto,
 } from "./dto/finance-expense.dto";
-import { DatabaseService } from "../../../database/database.service";
-import { FinanceLedgerService } from "../common/finance-ledger.service";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class ExpenseService {
@@ -88,19 +90,25 @@ export class ExpenseService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Expenses were loaded successfully. The response includes the requested page of expenses for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, expenseId: string) {
     const expense = await this.findExpenseWithRelations(businessId, expenseId);
 
     if (!expense) {
-      throw new NotFoundException("Expense not found");
+      throw new NotFoundException(
+        "Expense could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return apiResponse(expense);
@@ -203,12 +211,20 @@ export class ExpenseService {
     return apiResponse(cancelledExpense, "Expense cancelled successfully");
   }
 
-  async delete(businessId: string, expenseId: string) {
+  async delete(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    expenseId: string,
+  ) {
     const expense = await this.getExpenseOrThrow(businessId, expenseId);
 
-    await this.db.update(financeExpense).set({
-      deletedAt: new Date(),
-    });
+    await this.db
+      .update(financeExpense)
+      .set({
+        deletedAt: new Date(),
+        deletedBy: currentUser.id,
+      })
+      .where(eq(financeExpense.id, expense.id));
 
     return apiResponse(null, "Expense deleted successfully");
   }
@@ -310,7 +326,9 @@ export class ExpenseService {
       );
 
     if (!expense) {
-      throw new NotFoundException("Expense not found");
+      throw new NotFoundException(
+        "Expense could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return expense;
@@ -330,7 +348,9 @@ export class ExpenseService {
       );
 
     if (!account) {
-      throw new NotFoundException("Finance account not found");
+      throw new NotFoundException(
+        "Finance account could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
   }
 
@@ -351,7 +371,9 @@ export class ExpenseService {
       );
 
     if (!category) {
-      throw new NotFoundException("Expense category not found");
+      throw new NotFoundException(
+        "Expense category could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
   }
 

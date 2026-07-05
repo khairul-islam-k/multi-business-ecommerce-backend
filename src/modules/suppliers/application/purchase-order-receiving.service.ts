@@ -1,27 +1,29 @@
-import { Injectable } from "@nestjs/common";
-import {
-  InventoryMovementType,
-  InventoryReferenceType,
-  SupplierInvoiceStatus,
-  SupplierProductMapStatus,
-  SupplierPurchaseOrderStatus,
-  supplierInvoice,
-  supplierInvoiceItem,
-  supplierProductMap,
-  supplierPurchaseOrder,
-  supplierPurchaseOrderItem,
-} from "@/database/schema";
 import Decimal from "decimal.js";
 import { eq } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { ReceivePurchaseOrderDto } from "../dto/supplier.dto";
-import { assertPurchaseOrderCanReceive } from "../domain/purchase-order-status.policy";
-import { PurchaseOrderRepository } from "../infrastructure/purchase-order.repository";
+import {
+  InventoryMovementType,
+  InventoryReferenceType,
+  supplierInvoice,
+  supplierInvoiceItem,
+  SupplierInvoiceStatus,
+  supplierProductMap,
+  SupplierProductMapStatus,
+  supplierPurchaseOrder,
+  supplierPurchaseOrderItem,
+  SupplierPurchaseOrderStatus,
+} from "@/database/schema";
+import { Injectable } from "@nestjs/common";
+
+import { apiResponse } from "../../../common/utils/api-response.util";
 import { DatabaseService } from "../../../database/database.service";
 import { FinanceLedgerService } from "../../finance/common/finance-ledger.service";
 import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
-import { apiResponse } from "../../../common/utils/api-response.util";
+import { assertPurchaseOrderCanReceive } from "../domain/purchase-order-status.policy";
+import { ReceivePurchaseOrderDto } from "../dto/supplier.dto";
+import { PurchaseOrderRepository } from "../infrastructure/purchase-order.repository";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class PurchaseOrderReceivingService {
@@ -129,10 +131,12 @@ export class PurchaseOrderReceivingService {
           supplierInvoiceId: createdInvoice.id,
           productId: item.productId,
           variantId: item.variantId,
+          taxId: item.taxId,
           quantity: item.quantityOrdered,
           unitCost: item.unitCost,
           discountAmount: item.discountAmount,
           taxAmount: item.taxAmount,
+          taxRate: item.taxRate,
           lineTotal: item.lineTotal,
         })),
       );

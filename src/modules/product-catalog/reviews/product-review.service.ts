@@ -1,19 +1,21 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { ProductReviewStatus, productReview } from "@/database/schema";
 import { and, avg, count, desc, eq, isNull } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import { productReview, ProductReviewStatus } from "@/database/schema";
+import { Injectable, NotFoundException } from "@nestjs/common";
+
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
 import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
 import {
   CreateProductReviewDto,
   QueryProductReviewDto,
   UpdateProductReviewStatusDto,
 } from "./dto/product-review.dto";
-import { DatabaseService } from "../../../database/database.service";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class ProductReviewService {
@@ -86,12 +88,16 @@ export class ProductReviewService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Product reviews were loaded successfully. The response includes the requested page of reviews for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findApprovedForProduct(
@@ -165,7 +171,11 @@ export class ProductReviewService {
 
     await this.db
       .update(productReview)
-      .set({ deletedAt: new Date(), updatedBy: currentUser.id })
+      .set({
+        deletedAt: new Date(),
+        deletedBy: currentUser.id,
+        updatedBy: currentUser.id,
+      })
       .where(eq(productReview.id, review.id));
 
     return apiResponse(null, "Product review deleted successfully");

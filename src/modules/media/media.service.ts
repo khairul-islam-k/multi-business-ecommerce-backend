@@ -17,11 +17,11 @@ import {
   mediaTag,
   productImage,
 } from "@/database/schema";
-import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { DeleteMediaBulkDto } from "./dto/delete-media.dto";
-import { QueryMediaDto } from "./dto/query-media.dto";
+import { MediaSortBy, QueryMediaDto } from "./dto/query-media.dto";
 import { UploadMediaDto } from "./dto/upload-media.dto";
 import { DatabaseService } from "../../database/database.service";
 import { PackageLimitService } from "../packages/package-limit.service";
@@ -38,6 +38,7 @@ import type {
   MediaUploader,
   UploadableMediaFile,
 } from "./uploaders/media-uploader.types";
+import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 
 const SUPPORTED_IMAGE_MIME_TYPES = new Set([
   "image/gif",
@@ -105,7 +106,9 @@ export class MediaService {
     dto: UploadMediaDto,
   ) {
     if (!files || files.length === 0) {
-      throw new BadRequestException("At least one image file is required");
+      throw new BadRequestException(
+        "At least one image file is required. Upload one or more valid image files before retrying this media request.",
+      );
     }
 
     if (files.length > this.limits.maxBulkImageFiles) {
@@ -180,9 +183,17 @@ export class MediaService {
         .from(mediaAsset)
         .where(where)
         .orderBy(
-          this.mediaOrderBy(
-            query.sortBy ?? "createdAt",
-            query.sortOrder ?? "desc",
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [MediaSortBy.CREATED_AT]: mediaAsset.createdAt,
+                [MediaSortBy.FILE_NAME]: mediaAsset.fileName,
+                [MediaSortBy.FILE_SIZE]: mediaAsset.fileSize,
+              },
+              MediaSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
           ),
         )
         .limit(limit)
@@ -195,28 +206,43 @@ export class MediaService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Media assets were loaded successfully. The response includes the requested page of images for this business and pagination metadata for browsing more results.",
+    );
   }
 
-  async deleteImage(businessId: string, mediaAssetId: string) {
+  async deleteImage(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    mediaAssetId: string,
+  ) {
     const asset = await this.getActiveImageAssetOrThrow(
       businessId,
       mediaAssetId,
     );
 
     await this.assertImagesAreNotInUse(businessId, [asset.fileUrl]);
-    await this.softDeleteImageAssets([asset.id]);
+    await this.softDeleteImageAssets([asset.id], currentUser.id);
     await this.uploader.delete(asset.fileUrl);
 
-    return apiResponse(null, "Image deleted successfully");
+    return apiResponse(
+      null,
+      "Image was deleted successfully. The media asset was soft-deleted and its file deletion was requested from the configured uploader.",
+    );
   }
 
-  async deleteImages(businessId: string, dto: DeleteMediaBulkDto) {
+  async deleteImages(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    dto: DeleteMediaBulkDto,
+  ) {
     if (dto.mediaAssetIds.length > this.limits.maxBulkDeleteImages) {
       throw new BadRequestException(
         `You can delete up to ${this.limits.maxBulkDeleteImages} images at once`,
@@ -232,7 +258,10 @@ export class MediaService {
       businessId,
       assets.map((asset) => asset.fileUrl),
     );
-    await this.softDeleteImageAssets(assets.map((asset) => asset.id));
+    await this.softDeleteImageAssets(
+      assets.map((asset) => asset.id),
+      currentUser.id,
+    );
 
     await Promise.all(
       assets.map((asset) => this.uploader.delete(asset.fileUrl)),
@@ -250,7 +279,9 @@ export class MediaService {
     file: UploadableMediaFile | undefined,
   ): asserts file is UploadableMediaFile {
     if (!file) {
-      throw new BadRequestException("Image file is required");
+      throw new BadRequestException(
+        "Image file is required. Upload a valid image file before retrying this media request.",
+      );
     }
 
     if (!file.buffer || !Buffer.isBuffer(file.buffer)) {
@@ -280,7 +311,9 @@ export class MediaService {
       .limit(1);
 
     if (!asset) {
-      throw new BadRequestException("Image not found");
+      throw new BadRequestException(
+        "Image could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return asset;
@@ -339,12 +372,13 @@ export class MediaService {
     );
   }
 
-  private async softDeleteImageAssets(mediaAssetIds: string[]) {
+  private async softDeleteImageAssets(mediaAssetIds: string[], userId: string) {
     await this.db
       .update(mediaAsset)
       .set({
         status: MediaAssetStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedBy: userId,
       })
       .where(inArray(mediaAsset.id, mediaAssetIds));
   }
@@ -434,20 +468,6 @@ export class MediaService {
         tag: row.tag,
       })),
     };
-  }
-
-  private mediaOrderBy(
-    sortBy: NonNullable<QueryMediaDto["sortBy"]>,
-    sortOrder: NonNullable<QueryMediaDto["sortOrder"]>,
-  ) {
-    const column =
-      sortBy === "fileName"
-        ? mediaAsset.fileName
-        : sortBy === "fileSize"
-          ? mediaAsset.fileSize
-          : mediaAsset.createdAt;
-
-    return sortOrder === "asc" ? asc(column) : desc(column);
   }
 
   private normalizeTags(value?: string) {

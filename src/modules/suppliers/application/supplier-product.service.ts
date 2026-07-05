@@ -1,34 +1,35 @@
+import Decimal from "decimal.js";
+import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+
+import {
+  product,
+  productVariant,
+  supplier,
+  supplierProductMap,
+  SupplierProductMapStatus,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  SupplierProductMapStatus,
-  product,
-  productVariant,
-  supplier,
-  supplierProductMap,
-} from "@/database/schema";
-import Decimal from "decimal.js";
-import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
-import {
-  QuerySupplierProductMapDto,
-  QuerySupplierProductDto,
-  SupplierProductMapDto,
-  UpdateSupplierProductMapDto,
-} from "../dto/supplier.dto";
-import { normalizeNullableText } from "../domain/supplier-contact.policy";
-import { SupplierProductRepository } from "../infrastructure/supplier-product.repository";
-import { SupplierRepository } from "../infrastructure/supplier.repository";
-import { DatabaseService } from "../../../database/database.service";
 import { isUniqueConstraintError } from "../../../common/database/db-error.util";
-import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
+import { normalizeNullableText } from "../domain/supplier-contact.policy";
+import {
+  QuerySupplierProductDto,
+  QuerySupplierProductMapDto,
+  SupplierProductMapDto,
+  UpdateSupplierProductMapDto,
+} from "../dto/supplier.dto";
+import { SupplierProductRepository } from "../infrastructure/supplier-product.repository";
+import { SupplierRepository } from "../infrastructure/supplier.repository";
 
 @Injectable()
 export class SupplierProductService {
@@ -121,7 +122,9 @@ export class SupplierProductService {
       .limit(1);
 
     if (!item) {
-      throw new NotFoundException("Supplier product not found");
+      throw new NotFoundException(
+        "Supplier product could not be found. It may not exist, may have been removed, or may not belong to this supplier and business.",
+      );
     }
 
     return apiResponse(item);
@@ -210,12 +213,16 @@ export class SupplierProductService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Supplier products were loaded successfully. The response includes the requested page of supplier product mappings and pagination metadata for browsing more results.",
+    );
   }
 
   async updateProduct(

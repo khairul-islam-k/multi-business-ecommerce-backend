@@ -1,36 +1,3 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
-import {
-  type Product,
-  type ProductImage,
-  type ProductVariant,
-  type ProductVariantAttribute,
-  ProductVariantStatus,
-  courierShipmentItem,
-  inventoryOrderAllocation,
-  inventoryStock,
-  inventoryStockAdjustmentItem,
-  inventoryStockMovement,
-  inventoryStockTransferItem,
-  inventoryWarehouseStock,
-  invoiceItem,
-  orderCartItem,
-  orderItem,
-  orderReturnItem,
-  product,
-  productAttribute,
-  productAttributeValue,
-  productImage,
-  productVariant,
-  productVariantAttribute,
-  supplierInvoiceItem,
-  supplierProductMap,
-  supplierPurchaseOrderItem,
-  supplierPurchaseReturnItem,
-} from "@/database/schema";
 import Decimal from "decimal.js";
 import {
   and,
@@ -46,7 +13,54 @@ import {
   or,
 } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import {
+  businessSetting,
+  courierShipmentItem,
+  inventoryOrderAllocation,
+  inventoryStock,
+  inventoryStockAdjustmentItem,
+  inventoryStockMovement,
+  inventoryStockTransferItem,
+  inventoryWarehouseStock,
+  invoiceItem,
+  orderCartItem,
+  orderItem,
+  orderReturnItem,
+  Product,
+  product,
+  productAttribute,
+  productAttributeValue,
+  ProductImage,
+  productImage,
+  ProductVariant,
+  productVariant,
+  ProductVariantAttribute,
+  productVariantAttribute,
+  ProductVariantStatus,
+  supplierInvoiceItem,
+  supplierProductMap,
+  supplierPurchaseOrderItem,
+  supplierPurchaseReturnItem,
+} from "@/database/schema";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+
+import { apiResponse } from "../../../common/utils/api-response.util";
+import {
+  DatabaseService,
+  DatabaseTransaction,
+} from "../../../database/database.service";
+import { buildStockItemKey } from "../../inventory/domain/stock-item-key";
+import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import {
+  assertBulkUpdateAttributeCombinations,
+  assertUniqueAttributeCombinations,
+  buildAttributeCombinationKey,
+  variantMatchesAttributes,
+} from "./domain/variant-combination.policy";
 import {
   BulkCreateProductVariantsDto,
   BulkUpdateProductVariantsDto,
@@ -56,19 +70,8 @@ import {
   QueryProductVariantDto,
   UpdateProductVariantDto,
 } from "./dto/product-variant.dto";
-import { buildStockItemKey } from "../../inventory/domain/stock-item-key";
-import {
-  assertBulkUpdateAttributeCombinations,
-  assertUniqueAttributeCombinations,
-  buildAttributeCombinationKey,
-  variantMatchesAttributes,
-} from "./domain/variant-combination.policy";
-import {
-  type DatabaseTransaction,
-  DatabaseService,
-} from "../../../database/database.service";
-import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
-import { apiResponse } from "../../../common/utils/api-response.util";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 type VariantAttributeWithDetails = ProductVariantAttribute & {
   attribute: typeof productAttribute.$inferSelect;
@@ -151,12 +154,17 @@ export class ProductVariantService {
           images: dto.images,
         });
 
+        const lowStockAlertQty = await this.resolveLowStockThreshold(
+          tx,
+          businessId,
+        );
+
         await tx.insert(inventoryStock).values({
           businessId,
           productId,
           variantId: createdVariant.id,
           stockItemKey: buildStockItemKey(productId, createdVariant.id),
-          lowStockAlertQty: new Decimal(0),
+          lowStockAlertQty,
           quantityReserved: new Decimal(0),
           totalQuantity: new Decimal(0),
         });
@@ -249,12 +257,17 @@ export class ProductVariantService {
             images: variant.dto.images,
           });
 
+          const lowStockAlertQty = await this.resolveLowStockThreshold(
+            tx,
+            businessId,
+          );
+
           await tx.insert(inventoryStock).values({
             businessId,
             productId,
             variantId: createdVariant.id,
             stockItemKey: buildStockItemKey(productId, createdVariant.id),
-            lowStockAlertQty: new Decimal(0),
+            lowStockAlertQty,
             quantityReserved: new Decimal(0),
             totalQuantity: new Decimal(0),
           });
@@ -391,7 +404,9 @@ export class ProductVariantService {
     const variant = await this.findVariantRow(businessId, productId, variantId);
 
     if (!variant) {
-      throw new NotFoundException("Product variant not found");
+      throw new NotFoundException(
+        "Product variant could not be found. It may not exist, may have been deleted, or may not belong to the selected product.",
+      );
     }
 
     return apiResponse(await this.getVariantDetails(variant));
@@ -427,7 +442,11 @@ export class ProductVariantService {
         if (dto.images !== undefined) {
           await tx
             .update(productImage)
-            .set({ deletedAt: new Date(), updatedBy: currentUser.id })
+            .set({
+              deletedAt: new Date(),
+              deletedBy: currentUser.id,
+              updatedBy: currentUser.id,
+            })
             .where(
               and(
                 eq(productImage.variantId, variantId),
@@ -546,7 +565,11 @@ export class ProductVariantService {
           if (update.dto.images !== undefined) {
             await tx
               .update(productImage)
-              .set({ deletedAt: new Date(), updatedBy: currentUser.id })
+              .set({
+                deletedAt: new Date(),
+                deletedBy: currentUser.id,
+                updatedBy: currentUser.id,
+              })
               .where(
                 and(
                   eq(productImage.variantId, update.variantId),
@@ -630,6 +653,7 @@ export class ProductVariantService {
         .set({
           status: ProductVariantStatus.INACTIVE,
           deletedAt: new Date(),
+          deletedBy: currentUser.id,
           updatedBy: currentUser.id,
         })
         .where(eq(productVariant.id, variantId));
@@ -684,7 +708,6 @@ export class ProductVariantService {
         variantId: params.variantId,
         imageUrl: image.imageUrl.trim(),
         altText: this.lookup.normalizeNullableText(image.altText),
-        sortOrder: index,
         isThumbnail: index === 0,
         createdBy: params.userId,
         updatedBy: params.userId,
@@ -1069,12 +1092,17 @@ export class ProductVariantService {
       .limit(1);
 
     if (!productStock) {
+      const lowStockAlertQty = await this.resolveLowStockThreshold(
+        tx,
+        businessId,
+      );
+
       await tx.insert(inventoryStock).values({
         businessId,
         productId,
         variantId: null,
         stockItemKey,
-        lowStockAlertQty: new Decimal(0),
+        lowStockAlertQty,
         quantityReserved: new Decimal(0),
         totalQuantity: new Decimal(0),
       });
@@ -1124,6 +1152,19 @@ export class ProductVariantService {
       .then(([row]) => row ?? null);
   }
 
+  private async resolveLowStockThreshold(
+    tx: DatabaseTransaction,
+    businessId: string,
+  ) {
+    const [settings] = await tx
+      .select({ lowStockThreshold: businessSetting.lowStockThreshold })
+      .from(businessSetting)
+      .where(eq(businessSetting.businessId, businessId))
+      .limit(1);
+
+    return new Decimal(settings?.lowStockThreshold ?? 0);
+  }
+
   private async getVariantsDetails(variants: ProductVariant[]) {
     return Promise.all(
       variants.map((variant) => this.getVariantDetails(variant)),
@@ -1145,7 +1186,9 @@ export class ProductVariantService {
     ]);
 
     if (!productSummary) {
-      throw new NotFoundException("Product not found");
+      throw new NotFoundException(
+        "Product could not be found. It may not exist, may have been deleted, or may not belong to the current business or storefront.",
+      );
     }
 
     return {
@@ -1166,8 +1209,7 @@ export class ProductVariantService {
           eq(productImage.variantId, variantId),
           isNull(productImage.deletedAt),
         ),
-      )
-      .orderBy(asc(productImage.sortOrder));
+      );
   }
 
   private async getVariantAttributes(

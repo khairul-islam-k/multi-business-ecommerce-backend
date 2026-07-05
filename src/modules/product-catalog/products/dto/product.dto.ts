@@ -1,20 +1,29 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { CatalogProductStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsArray,
   IsEnum,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
-  Max,
   MaxLength,
   Min,
 } from "class-validator";
 
+import { CatalogProductStatus } from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+
+import { SortedPaginationQueryDto } from "../../../../common/http/query.dto";
 import { ProductImagesDto } from "../../common/dto/product-media.dto";
-import { CatalogSortOrder } from "../../common/dto/query-catalog.dto";
+
+export const ProductSortBy = {
+  NAME: "name",
+  PRICE: "price",
+  CREATED_AT: "createdAt",
+  UPDATED_AT: "updatedAt",
+} as const;
+export type ProductSortBy = (typeof ProductSortBy)[keyof typeof ProductSortBy];
 
 export class CreateProductDto extends ProductImagesDto {
   @ApiProperty({ example: "Classic sneaker" })
@@ -41,20 +50,21 @@ export class CreateProductDto extends ProductImagesDto {
   @Min(0)
   weight?: number;
 
-  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
-  @IsOptional()
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsUUID()
-  categoryId?: string;
+  categoryId!: string;
 
-  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
-  @IsOptional()
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsUUID()
-  brandId?: string;
+  brandId!: string;
 
-  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
-  @IsOptional()
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsUUID()
-  unitId?: string;
+  unitId!: string;
+
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsUUID()
+  taxId!: string;
 
   @ApiPropertyOptional({ enum: CatalogProductStatus })
   @IsOptional()
@@ -70,25 +80,7 @@ export class CreateProductDto extends ProductImagesDto {
 
 export class UpdateProductDto extends PartialType(CreateProductDto) {}
 
-export class QueryProductDto {
-  @ApiPropertyOptional({ example: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @Min(1)
-  page?: number = 1;
-
-  @ApiPropertyOptional({ example: 10 })
-  @IsOptional()
-  @Type(() => Number)
-  @Min(1)
-  @Max(100)
-  limit?: number = 10;
-
-  @ApiPropertyOptional({ example: "sneaker" })
-  @IsOptional()
-  @IsString()
-  search?: string;
-
+export class QueryProductDto extends SortedPaginationQueryDto<ProductSortBy> {
   @ApiPropertyOptional({ enum: CatalogProductStatus })
   @IsOptional()
   @IsEnum(CatalogProductStatus)
@@ -115,10 +107,10 @@ export class QueryProductDto {
   warehouseId?: string;
 
   @ApiPropertyOptional({
-    enum: CatalogSortOrder,
-    example: CatalogSortOrder.DESC,
+    enum: ProductSortBy,
+    example: ProductSortBy.CREATED_AT,
   })
   @IsOptional()
-  @IsEnum(CatalogSortOrder)
-  sortOrder?: CatalogSortOrder = CatalogSortOrder.DESC;
+  @IsIn(Object.values(ProductSortBy))
+  sortBy?: ProductSortBy = ProductSortBy.CREATED_AT;
 }

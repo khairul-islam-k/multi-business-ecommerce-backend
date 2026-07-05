@@ -1,17 +1,17 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 
-import {
-  CustomerOrderSortBy,
-  CustomerSortOrder,
-  QueryCustomerOrderDto,
-} from "../dto/customer.dto";
-import { CustomerRepository } from "../infrastructure/customer.repository";
 import { getPagination } from "../../../common/http/pagination.util";
 import {
   resolveSort,
   resolveSortDirection,
 } from "../../../common/http/sort.util";
 import { paginatedResponse } from "../../../common/utils/api-response.util";
+import {
+  CustomerOrderSortBy,
+  CustomerSortOrder,
+  QueryCustomerOrderDto,
+} from "../dto/customer.dto";
+import { CustomerRepository } from "../infrastructure/customer.repository";
 
 const CUSTOMER_ORDER_SORTS = Object.values(CustomerOrderSortBy);
 
@@ -47,7 +47,10 @@ export class CustomerOrderQueryService {
 
     const orderBy = [
       { field: sortBy, direction: sortOrder },
-      { field: CustomerOrderSortBy.CREATED_AT, direction: CustomerSortOrder.DESC },
+      {
+        field: CustomerOrderSortBy.CREATED_AT,
+        direction: CustomerSortOrder.DESC,
+      },
     ];
 
     const [items, total] = await this.customers.findOrdersPage({
@@ -57,14 +60,20 @@ export class CustomerOrderQueryService {
       orderBy,
     });
 
-    return paginatedResponse(items, pagination.meta(total));
+    return paginatedResponse(
+      items,
+      pagination.meta(total),
+      "Customer orders were loaded successfully. The response includes the requested page of orders for this customer and pagination metadata for browsing more results.",
+    );
   }
 
   private async getCustomerOrThrow(businessId: string, customerId: string) {
     const customer = await this.customers.findById(businessId, customerId);
 
     if (!customer) {
-      throw new NotFoundException("Customer not found");
+      throw new NotFoundException(
+        "Customer could not be found. It may not exist, may have been deleted, or may not belong to the current business or storefront.",
+      );
     }
 
     return customer;

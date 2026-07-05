@@ -1,12 +1,24 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import {
+  IsBoolean,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from "class-validator";
+
 import { ProductSimpleStatus } from "@/database/schema";
-import { IsEnum, IsOptional, IsString, MaxLength } from "class-validator";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 
 export class CreateProductTagDto {
   @ApiProperty({ example: "summer" })
   @IsString()
   @MaxLength(100)
   name!: string;
+
+  @ApiProperty({ example: false })
+  @IsBoolean()
+  @IsOptional()
+  isFeatured: boolean = false;
 
   @ApiPropertyOptional({ enum: ProductSimpleStatus })
   @IsOptional()

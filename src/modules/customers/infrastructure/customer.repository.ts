@@ -1,20 +1,3 @@
-import { Injectable } from "@nestjs/common";
-import {
-  type NewOrderCustomer,
-  type NewOrderCustomerAddress,
-  type OrderCustomer,
-  type OrderCustomerAddress,
-  type Order,
-  OrderCustomerStatus,
-  type OrderItem,
-  type OrderPayment,
-  orderCart,
-  orderCustomer,
-  orderCustomerAddress,
-  order as orderTable,
-  orderItem as orderItemTable,
-  orderPayment,
-} from "@/database/schema";
 import {
   and,
   asc,
@@ -27,12 +10,30 @@ import {
   isNull,
   ne,
   or,
-  type SQL,
+  SQL,
 } from "drizzle-orm";
 
 import {
-  type DatabaseTransaction,
+  Customer,
+  customer,
+  CustomerAddress,
+  customerAddress,
+  CustomerStatus,
+  NewCustomer,
+  NewCustomerAddress,
+  Order,
+  order as orderTable,
+  orderCart,
+  OrderItem,
+  orderItem as orderItemTable,
+  OrderPayment,
+  orderPayment,
+} from "@/database/schema";
+import { Injectable } from "@nestjs/common";
+
+import {
   DatabaseService,
+  DatabaseTransaction,
 } from "../../../database/database.service";
 import { CustomerOrderSortBy, CustomerSortBy } from "../dto/customer.dto";
 
@@ -40,7 +41,7 @@ type SortDirection = "asc" | "desc";
 
 type CustomerPageWhere = {
   businessId: string;
-  status?: OrderCustomer["status"];
+  status?: Customer["status"];
   search?: string;
 };
 
@@ -62,8 +63,8 @@ type CustomerOrderListOrderBy = {
   direction: SortDirection;
 };
 
-type CustomerWithDetails = OrderCustomer & {
-  addresses: OrderCustomerAddress[];
+type CustomerWithDetails = Customer & {
+  addresses: CustomerAddress[];
   _count: {
     carts: number;
     orders: number;
@@ -87,20 +88,20 @@ export class CustomerRepository {
     return this.db.transaction(callback);
   }
 
-  async create(data: NewOrderCustomer) {
-    const [customer] = await this.db
-      .insert(orderCustomer)
+  async create(data: NewCustomer) {
+    const [newCustomer] = await this.db
+      .insert(customer)
       .values(data)
       .returning();
 
-    return this.withCustomerDetails(customer);
+    return this.withCustomerDetails(newCustomer);
   }
 
   findById(businessId: string, customerId: string) {
     return this.findCustomerByConditions([
-      eq(orderCustomer.id, customerId),
-      eq(orderCustomer.businessId, businessId),
-      isNull(orderCustomer.deletedAt),
+      eq(customer.id, customerId),
+      eq(customer.businessId, businessId),
+      isNull(customer.deletedAt),
     ]);
   }
 
@@ -115,7 +116,7 @@ export class CustomerRepository {
     return Promise.all([
       this.db
         .select()
-        .from(orderCustomer)
+        .from(customer)
         .where(where)
         .orderBy(...args.orderBy.map((order) => this.customerOrderBy(order)))
         .limit(args.take)
@@ -123,20 +124,20 @@ export class CustomerRepository {
         .then((rows) => this.withCustomersDetails(rows)),
       this.db
         .select({ value: count() })
-        .from(orderCustomer)
+        .from(customer)
         .where(where)
         .then(([row]) => row?.value ?? 0),
     ]);
   }
 
-  async update(customerId: string, data: Partial<NewOrderCustomer>) {
-    const [customer] = await this.db
-      .update(orderCustomer)
+  async update(customerId: string, data: Partial<NewCustomer>) {
+    const [updatedCustomer] = await this.db
+      .update(customer)
       .set(data)
-      .where(eq(orderCustomer.id, customerId))
+      .where(eq(customer.id, customerId))
       .returning();
 
-    return this.withCustomerDetails(customer);
+    return this.withCustomerDetails(updatedCustomer);
   }
 
   softDeleteCustomer(
@@ -146,27 +147,29 @@ export class CustomerRepository {
     deletedAt: Date,
   ) {
     return tx
-      .update(orderCustomer)
+      .update(customer)
       .set({
-        status: OrderCustomerStatus.INACTIVE,
+        status: CustomerStatus.INACTIVE,
         deletedAt,
+        deletedBy: userId,
         updatedBy: userId,
       })
-      .where(eq(orderCustomer.id, customerId));
+      .where(eq(customer.id, customerId));
   }
 
   softDeleteAddresses(
     tx: DatabaseTransaction,
     customerId: string,
+    userId: string,
     deletedAt: Date,
   ) {
     return tx
-      .update(orderCustomerAddress)
-      .set({ deletedAt })
+      .update(customerAddress)
+      .set({ deletedAt, deletedBy: userId })
       .where(
         and(
-          eq(orderCustomerAddress.customerId, customerId),
-          isNull(orderCustomerAddress.deletedAt),
+          eq(customerAddress.customerId, customerId),
+          isNull(customerAddress.deletedAt),
         ),
       );
   }
@@ -179,11 +182,11 @@ export class CustomerRepository {
     const contactConditions: SQL[] = [];
 
     if (contact.email) {
-      contactConditions.push(eq(orderCustomer.email, contact.email));
+      contactConditions.push(eq(customer.email, contact.email));
     }
 
     if (contact.phone) {
-      contactConditions.push(eq(orderCustomer.phone, contact.phone));
+      contactConditions.push(eq(customer.phone, contact.phone));
     }
 
     if (contactConditions.length === 0) {
@@ -191,16 +194,14 @@ export class CustomerRepository {
     }
 
     return this.db
-      .select({ id: orderCustomer.id })
-      .from(orderCustomer)
+      .select({ id: customer.id })
+      .from(customer)
       .where(
         and(
-          eq(orderCustomer.businessId, businessId),
-          isNull(orderCustomer.deletedAt),
+          eq(customer.businessId, businessId),
+          isNull(customer.deletedAt),
           or(...contactConditions),
-          excludeCustomerId
-            ? ne(orderCustomer.id, excludeCustomerId)
-            : undefined,
+          excludeCustomerId ? ne(customer.id, excludeCustomerId) : undefined,
         ),
       )
       .limit(1)
@@ -210,11 +211,11 @@ export class CustomerRepository {
   countAddresses(customerId: string) {
     return this.db
       .select({ value: count() })
-      .from(orderCustomerAddress)
+      .from(customerAddress)
       .where(
         and(
-          eq(orderCustomerAddress.customerId, customerId),
-          isNull(orderCustomerAddress.deletedAt),
+          eq(customerAddress.customerId, customerId),
+          isNull(customerAddress.deletedAt),
         ),
       )
       .then(([row]) => row?.value ?? 0);
@@ -226,23 +227,23 @@ export class CustomerRepository {
     excludeAddressId?: string,
   ) {
     return tx
-      .update(orderCustomerAddress)
+      .update(customerAddress)
       .set({ isDefault: false })
       .where(
         and(
-          eq(orderCustomerAddress.customerId, customerId),
-          isNull(orderCustomerAddress.deletedAt),
-          eq(orderCustomerAddress.isDefault, true),
+          eq(customerAddress.customerId, customerId),
+          isNull(customerAddress.deletedAt),
+          eq(customerAddress.isDefault, true),
           excludeAddressId
-            ? ne(orderCustomerAddress.id, excludeAddressId)
+            ? ne(customerAddress.id, excludeAddressId)
             : undefined,
         ),
       );
   }
 
-  createAddress(tx: DatabaseTransaction, data: NewOrderCustomerAddress) {
+  createAddress(tx: DatabaseTransaction, data: NewCustomerAddress) {
     return tx
-      .insert(orderCustomerAddress)
+      .insert(customerAddress)
       .values(data)
       .returning()
       .then(([address]) => address);
@@ -251,28 +252,28 @@ export class CustomerRepository {
   findAddresses(customerId: string) {
     return this.db
       .select()
-      .from(orderCustomerAddress)
+      .from(customerAddress)
       .where(
         and(
-          eq(orderCustomerAddress.customerId, customerId),
-          isNull(orderCustomerAddress.deletedAt),
+          eq(customerAddress.customerId, customerId),
+          isNull(customerAddress.deletedAt),
         ),
       )
       .orderBy(
-        desc(orderCustomerAddress.isDefault),
-        desc(orderCustomerAddress.createdAt),
+        desc(customerAddress.isDefault),
+        desc(customerAddress.createdAt),
       );
   }
 
   findAddressById(customerId: string, addressId: string) {
     return this.db
       .select()
-      .from(orderCustomerAddress)
+      .from(customerAddress)
       .where(
         and(
-          eq(orderCustomerAddress.id, addressId),
-          eq(orderCustomerAddress.customerId, customerId),
-          isNull(orderCustomerAddress.deletedAt),
+          eq(customerAddress.id, addressId),
+          eq(customerAddress.customerId, customerId),
+          isNull(customerAddress.deletedAt),
         ),
       )
       .limit(1)
@@ -282,27 +283,27 @@ export class CustomerRepository {
   updateAddress(
     tx: DatabaseTransaction,
     addressId: string,
-    data: Partial<NewOrderCustomerAddress>,
+    data: Partial<NewCustomerAddress>,
   ) {
     return tx
-      .update(orderCustomerAddress)
+      .update(customerAddress)
       .set(data)
-      .where(eq(orderCustomerAddress.id, addressId))
+      .where(eq(customerAddress.id, addressId))
       .returning()
       .then(([address]) => address);
   }
 
   findNextDefaultAddress(tx: DatabaseTransaction, customerId: string) {
     return tx
-      .select({ id: orderCustomerAddress.id })
-      .from(orderCustomerAddress)
+      .select({ id: customerAddress.id })
+      .from(customerAddress)
       .where(
         and(
-          eq(orderCustomerAddress.customerId, customerId),
-          isNull(orderCustomerAddress.deletedAt),
+          eq(customerAddress.customerId, customerId),
+          isNull(customerAddress.deletedAt),
         ),
       )
-      .orderBy(desc(orderCustomerAddress.createdAt))
+      .orderBy(desc(customerAddress.createdAt))
       .limit(1)
       .then(([address]) => address ?? null);
   }
@@ -333,38 +334,38 @@ export class CustomerRepository {
   }
 
   private async findCustomerByConditions(conditions: SQL[]) {
-    const [customer] = await this.db
+    const [existingCustomer] = await this.db
       .select()
-      .from(orderCustomer)
+      .from(customer)
       .where(and(...conditions))
       .limit(1);
 
-    return customer ? this.withCustomerDetails(customer) : null;
+    return customer ? this.withCustomerDetails(existingCustomer) : null;
   }
 
   private buildCustomerWhere(args: CustomerPageWhere) {
     return and(
-      eq(orderCustomer.businessId, args.businessId),
-      isNull(orderCustomer.deletedAt),
-      args.status ? eq(orderCustomer.status, args.status) : undefined,
+      eq(customer.businessId, args.businessId),
+      isNull(customer.deletedAt),
+      args.status ? eq(customer.status, args.status) : undefined,
       args.search
         ? or(
-            ilike(orderCustomer.name, `%${args.search}%`),
-            ilike(orderCustomer.email, `%${args.search}%`),
-            ilike(orderCustomer.phone, `%${args.search}%`),
-            ilike(orderCustomer.note, `%${args.search}%`),
+            ilike(customer.name, `%${args.search}%`),
+            ilike(customer.email, `%${args.search}%`),
+            ilike(customer.phone, `%${args.search}%`),
+            ilike(customer.note, `%${args.search}%`),
             exists(
               this.db
-                .select({ id: orderCustomerAddress.id })
-                .from(orderCustomerAddress)
+                .select({ id: customerAddress.id })
+                .from(customerAddress)
                 .where(
                   and(
-                    eq(orderCustomerAddress.customerId, orderCustomer.id),
-                    isNull(orderCustomerAddress.deletedAt),
+                    eq(customerAddress.customerId, customer.id),
+                    isNull(customerAddress.deletedAt),
                     or(
-                      ilike(orderCustomerAddress.address, `%${args.search}%`),
-                      ilike(orderCustomerAddress.city, `%${args.search}%`),
-                      ilike(orderCustomerAddress.country, `%${args.search}%`),
+                      ilike(customerAddress.address, `%${args.search}%`),
+                      ilike(customerAddress.city, `%${args.search}%`),
+                      ilike(customerAddress.country, `%${args.search}%`),
                     ),
                   ),
                 ),
@@ -395,10 +396,10 @@ export class CustomerRepository {
   private customerOrderBy(order: CustomerOrderBy) {
     const column =
       order.field === CustomerSortBy.NAME
-        ? orderCustomer.name
+        ? customer.name
         : order.field === CustomerSortBy.UPDATED_AT
-          ? orderCustomer.updatedAt
-          : orderCustomer.createdAt;
+          ? customer.updatedAt
+          : customer.createdAt;
 
     return order.direction === "asc" ? asc(column) : desc(column);
   }
@@ -414,14 +415,14 @@ export class CustomerRepository {
     return order.direction === "asc" ? asc(column) : desc(column);
   }
 
-  private async withCustomerDetails(customer: OrderCustomer) {
+  private async withCustomerDetails(customer: Customer) {
     const [customerWithDetails] = await this.withCustomersDetails([customer]);
 
     return customerWithDetails;
   }
 
   private async withCustomersDetails(
-    customers: OrderCustomer[],
+    customers: Customer[],
   ): Promise<CustomerWithDetails[]> {
     const customerIds = customers.map((customer) => customer.id);
 
@@ -432,16 +433,16 @@ export class CustomerRepository {
     const [addresses, cartCounts, orderCounts] = await Promise.all([
       this.db
         .select()
-        .from(orderCustomerAddress)
+        .from(customerAddress)
         .where(
           and(
-            inArray(orderCustomerAddress.customerId, customerIds),
-            isNull(orderCustomerAddress.deletedAt),
+            inArray(customerAddress.customerId, customerIds),
+            isNull(customerAddress.deletedAt),
           ),
         )
         .orderBy(
-          desc(orderCustomerAddress.isDefault),
-          desc(orderCustomerAddress.createdAt),
+          desc(customerAddress.isDefault),
+          desc(customerAddress.createdAt),
         ),
       this.db
         .select({ customerId: orderCart.customerId, value: count() })
@@ -455,7 +456,7 @@ export class CustomerRepository {
         .groupBy(orderTable.customerId),
     ]);
 
-    const addressesByCustomerId = new Map<string, OrderCustomerAddress[]>();
+    const addressesByCustomerId = new Map<string, CustomerAddress[]>();
     const cartCountByCustomerId = new Map(
       cartCounts.map((row) => [row.customerId, row.value]),
     );

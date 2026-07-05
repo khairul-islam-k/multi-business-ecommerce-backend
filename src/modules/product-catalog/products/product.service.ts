@@ -1,20 +1,21 @@
+import Decimal from "decimal.js";
 import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
+  and,
+  asc,
+  avg,
+  count,
+  eq,
+  exists,
+  ilike,
+  inArray,
+  isNull,
+  ne,
+  or,
+} from "drizzle-orm";
+
 import {
-  type Product,
-  type ProductBrand,
-  type ProductCategory,
-  type ProductImage,
-  type ProductTag,
-  type ProductTagMap,
-  type ProductUnit,
-  type ProductVariant,
-  type ProductVariantAttribute,
   CatalogProductStatus,
-  ProductReviewStatus,
+  businessSetting,
   courierShipmentItem,
   inventoryOrderAllocation,
   inventoryStock,
@@ -26,54 +27,59 @@ import {
   orderCartItem,
   orderItem,
   orderReturnItem,
+  Product,
   product,
   productAttribute,
   productAttributeValue,
+  ProductBrand,
   productBrand,
+  ProductCategory,
   productCategory,
+  ProductImage,
   productImage,
   productReview,
+  ProductReviewStatus,
+  ProductTag,
   productTag,
+  ProductTagMap,
   productTagMap,
+  ProductUnit,
   productUnit,
+  ProductVariant,
   productVariant,
+  ProductVariantAttribute,
   productVariantAttribute,
   supplierInvoiceItem,
   supplierProductMap,
   supplierPurchaseOrderItem,
   supplierPurchaseReturnItem,
 } from "@/database/schema";
-import Decimal from "decimal.js";
 import {
-  and,
-  asc,
-  avg,
-  count,
-  desc,
-  eq,
-  exists,
-  ilike,
-  inArray,
-  isNull,
-  ne,
-  or,
-} from "drizzle-orm";
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { CatalogSortOrder } from "../common/dto/query-catalog.dto";
-import { ProductImageInputDto } from "../common/dto/product-media.dto";
 import {
-  CreateProductDto,
-  QueryProductDto,
-  UpdateProductDto,
-} from "./dto/product.dto";
-import { buildStockItemKey } from "../../inventory/domain/stock-item-key";
-import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
-import { DatabaseService } from "../../../database/database.service";
+  buildOrderBy,
+  resolveSortColumn,
+} from "../../../common/http/sort.util";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import { buildStockItemKey } from "../../inventory/domain/stock-item-key";
+import { ProductImageInputDto } from "../common/dto/product-media.dto";
+import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import {
+  CreateProductDto,
+  ProductSortBy,
+  QueryProductDto,
+  UpdateProductDto,
+} from "./dto/product.dto";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 type ProductTagWithTag = ProductTagMap & {
   tag: ProductTag;
@@ -143,9 +149,10 @@ export class ProductService {
           .insert(product)
           .values({
             businessId,
-            categoryId: dto.categoryId ?? null,
-            brandId: dto.brandId ?? null,
-            unitId: dto.unitId ?? null,
+            categoryId: dto.categoryId,
+            brandId: dto.brandId,
+            unitId: dto.unitId,
+            taxId: dto.taxId,
             name: this.lookup.normalizeName(dto.name),
             slug,
             description: this.lookup.normalizeNullableText(dto.description),
@@ -167,12 +174,17 @@ export class ProductService {
           images: dto.images,
         });
 
+        const lowStockAlertQty = await this.resolveLowStockThreshold(
+          tx,
+          businessId,
+        );
+
         await tx.insert(inventoryStock).values({
           businessId,
           productId: createdProduct.id,
           variantId: null,
           stockItemKey: buildStockItemKey(createdProduct.id, null),
-          lowStockAlertQty: new Decimal(0),
+          lowStockAlertQty,
           quantityReserved: new Decimal(0),
           totalQuantity: new Decimal(0),
         });
@@ -257,9 +269,19 @@ export class ProductService {
         .from(product)
         .where(where)
         .orderBy(
-          query.sortOrder === CatalogSortOrder.ASC
-            ? asc(product.createdAt)
-            : desc(product.createdAt),
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [ProductSortBy.NAME]: product.name,
+                [ProductSortBy.PRICE]: product.price,
+                [ProductSortBy.CREATED_AT]: product.createdAt,
+                [ProductSortBy.UPDATED_AT]: product.updatedAt,
+              },
+              ProductSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
+          ),
         )
         .limit(limit)
         .offset(skip)
@@ -273,19 +295,25 @@ export class ProductService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Products were loaded successfully. The response includes the requested page of products for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, productId: string) {
     const row = await this.findProductRow(businessId, productId);
 
     if (!row) {
-      throw new NotFoundException("Product not found");
+      throw new NotFoundException(
+        "Product could not be found. It may not exist, may have been deleted, or may not belong to the current business or storefront.",
+      );
     }
 
     return apiResponse(
@@ -321,7 +349,11 @@ export class ProductService {
         if (dto.images !== undefined) {
           await tx
             .update(productImage)
-            .set({ deletedAt: new Date(), updatedBy: currentUser.id })
+            .set({
+              deletedAt: new Date(),
+              deletedBy: currentUser.id,
+              updatedBy: currentUser.id,
+            })
             .where(
               and(
                 eq(productImage.productId, productId),
@@ -346,6 +378,7 @@ export class ProductService {
             }),
             ...(dto.brandId !== undefined && { brandId: dto.brandId ?? null }),
             ...(dto.unitId !== undefined && { unitId: dto.unitId ?? null }),
+            ...(dto.taxId !== undefined && { taxId: dto.taxId }),
             ...(dto.name !== undefined && {
               name: this.lookup.normalizeName(dto.name),
             }),
@@ -388,13 +421,18 @@ export class ProductService {
         .set({
           status: CatalogProductStatus.ARCHIVED,
           deletedAt: new Date(),
+          deletedBy: currentUser.id,
           updatedBy: currentUser.id,
         })
         .where(eq(product.id, productId));
 
       await tx
         .update(productVariant)
-        .set({ deletedAt: new Date(), updatedBy: currentUser.id })
+        .set({
+          deletedAt: new Date(),
+          deletedBy: currentUser.id,
+          updatedBy: currentUser.id,
+        })
         .where(
           and(
             eq(productVariant.productId, productId),
@@ -428,6 +466,19 @@ export class ProductService {
         })),
       );
     }
+  }
+
+  private async resolveLowStockThreshold(
+    tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
+    businessId: string,
+  ) {
+    const [settings] = await tx
+      .select({ lowStockThreshold: businessSetting.lowStockThreshold })
+      .from(businessSetting)
+      .where(eq(businessSetting.businessId, businessId))
+      .limit(1);
+
+    return new Decimal(settings?.lowStockThreshold ?? 0);
   }
 
   private async insertImages(
@@ -768,8 +819,7 @@ export class ProductService {
             : eq(productImage.variantId, variantId),
           isNull(productImage.deletedAt),
         ),
-      )
-      .orderBy(asc(productImage.sortOrder));
+      );
   }
 
   private async getVariants(

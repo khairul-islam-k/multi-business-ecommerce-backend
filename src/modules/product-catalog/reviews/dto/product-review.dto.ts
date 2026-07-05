@@ -1,5 +1,3 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { ProductReviewStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsEmail,
@@ -12,6 +10,9 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
+
+import { ProductReviewStatus } from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class CreateProductReviewDto {
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })

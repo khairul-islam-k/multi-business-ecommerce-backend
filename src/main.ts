@@ -1,14 +1,26 @@
 import "reflect-metadata";
 
+import { join } from "node:path";
+
 import { Logger, ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
-import { join } from "node:path";
+import { and, eq, isNull, or } from "drizzle-orm";
 
-import { AppConfigService } from "./common/config/app-config.service";
 import { AppModule } from "./app.module";
+import { AppConfigService } from "./common/config/app-config.service";
 import { createCorsOrigin } from "./common/config/cors.config";
+import { DatabaseService } from "./database/database.service";
+import {
+  website,
+  websiteDomain,
+  WebsiteDomainSslStatus,
+  WebsiteDomainVerificationStatus,
+  WebsiteStatus,
+} from "./database/schema";
+
+const CORS_DOMAIN_CACHE_TTL_MS = 5 * 60 * 1000;
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -17,13 +29,23 @@ async function bootstrap() {
   });
 
   const appConfig = app.get(AppConfigService);
+  const database = app.get(DatabaseService);
   const uploadRoot = appConfig.mediaUploadRoot;
   const publicUploadPrefix = appConfig.publicUploadPrefix;
 
   app.enableCors({
-    origin: createCorsOrigin(appConfig.corsOrigins),
+    origin: createCorsOrigin({
+      allowedOrigins: appConfig.corsOrigins,
+      allowedSubdomainBases: appConfig.corsSubdomainBases,
+      isAllowedCustomDomain: createCustomDomainCorsChecker(database),
+    }),
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "x-forwarded-host",
+      "host",
+    ],
   });
 
   app.setGlobalPrefix("api/v1");
@@ -74,3 +96,45 @@ async function bootstrap() {
 }
 
 void bootstrap();
+
+function createCustomDomainCorsChecker(database: DatabaseService) {
+  const cache = new Map<string, { allowed: boolean; expiresAt: number }>();
+
+  return async (hostname: string) => {
+    const now = Date.now();
+    const cached = cache.get(hostname);
+
+    if (cached && cached.expiresAt > now) {
+      return cached.allowed;
+    }
+
+    const [row] = await database.db
+      .select({ id: websiteDomain.id })
+      .from(websiteDomain)
+      .innerJoin(website, eq(website.id, websiteDomain.websiteId))
+      .where(
+        and(
+          or(
+            eq(websiteDomain.domain, hostname),
+            eq(websiteDomain.subdomain, hostname),
+          ),
+          eq(
+            websiteDomain.verificationStatus,
+            WebsiteDomainVerificationStatus.VERIFIED,
+          ),
+          eq(websiteDomain.sslStatus, WebsiteDomainSslStatus.ACTIVE),
+          eq(website.status, WebsiteStatus.PUBLISHED),
+          isNull(website.deletedAt),
+        ),
+      )
+      .limit(1);
+    const allowed = Boolean(row);
+
+    cache.set(hostname, {
+      allowed,
+      expiresAt: now + CORS_DOMAIN_CACHE_TTL_MS,
+    });
+
+    return allowed;
+  };
+}

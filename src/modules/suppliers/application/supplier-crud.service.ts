@@ -1,23 +1,30 @@
-import { Injectable } from "@nestjs/common";
-import { SupplierStatus, supplier } from "@/database/schema";
-import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+import { and, count, eq, ilike, isNull, or } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import { supplier, SupplierStatus } from "@/database/schema";
+import { Injectable } from "@nestjs/common";
+
 import {
-  CreateSupplierDto,
-  QuerySupplierDto,
-  UpdateSupplierDto,
-} from "../dto/supplier.dto";
-import {
-  normalizeNullableText,
-  normalizeSupplierName,
-} from "../domain/supplier-contact.policy";
-import { SupplierRepository } from "../infrastructure/supplier.repository";
-import { DatabaseService } from "../../../database/database.service";
+  buildOrderBy,
+  resolveSortColumn,
+} from "../../../common/http/sort.util";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import {
+  normalizeNullableText,
+  normalizeSupplierName,
+} from "../domain/supplier-contact.policy";
+import {
+  CreateSupplierDto,
+  QuerySupplierDto,
+  SupplierSortBy,
+  UpdateSupplierDto,
+} from "../dto/supplier.dto";
+import { SupplierRepository } from "../infrastructure/supplier.repository";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class SupplierCrudService {
@@ -83,9 +90,19 @@ export class SupplierCrudService {
         .from(supplier)
         .where(where)
         .orderBy(
-          query.sortOrder === "asc"
-            ? asc(supplier.createdAt)
-            : desc(supplier.createdAt),
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [SupplierSortBy.NAME]: supplier.name,
+                [SupplierSortBy.STATUS]: supplier.status,
+                [SupplierSortBy.CREATED_AT]: supplier.createdAt,
+                [SupplierSortBy.UPDATED_AT]: supplier.updatedAt,
+              },
+              SupplierSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
+          ),
         )
         .limit(limit)
         .offset(skip),
@@ -99,12 +116,16 @@ export class SupplierCrudService {
       rows.map((supplierRow) => this.suppliers.withCounts(supplierRow)),
     );
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Suppliers were loaded successfully. The response includes the requested page of supplier records for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, supplierId: string) {
@@ -188,6 +209,7 @@ export class SupplierCrudService {
       .set({
         status: SupplierStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
         updatedBy: currentUser.id,
       })
       .where(eq(supplier.id, supplierId));

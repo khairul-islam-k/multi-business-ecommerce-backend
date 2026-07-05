@@ -1,21 +1,23 @@
+import Decimal from "decimal.js";
+import { and, eq, isNull } from "drizzle-orm";
+
+import {
+  financeAccount,
+  FinanceAccountStatus,
+  financeAccountTransaction,
+  FinanceSourceType,
+  FinanceTransactionType,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  FinanceAccountStatus,
-  FinanceSourceType,
-  FinanceTransactionType,
-  financeAccount,
-  financeAccountTransaction,
-} from "@/database/schema";
-import Decimal from "decimal.js";
-import { and, eq, isNull } from "drizzle-orm";
 
+import { normalizeOptionalText } from "../../../common/text/normalizers";
 import { assertPositiveMoney, toMoney } from "../domain/money";
 import { FinanceCodeService } from "./finance-code.service";
-import { normalizeOptionalText } from "../../../common/text/normalizers";
+
 import type { DatabaseTransaction } from "../../../database/database.service";
 
 @Injectable()
@@ -89,7 +91,9 @@ export class AccountBalanceService {
       .limit(1);
 
     if (!account) {
-      throw new NotFoundException("Finance account not found");
+      throw new NotFoundException(
+        "Finance account could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     const balanceBefore = toMoney(account.currentBalance);

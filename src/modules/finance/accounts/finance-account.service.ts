@@ -1,22 +1,31 @@
+import Decimal from "decimal.js";
+import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+
+import {
+  businessSetting,
+  FinanceAccount,
+  financeAccount,
+  FinanceAccountStatus,
+  financeAccountTransaction,
+  financeExpense,
+  FinanceSourceType,
+  orderPayment,
+  paymentGatewayConfig,
+} from "@/database/schema";
 import {
   BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  type FinanceAccount,
-  FinanceAccountStatus,
-  FinanceSourceType,
-  financeAccount,
-  financeAccountTransaction,
-  financeExpense,
-  orderPayment,
-} from "@/database/schema";
-import Decimal from "decimal.js";
-import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import { isUniqueConstraintError } from "../../../common/database/db-error.util";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import { FinanceLedgerService } from "../common/finance-ledger.service";
 import {
   AddFinanceAccountMoneyDto,
   CreateFinanceAccountDto,
@@ -24,13 +33,8 @@ import {
   QueryFinanceTransactionDto,
   UpdateFinanceAccountDto,
 } from "./dto/finance-account.dto";
-import { DatabaseService } from "../../../database/database.service";
-import { FinanceLedgerService } from "../common/finance-ledger.service";
-import { isUniqueConstraintError } from "../../../common/database/db-error.util";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 type FinanceAccountWithCount = FinanceAccount & {
   _count: {
@@ -133,19 +137,25 @@ export class FinanceAccountService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Finance accounts were loaded successfully. The response includes the requested page of accounts for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, accountId: string) {
     const account = await this.findAccountRow(businessId, accountId);
 
     if (!account) {
-      throw new NotFoundException("Finance account not found");
+      throw new NotFoundException(
+        "Finance account could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return apiResponse(await this.withAccountCount(account));
@@ -234,11 +244,14 @@ export class FinanceAccountService {
       );
     }
 
+    await this.assertAccountCanBeDeleted(businessId, accountId);
+
     await this.db
       .update(financeAccount)
       .set({
         status: FinanceAccountStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
         updatedBy: currentUser.id,
       })
       .where(eq(financeAccount.id, accountId));
@@ -276,19 +289,25 @@ export class FinanceAccountService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Finance account transactions were loaded successfully. The response includes the requested page of transactions for this account and pagination metadata for browsing more results.",
+    );
   }
 
   private async assertAccountExists(businessId: string, accountId: string) {
     const account = await this.findAccountRow(businessId, accountId);
 
     if (!account) {
-      throw new NotFoundException("Finance account not found");
+      throw new NotFoundException(
+        "Finance account could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return account;
@@ -310,7 +329,50 @@ export class FinanceAccountService {
   }
 
   private async withAccountsCount(accounts: FinanceAccount[]) {
-    return Promise.all(accounts.map((account) => this.withAccountCount(account)));
+    return Promise.all(
+      accounts.map((account) => this.withAccountCount(account)),
+    );
+  }
+
+  private async assertAccountCanBeDeleted(
+    businessId: string,
+    accountId: string,
+  ) {
+    const [defaultReference, gatewayConfigReference] = await Promise.all([
+      this.db
+        .select({ value: count() })
+        .from(businessSetting)
+        .where(
+          and(
+            eq(businessSetting.businessId, businessId),
+            eq(businessSetting.defaultFinanceAccountId, accountId),
+          ),
+        )
+        .then(([row]) => row?.value ?? 0),
+      this.db
+        .select({ value: count() })
+        .from(paymentGatewayConfig)
+        .where(
+          and(
+            eq(paymentGatewayConfig.businessId, businessId),
+            eq(paymentGatewayConfig.financeAccountId, accountId),
+            isNull(paymentGatewayConfig.deletedAt),
+          ),
+        )
+        .then(([row]) => row?.value ?? 0),
+    ]);
+
+    if (defaultReference > 0) {
+      throw new BadRequestException(
+        "Default finance account cannot be deleted. Select another active default account in business settings first.",
+      );
+    }
+
+    if (gatewayConfigReference > 0) {
+      throw new BadRequestException(
+        "Finance account cannot be deleted while active payment gateway configurations use it.",
+      );
+    }
   }
 
   private async withAccountCount(

@@ -17,13 +17,13 @@ export class AdminGuard implements CanActivate {
 
     if (!user) {
       throw new UnauthorizedException(
-        "Authentication required. Please login continue.",
+        "Administrator authentication is required for this request. Please sign in with an administrator account and send a valid Bearer access token before trying again.",
       );
     }
 
     if (user.type !== SystemUserType.ADMIN) {
       throw new ForbiddenException(
-        "Unauthorized access. Only admin can access this resource.",
+        "Your account is authenticated, but this endpoint is restricted to administrator accounts. Sign in with an administrator account or request elevated access.",
       );
     }
 

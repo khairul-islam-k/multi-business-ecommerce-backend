@@ -1,30 +1,38 @@
+import { and, count, eq, ilike, isNull, or } from "drizzle-orm";
+
+import {
+  businessSetting,
+  inventoryStockMovement,
+  inventoryWarehouseStock,
+  supplierPurchaseOrder,
+  Warehouse,
+  warehouse,
+  WarehouseStatus,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  type Warehouse,
-  WarehouseStatus,
-  inventoryStockMovement,
-  inventoryWarehouseStock,
-  supplierPurchaseOrder,
-  warehouse,
-} from "@/database/schema";
-import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import {
-  CreateWarehouseDto,
-  QueryWarehouseDto,
-  UpdateWarehouseDto,
-} from "./dto/warehouse.dto";
-import { DatabaseService } from "../../../database/database.service";
-import { InventoryLookupService } from "../common/inventory-lookup.service";
+  buildOrderBy,
+  resolveSortColumn,
+} from "../../../common/http/sort.util";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import { InventoryLookupService } from "../common/inventory-lookup.service";
+import {
+  CreateWarehouseDto,
+  QueryWarehouseDto,
+  UpdateWarehouseDto,
+  WarehouseSortBy,
+} from "./dto/warehouse.dto";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class WarehouseService {
@@ -50,6 +58,12 @@ export class WarehouseService {
           name: this.lookup.normalizeName(dto.name),
           phone: this.lookup.normalizeNullableText(dto.phone),
           address: this.lookup.normalizeNullableText(dto.address),
+          redxAreaId: this.lookup.normalizeNullableText(dto.redxAreaId),
+          redxAreaName: this.lookup.normalizeNullableText(dto.redxAreaName),
+          redxPostCode: this.lookup.normalizeNullableText(dto.redxPostCode),
+          redxPickupStoreId: this.lookup.normalizeNullableText(
+            dto.redxPickupStoreId,
+          ),
           status: dto.status ?? WarehouseStatus.ACTIVE,
           createdBy: currentUser.id,
           updatedBy: currentUser.id,
@@ -88,9 +102,19 @@ export class WarehouseService {
         .from(warehouse)
         .where(where)
         .orderBy(
-          query.sortOrder === "asc"
-            ? asc(warehouse.createdAt)
-            : desc(warehouse.createdAt),
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [WarehouseSortBy.NAME]: warehouse.name,
+                [WarehouseSortBy.STATUS]: warehouse.status,
+                [WarehouseSortBy.CREATED_AT]: warehouse.createdAt,
+                [WarehouseSortBy.UPDATED_AT]: warehouse.updatedAt,
+              },
+              WarehouseSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
+          ),
         )
         .limit(limit)
         .offset(skip),
@@ -104,19 +128,25 @@ export class WarehouseService {
       rows.map((warehouseRow) => this.withWarehouseCount(warehouseRow)),
     );
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Warehouses were loaded successfully. The response includes the requested page of warehouse records for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, warehouseId: string) {
     const warehouseRow = await this.findWarehouseRow(businessId, warehouseId);
 
     if (!warehouseRow) {
-      throw new NotFoundException("Warehouse not found");
+      throw new NotFoundException(
+        "Warehouse could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return apiResponse(await this.withWarehouseCount(warehouseRow));
@@ -142,6 +172,20 @@ export class WarehouseService {
           }),
           ...(dto.address !== undefined && {
             address: this.lookup.normalizeNullableText(dto.address),
+          }),
+          ...(dto.redxAreaId !== undefined && {
+            redxAreaId: this.lookup.normalizeNullableText(dto.redxAreaId),
+          }),
+          ...(dto.redxAreaName !== undefined && {
+            redxAreaName: this.lookup.normalizeNullableText(dto.redxAreaName),
+          }),
+          ...(dto.redxPostCode !== undefined && {
+            redxPostCode: this.lookup.normalizeNullableText(dto.redxPostCode),
+          }),
+          ...(dto.redxPickupStoreId !== undefined && {
+            redxPickupStoreId: this.lookup.normalizeNullableText(
+              dto.redxPickupStoreId,
+            ),
           }),
           ...(dto.status !== undefined && { status: dto.status }),
           updatedBy: currentUser.id,
@@ -171,6 +215,7 @@ export class WarehouseService {
       .set({
         status: WarehouseStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
         updatedBy: currentUser.id,
       })
       .where(eq(warehouse.id, warehouseId));
@@ -197,7 +242,9 @@ export class WarehouseService {
     const warehouseRow = await this.findWarehouseRow(businessId, warehouseId);
 
     if (!warehouseRow) {
-      throw new NotFoundException("Warehouse not found");
+      throw new NotFoundException(
+        "Warehouse could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
   }
 
@@ -205,6 +252,22 @@ export class WarehouseService {
     businessId: string,
     warehouseId: string,
   ) {
+    const [{ value: defaultReferenceCount }] = await this.db
+      .select({ value: count() })
+      .from(businessSetting)
+      .where(
+        and(
+          eq(businessSetting.businessId, businessId),
+          eq(businessSetting.defaultWarehouseId, warehouseId),
+        ),
+      );
+
+    if (defaultReferenceCount > 0) {
+      throw new BadRequestException(
+        "Default warehouse cannot be deleted. Select another active default warehouse in business settings first.",
+      );
+    }
+
     const referenceCounts = await Promise.all([
       this.countRows(inventoryWarehouseStock, businessId, warehouseId),
       this.countRows(inventoryStockMovement, businessId, warehouseId),
@@ -229,7 +292,12 @@ export class WarehouseService {
     const [{ value }] = await this.db
       .select({ value: count() })
       .from(table)
-      .where(and(eq(table.businessId, businessId), eq(table.warehouseId, warehouseId)));
+      .where(
+        and(
+          eq(table.businessId, businessId),
+          eq(table.warehouseId, warehouseId),
+        ),
+      );
 
     return value;
   }

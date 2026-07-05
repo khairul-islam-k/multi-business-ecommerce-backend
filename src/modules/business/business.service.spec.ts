@@ -1,6 +1,5 @@
-import { describe, expect, it, jest } from "@jest/globals";
-
 import { business, website } from "@/database/schema";
+import { describe, expect, it, jest } from "@jest/globals";
 
 import { BusinessService } from "./business.service";
 

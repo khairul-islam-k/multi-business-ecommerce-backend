@@ -1,16 +1,3 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import {
-  type InventoryStock,
-  type InventoryStockMovement,
-  inventoryStock,
-  inventoryStockMovement,
-  inventoryWarehouseStock,
-  order as orderTable,
-  orderItem as orderItemTable,
-  product,
-  productVariant,
-  warehouse,
-} from "@/database/schema";
 import Decimal from "decimal.js";
 import {
   and,
@@ -22,10 +9,29 @@ import {
   isNull,
   or,
   sql,
-  type SQL,
+  SQL,
 } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import {
+  InventoryStock,
+  inventoryStock,
+  InventoryStockMovement,
+  inventoryStockMovement,
+  inventoryWarehouseStock,
+  order as orderTable,
+  orderItem as orderItemTable,
+  product,
+  productVariant,
+  warehouse,
+} from "@/database/schema";
+import { Injectable, NotFoundException } from "@nestjs/common";
+
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import { InventoryLookupService } from "../common/inventory-lookup.service";
 import {
   FulfillOrderAllocationDto,
   QueryStockDto,
@@ -33,12 +39,8 @@ import {
   ReserveOrderStockDto,
   UpdateStockAlertDto,
 } from "./dto/stock.dto";
-import { DatabaseService } from "../../../database/database.service";
-import { InventoryLookupService } from "../common/inventory-lookup.service";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class StockService {
@@ -75,19 +77,25 @@ export class StockService {
       rows.map((stock) => this.withStockRelations(stock)),
     );
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Stock records were loaded successfully. The response includes the requested page of stock balances for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, stockId: string) {
     const stock = await this.findStockRow(businessId, stockId);
 
     if (!stock) {
-      throw new NotFoundException("Stock not found");
+      throw new NotFoundException(
+        "Stock record could not be found. It may not exist yet, may have been deleted, or may not belong to the requested product, variant, or warehouse.",
+      );
     }
 
     return apiResponse(await this.withStockRelations(stock));
@@ -137,12 +145,16 @@ export class StockService {
       rows.map((movement) => this.withMovementRelations(movement)),
     );
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Warehouse stock records were loaded successfully. The response includes the requested page of warehouse-level stock balances and pagination metadata for browsing more results.",
+    );
   }
 
   async reserveForOrder(
@@ -383,7 +395,9 @@ export class StockService {
     const stock = await this.findStockRow(businessId, stockId);
 
     if (!stock) {
-      throw new NotFoundException("Stock not found");
+      throw new NotFoundException(
+        "Stock record could not be found. It may not exist yet, may have been deleted, or may not belong to the requested product, variant, or warehouse.",
+      );
     }
   }
 

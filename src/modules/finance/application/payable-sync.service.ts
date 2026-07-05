@@ -1,26 +1,59 @@
+import Decimal from "decimal.js";
+import { and, eq, ne } from "drizzle-orm";
+
+import {
+  FinancePartyType,
+  financePayable,
+  FinancePayableStatus,
+  FinanceSourceType,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  FinancePartyType,
-  FinancePayableStatus,
-  FinanceSourceType,
-  financePayable,
-} from "@/database/schema";
-import Decimal from "decimal.js";
-import { and, eq, ne } from "drizzle-orm";
 
+import { normalizeOptionalText } from "../../../common/text/normalizers";
 import { toMoney } from "../domain/money";
 import { getPayableStatus } from "../domain/payable-status.policy";
 import { FinanceCodeService } from "./finance-code.service";
-import { normalizeOptionalText } from "../../../common/text/normalizers";
+
 import type { DatabaseTransaction } from "../../../database/database.service";
 
 @Injectable()
 export class PayableSyncService {
   constructor(private readonly financeCodes: FinanceCodeService) {}
+
+  async createOrderReturnPayable(
+    tx: DatabaseTransaction,
+    params: {
+      businessId: string;
+      customerId: string;
+      returnId: string;
+      totalAmount: Decimal.Value;
+      note?: string | null;
+    },
+  ) {
+    const [created] = await tx
+      .insert(financePayable)
+      .values({
+        businessId: params.businessId,
+        payableNo: await this.financeCodes.generateUniquePayableNo(
+          params.businessId,
+        ),
+        partyType: FinancePartyType.CUSTOMER,
+        partyId: params.customerId,
+        sourceType: FinanceSourceType.REFUND,
+        sourceId: params.returnId,
+        totalAmount: toMoney(params.totalAmount),
+        paidAmount: new Decimal(0),
+        status: FinancePayableStatus.PENDING,
+        note: normalizeOptionalText(params.note),
+      })
+      .returning();
+
+    return created;
+  }
 
   async createSupplierInvoicePayable(
     tx: DatabaseTransaction,

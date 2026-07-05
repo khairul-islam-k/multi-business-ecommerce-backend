@@ -1,11 +1,9 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { ProductVariantStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
   ArrayMinSize,
-  IsBoolean,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsNumber,
   IsOptional,
@@ -15,6 +13,9 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
+
+import { ProductVariantStatus } from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 
 import { ProductImagesDto } from "../../common/dto/product-media.dto";
 

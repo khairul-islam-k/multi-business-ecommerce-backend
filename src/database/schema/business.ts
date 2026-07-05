@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  AnyPgColumn,
   boolean,
   index,
   integer,
@@ -9,11 +11,12 @@ import {
   uniqueIndex,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
+import { financeAccount, financeTax } from "./finance";
+import { warehouse } from "./inventory";
+import { productUnit } from "./product";
 import { systemUser } from "./system";
-import { sql } from "drizzle-orm";
 
 export const BusinessStatus = {
   ACTIVE: "ACTIVE",
@@ -41,6 +44,19 @@ export const businessMemberStatusEnum = pgEnum("BusinessMemberStatus", [
   "SUSPENDED",
 ]);
 
+export const BusinessBrandingDensity = {
+  COMPACT: "COMPACT",
+  DEFAULT: "DEFAULT",
+  COMFORTABLE: "COMFORTABLE",
+} as const;
+export type BusinessBrandingDensity =
+  (typeof BusinessBrandingDensity)[keyof typeof BusinessBrandingDensity];
+export const businessBrandingDensityEnum = pgEnum("BusinessBrandingDensity", [
+  "COMPACT",
+  "DEFAULT",
+  "COMFORTABLE",
+]);
+
 export const business = pgTable(
   "businesses",
   {
@@ -61,6 +77,10 @@ export const business = pgTable(
       { onDelete: "set null" },
     ),
     updatedById: uuid("updated_by").references(
+      (): AnyPgColumn => systemUser.id,
+      { onDelete: "set null" },
+    ),
+    deletedById: uuid("deleted_by").references(
       (): AnyPgColumn => systemUser.id,
       { onDelete: "set null" },
     ),
@@ -126,8 +146,25 @@ export const businessSetting = pgTable(
     productBarcodePrefix: varchar("product_barcode_prefix", { length: 20 }),
     variantSkuPrefix: varchar("variant_sku_prefix", { length: 20 }),
     variantBarcodePrefix: varchar("variant_barcode_prefix", { length: 20 }),
+    defaultWarehouseId: uuid("default_warehouse_id")
+      .notNull()
+      .references((): AnyPgColumn => warehouse.id, { onDelete: "restrict" }),
+    defaultFinanceAccountId: uuid("default_finance_account_id")
+      .notNull()
+      .references((): AnyPgColumn => financeAccount.id, {
+        onDelete: "restrict",
+      }),
+    defaultUnitId: uuid("default_unit_id")
+      .notNull()
+      .references((): AnyPgColumn => productUnit.id, {
+        onDelete: "restrict",
+      }),
+    defaultTaxId: uuid("default_tax_id")
+      .notNull()
+      .references((): AnyPgColumn => financeTax.id, {
+        onDelete: "restrict",
+      }),
     lowStockThreshold: integer("low_stock_threshold"),
-    allowBackorder: boolean("allow_backorder"),
     autoConfirmOrder: boolean("auto_confirm_order"),
     codEnabled: boolean("cod_enabled"),
     onlinePaymentEnabled: boolean("online_payment_enabled"),
@@ -147,7 +184,16 @@ export const businessSetting = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  () => [],
+  (table) => [
+    index("business_settings_default_warehouse_id_idx").on(
+      table.defaultWarehouseId,
+    ),
+    index("business_settings_default_finance_account_id_idx").on(
+      table.defaultFinanceAccountId,
+    ),
+    index("business_settings_default_unit_id_idx").on(table.defaultUnitId),
+    index("business_settings_default_tax_id_idx").on(table.defaultTaxId),
+  ],
 );
 export type BusinessSetting = typeof businessSetting.$inferSelect;
 export type NewBusinessSetting = typeof businessSetting.$inferInsert;
@@ -163,9 +209,55 @@ export const businessBranding = pgTable(
     logoUrl: text("logo_url"),
     faviconUrl: text("favicon_url"),
     primaryColor: varchar("primary_color", { length: 20 }),
+    primaryHoverColor: varchar("primary_hover_color", { length: 20 }),
+    primaryActiveColor: varchar("primary_active_color", { length: 20 }),
     secondaryColor: varchar("secondary_color", { length: 20 }),
     accentColor: varchar("accent_color", { length: 20 }),
+    successColor: varchar("success_color", { length: 20 }),
+    warningColor: varchar("warning_color", { length: 20 }),
+    errorColor: varchar("error_color", { length: 20 }),
+    infoColor: varchar("info_color", { length: 20 }),
+    dashboardBackgroundColor: varchar("dashboard_background_color", {
+      length: 20,
+    }),
+    sidebarBackgroundColor: varchar("sidebar_background_color", {
+      length: 20,
+    }),
+    sidebarTextColor: varchar("sidebar_text_color", { length: 20 }),
+    sidebarMutedTextColor: varchar("sidebar_muted_text_color", { length: 20 }),
+    sidebarActiveBackgroundColor: varchar("sidebar_active_background_color", {
+      length: 20,
+    }),
+    sidebarActiveTextColor: varchar("sidebar_active_text_color", {
+      length: 20,
+    }),
+    sidebarHoverBackgroundColor: varchar("sidebar_hover_background_color", {
+      length: 20,
+    }),
+    headerBackgroundColor: varchar("header_background_color", { length: 20 }),
+    headerTextColor: varchar("header_text_color", { length: 20 }),
+    cardBackgroundColor: varchar("card_background_color", { length: 20 }),
+    elevatedBackgroundColor: varchar("elevated_background_color", {
+      length: 20,
+    }),
+    tableHeaderBackgroundColor: varchar("table_header_background_color", {
+      length: 20,
+    }),
+    tableRowHoverColor: varchar("table_row_hover_color", { length: 20 }),
+    inputBackgroundColor: varchar("input_background_color", { length: 20 }),
+    disabledBackgroundColor: varchar("disabled_background_color", {
+      length: 20,
+    }),
+    textPrimaryColor: varchar("text_primary_color", { length: 20 }),
+    textSecondaryColor: varchar("text_secondary_color", { length: 20 }),
+    textMutedColor: varchar("text_muted_color", { length: 20 }),
+    textInverseColor: varchar("text_inverse_color", { length: 20 }),
+    borderColor: varchar("border_color", { length: 20 }),
+    borderSubtleColor: varchar("border_subtle_color", { length: 20 }),
+    focusRingColor: varchar("focus_ring_color", { length: 20 }),
     fontFamily: varchar("font_family", { length: 100 }),
+    borderRadius: varchar("border_radius", { length: 30 }),
+    density: businessBrandingDensityEnum(),
     seoTitle: varchar("seo_title", { length: 255 }),
     seoDescription: text("seo_description"),
     createdAt: timestamp("created_at", {
@@ -220,6 +312,10 @@ export const businessMember = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
+    deletedById: uuid("deleted_by").references(
+      (): AnyPgColumn => systemUser.id,
+      { onDelete: "set null" },
+    ),
     deletedAt: timestamp("deleted_at", {
       precision: 6,
       withTimezone: true,

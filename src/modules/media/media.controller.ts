@@ -143,10 +143,11 @@ export class MediaController {
       "Deletes several selected records in one request. Use this when cleaning up items that are no longer needed.",
   })
   deleteImages(
+    @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Body() dto: DeleteMediaBulkDto,
   ) {
-    return this.mediaService.deleteImages(businessId, dto);
+    return this.mediaService.deleteImages(user, businessId, dto);
   }
 
   @Delete("images/:mediaAssetId")
@@ -157,9 +158,10 @@ export class MediaController {
       "Deletes image from normal day-to-day use. Records may be kept internally when the system needs history for reporting or auditing.",
   })
   deleteImage(
+    @CurrentUser() user: CurrentUserPayload,
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("mediaAssetId", ParseUUIDPipe) mediaAssetId: string,
   ) {
-    return this.mediaService.deleteImage(businessId, mediaAssetId);
+    return this.mediaService.deleteImage(user, businessId, mediaAssetId);
   }
 }

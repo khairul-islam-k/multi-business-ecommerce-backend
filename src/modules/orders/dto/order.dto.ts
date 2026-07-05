@@ -8,20 +8,41 @@ import {
   IsOptional,
   IsString,
   IsUUID,
-  Max,
   MaxLength,
   Min,
   ValidateNested,
 } from "class-validator";
 
 import {
+  InvoiceStatus,
   OrderPaymentMethod,
   OrderPaymentStatus,
+  OrderReturnStatus,
   OrderSource,
   OrderStatus,
   OrderType,
 } from "@/database/schema";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+
+import { SortedPaginationQueryDto } from "../../../common/http/query.dto";
+
+export const OrderSortBy = {
+  ORDER_NO: "orderNo",
+  TOTAL_AMOUNT: "totalAmount",
+  CREATED_AT: "createdAt",
+  UPDATED_AT: "updatedAt",
+} as const;
+export type OrderSortBy = (typeof OrderSortBy)[keyof typeof OrderSortBy];
+
+export const InvoiceSortBy = {
+  INVOICE_NO: "invoiceNo",
+  INVOICE_DATE: "invoiceDate",
+  DUE_DATE: "dueDate",
+  TOTAL_AMOUNT: "totalAmount",
+  CREATED_AT: "createdAt",
+  UPDATED_AT: "updatedAt",
+} as const;
+export type InvoiceSortBy = (typeof InvoiceSortBy)[keyof typeof InvoiceSortBy];
 
 export class OrderItemInputDto {
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
@@ -62,35 +83,90 @@ export class OrderCourierInputDto {
   @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsOptional()
   @IsUUID()
-  courierId!: string;
+  courierId?: string;
 
   @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsOptional()
   @IsUUID()
-  deliveryZoneId!: string;
+  courierConfigId?: string;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  pickupWarehouseId?: string;
+
+  @ApiPropertyOptional({ example: "115" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  deliveryAreaId?: string;
+
+  @ApiPropertyOptional({ example: "Dhanmondi" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  deliveryAreaName?: string;
+
+  @ApiPropertyOptional({ example: "1209" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  deliveryPostCode?: string;
+
+  @ApiPropertyOptional({ example: "Dhaka" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  deliveryDivisionName?: string;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.001)
+  weight?: number;
 
   @ApiPropertyOptional({ example: 80 })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
-  courierFee!: number;
+  deliveryCharge?: number;
+
+  @ApiPropertyOptional({ example: 10 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  codCharge?: number;
+
+  @ApiPropertyOptional({ example: 80 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  courierFee?: number;
+
+  @ApiPropertyOptional({ example: "Please call before delivery" })
+  @IsOptional()
+  @IsString()
+  specialInstruction?: string;
 
   @ApiPropertyOptional({ example: "Customer Name" })
   @IsOptional()
   @IsString()
   @MaxLength(150)
-  recipientName!: string;
+  recipientName?: string;
 
   @ApiPropertyOptional({ example: "+8801700000000" })
   @IsOptional()
   @IsString()
   @MaxLength(30)
-  recipientPhone!: string;
+  recipientPhone?: string;
 
   @ApiPropertyOptional({ example: { address: "House 42, Street 69, Area Z" } })
   @IsOptional()
-  deliveryAddressSnapshot!: unknown;
+  deliveryAddressSnapshot?: unknown;
 }
 
 export class CreateOrderDto {
@@ -103,10 +179,6 @@ export class CreateOrderDto {
   @IsOptional()
   @IsUUID()
   warehouseId?: string;
-
-  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
-  @IsUUID()
-  taxId!: string;
 
   @ApiPropertyOptional({ enum: OrderType, example: OrderType.ADMIN })
   @IsOptional()
@@ -176,25 +248,7 @@ export class CreateOrderDto {
   courier?: OrderCourierInputDto;
 }
 
-export class QueryOrderDto {
-  @ApiPropertyOptional({ example: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @Min(1)
-  page?: number = 1;
-
-  @ApiPropertyOptional({ example: 10 })
-  @IsOptional()
-  @Type(() => Number)
-  @Min(1)
-  @Max(100)
-  limit?: number = 10;
-
-  @ApiPropertyOptional({ example: "ORD" })
-  @IsOptional()
-  @IsString()
-  search?: string;
-
+export class QueryOrderDto extends SortedPaginationQueryDto<OrderSortBy> {
   @ApiPropertyOptional({ enum: OrderStatus })
   @IsOptional()
   @IsEnum(OrderStatus)
@@ -211,12 +265,75 @@ export class QueryOrderDto {
   orderType?: OrderType;
 
   @ApiPropertyOptional({
-    example: "desc",
-    enum: ["asc", "desc"],
+    example: OrderSortBy.CREATED_AT,
+    enum: OrderSortBy,
   })
   @IsOptional()
-  @IsIn(["asc", "desc"])
-  sortOrder?: "asc" | "desc" = "desc";
+  @IsIn(Object.values(OrderSortBy))
+  sortBy?: OrderSortBy = OrderSortBy.CREATED_AT;
 }
 
 export class AddOrderPaymentDto extends OrderPaymentInputDto {}
+
+export class QueryInvoiceDto extends SortedPaginationQueryDto<InvoiceSortBy> {
+  @ApiPropertyOptional({ enum: InvoiceStatus })
+  @IsOptional()
+  @IsEnum(InvoiceStatus)
+  status?: InvoiceStatus;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  customerId?: string;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  orderId?: string;
+
+  @ApiPropertyOptional({
+    example: InvoiceSortBy.CREATED_AT,
+    enum: InvoiceSortBy,
+  })
+  @IsOptional()
+  @IsIn(Object.values(InvoiceSortBy))
+  sortBy?: InvoiceSortBy = InvoiceSortBy.CREATED_AT;
+}
+
+export class QueryCustomerInvoiceDto extends SortedPaginationQueryDto<InvoiceSortBy> {
+  @ApiPropertyOptional({ enum: InvoiceStatus })
+  @IsOptional()
+  @IsEnum(InvoiceStatus)
+  status?: InvoiceStatus;
+
+  @ApiPropertyOptional({
+    example: InvoiceSortBy.CREATED_AT,
+    enum: InvoiceSortBy,
+  })
+  @IsOptional()
+  @IsIn(Object.values(InvoiceSortBy))
+  sortBy?: InvoiceSortBy = InvoiceSortBy.CREATED_AT;
+}
+
+export class QueryOrderReturnDto extends SortedPaginationQueryDto<"createdAt"> {
+  @ApiPropertyOptional({ enum: OrderReturnStatus })
+  @IsOptional()
+  @IsEnum(OrderReturnStatus)
+  status?: OrderReturnStatus;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  orderId?: string;
+
+  @ApiPropertyOptional({ example: "createdAt", enum: ["createdAt"] })
+  @IsOptional()
+  @IsIn(["createdAt"])
+  sortBy = "createdAt" as const;
+}
+
+export class UpdateOrderReturnStatusDto {
+  @ApiProperty({ enum: OrderReturnStatus })
+  @IsEnum(OrderReturnStatus)
+  status!: OrderReturnStatus;
+}

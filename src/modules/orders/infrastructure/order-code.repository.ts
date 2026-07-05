@@ -5,6 +5,7 @@ import {
   invoice,
   order,
   orderPayment,
+  orderReturn,
 } from "@/database/schema";
 import { BadRequestException, Injectable } from "@nestjs/common";
 
@@ -98,6 +99,22 @@ export class OrderCodeRepository {
           and(
             eq(courierShipment.businessId, businessId),
             eq(courierShipment.shipmentNo, code),
+          ),
+        );
+
+      return row ?? null;
+    });
+  }
+
+  async generateUniqueReturnNo(businessId: string) {
+    return this.generateUniqueCode(businessId, "RET", async (code) => {
+      const [row] = await this.db
+        .select({ id: orderReturn.id })
+        .from(orderReturn)
+        .where(
+          and(
+            eq(orderReturn.businessId, businessId),
+            eq(orderReturn.returnNo, code),
           ),
         );
 

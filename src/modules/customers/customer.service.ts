@@ -1,25 +1,6 @@
+import { CustomerStatus } from "@/database/schema";
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { OrderCustomerStatus } from "@/database/schema";
 
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
-import {
-  CreateCustomerDto,
-  CustomerAddressDto,
-  CustomerSortBy,
-  CustomerSortOrder,
-  QueryCustomerDto,
-  QueryCustomerOrderDto,
-  UpdateCustomerAddressDto,
-  UpdateCustomerDto,
-} from "./dto/customer.dto";
-import {
-  assertCustomerContactAvailable,
-  normalizeCustomerContact,
-  normalizeCustomerContactUpdate,
-} from "./domain/customer-contact.policy";
-import { CustomerAddressService } from "./application/customer-address.service";
-import { CustomerOrderQueryService } from "./application/customer-order-query.service";
-import { CustomerRepository } from "./infrastructure/customer.repository";
 import { getPagination } from "../../common/http/pagination.util";
 import { resolveSort, resolveSortDirection } from "../../common/http/sort.util";
 import {
@@ -30,6 +11,26 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
+import { CustomerAddressService } from "./application/customer-address.service";
+import { CustomerOrderQueryService } from "./application/customer-order-query.service";
+import {
+  assertCustomerContactAvailable,
+  normalizeCustomerContact,
+  normalizeCustomerContactUpdate,
+} from "./domain/customer-contact.policy";
+import {
+  CreateCustomerDto,
+  CustomerAddressDto,
+  CustomerSortBy,
+  CustomerSortOrder,
+  QueryCustomerDto,
+  QueryCustomerOrderDto,
+  UpdateCustomerAddressDto,
+  UpdateCustomerDto,
+} from "./dto/customer.dto";
+import { CustomerRepository } from "./infrastructure/customer.repository";
+
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 const CUSTOMER_SORTS = Object.values(CustomerSortBy);
 
@@ -57,13 +58,16 @@ export class CustomerService {
       name: normalizeRequiredText(dto.name),
       email: contact.email,
       phone: contact.phone,
-      status: dto.status ?? OrderCustomerStatus.ACTIVE,
+      status: dto.status ?? CustomerStatus.ACTIVE,
       note: normalizeOptionalText(dto.note),
       createdBy: currentUser.id,
       updatedBy: currentUser.id,
     });
 
-    return apiResponse(customer, "Customer created successfully");
+    return apiResponse(
+      customer,
+      "Customer was created successfully. The customer profile and contact details were saved for this business.",
+    );
   }
 
   async findAll(businessId: string, query: QueryCustomerDto) {
@@ -96,7 +100,11 @@ export class CustomerService {
       orderBy,
     });
 
-    return paginatedResponse(items, pagination.meta(total));
+    return paginatedResponse(
+      items,
+      pagination.meta(total),
+      "Customers were loaded successfully. The response includes the requested page of customer records for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, customerId: string) {
@@ -136,7 +144,10 @@ export class CustomerService {
       updatedBy: currentUser.id,
     });
 
-    return apiResponse(customer, "Customer updated successfully");
+    return apiResponse(
+      customer,
+      "Customer was updated successfully. The latest customer profile and contact details are included in the response.",
+    );
   }
 
   async remove(
@@ -149,7 +160,12 @@ export class CustomerService {
     const deletedAt = new Date();
 
     await this.customers.transaction(async (tx) => {
-      await this.customers.softDeleteAddresses(tx, customerId, deletedAt);
+      await this.customers.softDeleteAddresses(
+        tx,
+        customerId,
+        currentUser.id,
+        deletedAt,
+      );
       await this.customers.softDeleteCustomer(
         tx,
         customerId,
@@ -158,7 +174,10 @@ export class CustomerService {
       );
     });
 
-    return apiResponse(null, "Customer deleted successfully");
+    return apiResponse(
+      null,
+      "Customer was deleted successfully. The customer record was soft-deleted and will no longer appear in active customer lists.",
+    );
   }
 
   createAddress(
@@ -182,8 +201,18 @@ export class CustomerService {
     return this.addresses.updateAddress(businessId, customerId, addressId, dto);
   }
 
-  removeAddress(businessId: string, customerId: string, addressId: string) {
-    return this.addresses.removeAddress(businessId, customerId, addressId);
+  removeAddress(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    customerId: string,
+    addressId: string,
+  ) {
+    return this.addresses.removeAddress(
+      currentUser,
+      businessId,
+      customerId,
+      addressId,
+    );
   }
 
   findOrders(
@@ -198,7 +227,9 @@ export class CustomerService {
     const customer = await this.customers.findById(businessId, customerId);
 
     if (!customer) {
-      throw new NotFoundException("Customer not found");
+      throw new NotFoundException(
+        "Customer could not be found. It may not exist, may have been deleted, or may not belong to the current business or storefront.",
+      );
     }
 
     return customer;

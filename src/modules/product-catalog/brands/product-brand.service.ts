@@ -1,28 +1,37 @@
+import { and, asc, count, eq, ilike, isNull, or } from "drizzle-orm";
+
+import {
+  product,
+  ProductBrand,
+  productBrand,
+  ProductSimpleStatus,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  type ProductBrand,
-  ProductSimpleStatus,
-  product,
-  productBrand,
-} from "@/database/schema";
-import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { QueryCatalogDto } from "../common/dto/query-catalog.dto";
 import {
-  CreateProductBrandDto,
-  UpdateProductBrandDto,
-} from "./dto/product-brand.dto";
-import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
-import { DatabaseService } from "../../../database/database.service";
+  buildOrderBy,
+  resolveSortColumn,
+} from "../../../common/http/sort.util";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import {
+  CatalogSortBy,
+  QueryCatalogDto,
+} from "../common/dto/query-catalog.dto";
+import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import {
+  CreateProductBrandDto,
+  UpdateProductBrandDto,
+} from "./dto/product-brand.dto";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 type BrandWithCount = ProductBrand & {
   _count: { products: number };
@@ -53,7 +62,6 @@ export class ProductBrandService {
           description: this.lookup.normalizeNullableText(dto.description),
           logoUrl: this.lookup.normalizeNullableText(dto.logoUrl),
           status: dto.status ?? ProductSimpleStatus.ACTIVE,
-          sortOrder: dto.sortOrder ?? 0,
           createdBy: currentUser.id,
           updatedBy: currentUser.id,
         })
@@ -90,10 +98,18 @@ export class ProductBrandService {
         .from(productBrand)
         .where(where)
         .orderBy(
-          asc(productBrand.sortOrder),
-          query.sortOrder === "asc"
-            ? asc(productBrand.createdAt)
-            : desc(productBrand.createdAt),
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [CatalogSortBy.NAME]: productBrand.name,
+                [CatalogSortBy.CREATED_AT]: productBrand.createdAt,
+                [CatalogSortBy.UPDATED_AT]: productBrand.updatedAt,
+              },
+              CatalogSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
+          ),
         )
         .limit(limit)
         .offset(skip)
@@ -105,19 +121,25 @@ export class ProductBrandService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Product brands were loaded successfully. The response includes the requested page of brands for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, brandId: string) {
     const brand = await this.findBrandRow(businessId, brandId);
 
     if (!brand) {
-      throw new NotFoundException("Brand not found");
+      throw new NotFoundException(
+        "Brand could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return apiResponse(await this.withBrandCount(brand));
@@ -145,7 +167,6 @@ export class ProductBrandService {
             logoUrl: this.lookup.normalizeNullableText(dto.logoUrl),
           }),
           ...(dto.status !== undefined && { status: dto.status }),
-          ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
           updatedBy: currentUser.id,
         })
         .where(eq(productBrand.id, brandId))
@@ -173,6 +194,7 @@ export class ProductBrandService {
       .set({
         status: ProductSimpleStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
         updatedBy: currentUser.id,
       })
       .where(eq(productBrand.id, brandId));
@@ -184,7 +206,9 @@ export class ProductBrandService {
     const brand = await this.findBrandRow(businessId, brandId);
 
     if (!brand) {
-      throw new NotFoundException("Brand not found");
+      throw new NotFoundException(
+        "Brand could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
   }
 

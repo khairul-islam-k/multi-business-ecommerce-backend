@@ -1,27 +1,30 @@
+import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+
+import {
+  financeExpense,
+  financeExpenseCategory,
+  FinanceExpenseCategoryStatus,
+} from "@/database/schema";
 import {
   BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  FinanceExpenseCategoryStatus,
-  financeExpense,
-  financeExpenseCategory,
-} from "@/database/schema";
-import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
-import {
-  CreateExpenseCategoryDto,
-  QueryExpenseCategoryDto,
-  UpdateExpenseCategoryDto,
-} from "./dto/finance-expense.dto";
-import { DatabaseService } from "../../../database/database.service";
 import { isUniqueConstraintError } from "../../../common/database/db-error.util";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import {
+  CreateExpenseCategoryDto,
+  QueryExpenseCategoryDto,
+  UpdateExpenseCategoryDto,
+} from "./dto/finance-expense.dto";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class ExpenseCategoryService {
@@ -82,12 +85,16 @@ export class ExpenseCategoryService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Expense categories were loaded successfully. The response includes the requested page of categories for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async update(
@@ -116,7 +123,11 @@ export class ExpenseCategoryService {
     }
   }
 
-  async remove(businessId: string, categoryId: string) {
+  async remove(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    categoryId: string,
+  ) {
     await this.assertCategoryExists(businessId, categoryId);
 
     const [{ value: activeExpenseCount }] = await this.db
@@ -141,6 +152,7 @@ export class ExpenseCategoryService {
       .set({
         status: FinanceExpenseCategoryStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
       })
       .where(eq(financeExpenseCategory.id, categoryId));
 
@@ -161,7 +173,9 @@ export class ExpenseCategoryService {
       .limit(1);
 
     if (!category) {
-      throw new NotFoundException("Expense category not found");
+      throw new NotFoundException(
+        "Expense category could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
   }
 

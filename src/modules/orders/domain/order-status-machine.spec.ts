@@ -1,6 +1,6 @@
+import { OrderStatus } from "@/database/schema";
 import { describe, expect, it } from "@jest/globals";
 import { BadRequestException } from "@nestjs/common";
-import { OrderStatus } from "@/database/schema";
 
 import {
   assertCanCancelOrder,
@@ -20,6 +20,15 @@ describe("order status machine", () => {
     );
     expect(() => assertCanCancelOrder(OrderStatus.DELIVERED)).toThrow(
       BadRequestException,
+    );
+  });
+
+  it("explains why an invalid transition is blocked", () => {
+    expect(() => assertCanShipOrder(OrderStatus.PLACED)).toThrow(
+      "This order cannot be marked as shipped because it is currently placed. Only confirmed, processing orders can be shipped.",
+    );
+    expect(() => assertCanCancelOrder(OrderStatus.DELIVERED)).toThrow(
+      "This order cannot be cancelled because it is already delivered.",
     );
   });
 });

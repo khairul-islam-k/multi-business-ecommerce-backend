@@ -3,15 +3,16 @@ import { and, count, eq, isNull } from "drizzle-orm";
 
 import {
   CatalogProductStatus,
+  businessSetting,
   courierShipment,
   courierShipmentItem,
+  customer,
   invoice,
   invoiceItem,
   InvoiceStatus,
   JsonValue,
   Order,
   order,
-  orderCustomer,
   OrderItem,
   orderItem,
   OrderPaymentMethod,
@@ -23,6 +24,8 @@ import {
   product,
   productVariant,
   ProductVariantStatus,
+  warehouse,
+  WarehouseStatus,
 } from "@/database/schema";
 import {
   BadRequestException,
@@ -72,6 +75,28 @@ export class CreateOrderService {
       orderType: dto.orderType ?? OrderType.ADMIN,
       orderSource: dto.orderSource ?? OrderSource.ADMIN_PANEL,
       fulfillImmediately: false,
+      initialStatus: OrderStatus.CONFIRMED,
+    });
+  }
+
+  async createStorefrontOrder(businessId: string, dto: CreateOrderDto) {
+    const settings = await this.assertStorefrontPaymentSettings(
+      businessId,
+      dto,
+    );
+
+    const defaultWarehouseId =
+      await this.resolveDefaultWarehouseIdOrThrow(businessId);
+
+    return this.createOrderFlow(undefined, businessId, {
+      ...dto,
+      warehouseId: defaultWarehouseId,
+      orderType: OrderType.ONLINE,
+      orderSource: OrderSource.WEBSITE,
+      fulfillImmediately: false,
+      initialStatus: settings.autoConfirmOrder
+        ? OrderStatus.CONFIRMED
+        : OrderStatus.PLACED,
     });
   }
 
@@ -87,48 +112,46 @@ export class CreateOrderService {
     return this.createOrderFlow(currentUser, businessId, {
       customerName: dto.customerName,
       customerPhone: dto.customerPhone,
+      customerEmail: dto.customerEmail,
       warehouseId: dto.warehouseId,
-      taxId: dto.taxId,
       customerId: dto.customerId,
       items: dto.items,
       payment: dto.payment,
       orderType: OrderType.POS,
       orderSource: OrderSource.POS,
       fulfillImmediately: true,
+      initialStatus: OrderStatus.DELIVERED,
     });
   }
 
   private async createOrderFlow(
-    currentUser: CurrentUserPayload,
+    currentUser: CurrentUserPayload | undefined,
     businessId: string,
     params: CreateOrderDto & {
       orderType: OrderType;
       orderSource: OrderSource;
       fulfillImmediately: boolean;
+      initialStatus: OrderStatus;
     },
   ) {
     assertOrderItems(params.items);
     assertOrderPaymentInput(params.payment, params.isCod);
-
-    if (params.isCod && !params.courier) {
-      throw new BadRequestException("COD order requires courier shipment");
-    }
+    await this.assertBusinessOrderSettings(businessId, params);
 
     if (params.customerId) {
       await this.assertCustomerExists(businessId, params.customerId);
     }
 
-    const [orderNo, invoiceNo, tax] = await Promise.all([
+    const [orderNo, invoiceNo] = await Promise.all([
       this.orderCodeRepository.generateUniqueOrderNo(businessId),
       this.orderCodeRepository.generateUniqueInvoiceNo(businessId),
-      this.financeLedgerService.assertActiveTax(
-        this.db,
-        businessId,
-        params.taxId,
-      ),
     ]);
-    const items = await this.buildItems(businessId, params.items, tax.rate);
+    const warehouseId =
+      params.warehouseId ??
+      (await this.resolveDefaultWarehouseIdOrThrow(businessId));
+    const items = await this.buildItems(businessId, params.items);
     const totals = calculateOrderTotals(items, params.shippingCharge ?? 0);
+    const taxSnapshot = this.deriveTaxSnapshot(items, totals);
 
     const createdOrder = await this.db.transaction(async (tx) => {
       const [createdOrder] = await tx
@@ -136,15 +159,14 @@ export class CreateOrderService {
         .values({
           businessId,
           customerId: params.customerId,
-          warehouseId: params.warehouseId,
-          taxId: tax.id,
+          warehouseId,
+          taxId: taxSnapshot.taxId,
           orderNo,
           orderType: params.orderType,
           orderSource: params.orderSource,
-          status: params.fulfillImmediately
-            ? OrderStatus.DELIVERED
-            : OrderStatus.CONFIRMED,
+          status: params.initialStatus,
           paymentStatus: OrderPaymentStatus.UNPAID,
+          isCod: params.isCod ?? false,
           customerName: this.normalizeNullableText(params.customerName),
           customerPhone: this.normalizeNullableText(params.customerPhone),
           customerEmail: this.normalizeNullableText(params.customerEmail),
@@ -154,21 +176,19 @@ export class CreateOrderService {
           subtotal: totals.subtotal,
           discountTotal: totals.discountTotal,
           taxTotal: totals.taxTotal,
-          taxRate: tax.rate,
+          taxRate: taxSnapshot.taxRate,
           shippingCharge: totals.shippingCharge,
           totalAmount: totals.totalAmount,
           note: this.normalizeNullableText(params.note),
-          createdBy: currentUser.id,
+          createdBy: currentUser?.id,
           paidAmount: new Decimal(0),
         })
         .returning();
 
       await tx.insert(orderStatusLog).values({
         orderId: createdOrder.id,
-        toStatus: params.fulfillImmediately
-          ? OrderStatus.DELIVERED
-          : OrderStatus.CONFIRMED,
-        changedBy: currentUser.id,
+        toStatus: params.initialStatus,
+        changedBy: currentUser?.id,
       });
 
       const createdItems: OrderItem[] = [];
@@ -180,10 +200,12 @@ export class CreateOrderService {
             orderId: createdOrder.id,
             productId: item.productId,
             variantId: item.variantId ?? null,
+            taxId: item.taxId,
             quantity: new Decimal(item.quantity),
             unitPrice: item.unitPrice,
             discountAmount: new Decimal(item.discountAmount ?? 0),
             taxAmount: item.taxAmount,
+            taxRate: item.taxRate,
             lineTotal: item.lineTotal,
           })
           .returning();
@@ -199,8 +221,8 @@ export class CreateOrderService {
             productId: item.productId,
             variantId: item.variantId ?? null,
             quantity: item.quantity,
-            warehouseId: params.warehouseId,
-            createdBy: currentUser.id,
+            warehouseId,
+            createdBy: currentUser?.id,
           },
         );
 
@@ -208,7 +230,7 @@ export class CreateOrderService {
           await this.inventoryLookupService.fulfillOrderAllocation(
             tx,
             { businessId, allocationId: allocation.id },
-            currentUser.id,
+            currentUser?.id,
           );
         }
       }
@@ -218,12 +240,16 @@ export class CreateOrderService {
         order: createdOrder,
         items: createdItems,
         invoiceNo,
-        taxId: tax.id,
-        taxRate: tax.rate,
-        currentUserId: currentUser.id,
+        currentUserId: currentUser?.id,
       });
 
       if (params.payment) {
+        if (!currentUser?.id) {
+          throw new BadRequestException(
+            "Payment cannot be created without a system user",
+          );
+        }
+
         await this.orderPaymentService.createPayment(tx, {
           businessId,
           orderId: createdOrder.id,
@@ -240,7 +266,7 @@ export class CreateOrderService {
           items: createdItems,
           courier: params.courier,
           isCod: params.isCod ?? false,
-          currentUserId: currentUser.id,
+          currentUserId: currentUser?.id,
         });
       }
 
@@ -261,9 +287,7 @@ export class CreateOrderService {
       order: Order;
       items: OrderItem[];
       invoiceNo: string;
-      taxId: string;
-      taxRate: Decimal.Value;
-      currentUserId: string;
+      currentUserId?: string;
     },
   ) {
     const [createdInvoice] = await tx
@@ -272,7 +296,7 @@ export class CreateOrderService {
         businessId: params.businessId,
         orderId: params.order.id,
         customerId: params.order.customerId,
-        taxId: params.taxId,
+        taxId: params.order.taxId,
         invoiceNo: params.invoiceNo,
         invoiceDate: new Date(),
         status: InvoiceStatus.ISSUED,
@@ -284,7 +308,7 @@ export class CreateOrderService {
         subtotal: params.order.subtotal,
         discountTotal: params.order.discountTotal,
         taxTotal: params.order.taxTotal,
-        taxRate: new Decimal(params.taxRate),
+        taxRate: params.order.taxRate,
         shippingCharge: params.order.shippingCharge,
         totalAmount: params.order.totalAmount,
         paidAmount: params.order.paidAmount,
@@ -299,10 +323,12 @@ export class CreateOrderService {
         orderItemId: item.id,
         productId: item.productId,
         variantId: item.variantId,
+        taxId: item.taxId,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         discountAmount: item.discountAmount,
         taxAmount: item.taxAmount,
+        taxRate: item.taxRate,
         lineTotal: item.lineTotal,
       })),
     );
@@ -316,7 +342,7 @@ export class CreateOrderService {
       items: OrderItem[];
       courier: NonNullable<CreateOrderDto["courier"]>;
       isCod: boolean;
-      currentUserId: string;
+      currentUserId?: string;
     },
   ) {
     const shipmentNo = await this.orderCodeRepository.generateUniqueShipmentNo(
@@ -325,6 +351,27 @@ export class CreateOrderService {
     const codAmount = params.isCod
       ? new Decimal(params.order.totalAmount).minus(params.order.paidAmount)
       : new Decimal(0);
+    const [pickupWarehouse] = await tx
+      .select()
+      .from(warehouse)
+      .where(
+        and(
+          eq(
+            warehouse.id,
+            params.courier.pickupWarehouseId ?? params.order.warehouseId,
+          ),
+          eq(warehouse.businessId, params.businessId),
+          eq(warehouse.status, WarehouseStatus.ACTIVE),
+          isNull(warehouse.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!pickupWarehouse?.redxAreaId || !pickupWarehouse.redxAreaName) {
+      throw new BadRequestException(
+        "Pickup warehouse must have REDX area metadata before a REDX shipment can be created.",
+      );
+    }
 
     const [shipment] = await tx
       .insert(courierShipment)
@@ -332,10 +379,14 @@ export class CreateOrderService {
         businessId: params.businessId,
         orderId: params.order.id,
         courierId: params.courier.courierId,
-        deliveryZoneId: params.courier.deliveryZoneId,
+        courierConfigId: params.courier.courierConfigId,
+        pickupWarehouseId:
+          params.courier.pickupWarehouseId ?? params.order.warehouseId,
         shipmentNo,
         shippingCharge: params.order.shippingCharge,
         codAmount,
+        deliveryCharge: new Decimal(params.courier.deliveryCharge ?? 0),
+        codCharge: new Decimal(params.courier.codCharge ?? 0),
         courierFee: new Decimal(params.courier.courierFee ?? 0),
         recipientName:
           this.normalizeNullableText(params.courier.recipientName) ??
@@ -343,10 +394,32 @@ export class CreateOrderService {
         recipientPhone:
           this.normalizeNullableText(params.courier.recipientPhone) ??
           params.order.customerPhone,
+        deliveryAreaId: this.normalizeNullableText(
+          params.courier.deliveryAreaId,
+        ),
+        deliveryAreaName: this.normalizeNullableText(
+          params.courier.deliveryAreaName,
+        ),
+        deliveryPostCode: this.normalizeNullableText(
+          params.courier.deliveryPostCode,
+        ),
+        deliveryDivisionName: this.normalizeNullableText(
+          params.courier.deliveryDivisionName,
+        ),
+        pickupAreaId: pickupWarehouse.redxAreaId,
+        pickupAreaName: pickupWarehouse.redxAreaName,
+        pickupPostCode: pickupWarehouse.redxPostCode,
+        pickupStoreId: pickupWarehouse.redxPickupStoreId,
         deliveryAddressSnapshot:
           (params.courier.deliveryAddressSnapshot as JsonValue | undefined) ??
           params.order.shippingAddressSnapshot ??
           undefined,
+        providerRequest: {
+          parcelWeight: params.courier.weight ?? 1,
+          instruction:
+            this.normalizeNullableText(params.courier.specialInstruction) ??
+            null,
+        } as JsonValue,
         createdBy: params.currentUserId,
       })
       .returning();
@@ -362,19 +435,15 @@ export class CreateOrderService {
     );
   }
 
-  private async buildItems(
-    businessId: string,
-    items: OrderItemInputDto[],
-    taxRate: Decimal.Value,
-  ) {
+  private async buildItems(businessId: string, items: OrderItemInputDto[]) {
     const builtItems: OrderItemWithPrice[] = [];
-    const rate = new Decimal(taxRate);
 
     for (const item of items) {
       const [productRow] = await this.db
         .select({
           id: product.id,
           price: product.price,
+          taxId: product.taxId,
         })
         .from(product)
         .where(
@@ -389,6 +458,13 @@ export class CreateOrderService {
       if (!productRow) {
         throw new BadRequestException("One or more order items are invalid");
       }
+
+      const tax = await this.financeLedgerService.assertActiveTax(
+        this.db,
+        businessId,
+        productRow.taxId,
+      );
+      const rate = new Decimal(tax.rate);
 
       const [{ value: variantCount }] = await this.db
         .select({ value: count() })
@@ -448,6 +524,8 @@ export class CreateOrderService {
         ...item,
         variantId: item.variantId ?? null,
         unitPrice,
+        taxId: tax.id,
+        taxRate: rate,
         taxAmount,
         lineTotal,
       });
@@ -456,20 +534,127 @@ export class CreateOrderService {
     return builtItems;
   }
 
+  private deriveTaxSnapshot(
+    items: OrderItemWithPrice[],
+    totals: ReturnType<typeof calculateOrderTotals>,
+  ) {
+    const uniqueTaxIds = new Set(items.map((item) => item.taxId));
+    const taxableBase = totals.subtotal.minus(totals.discountTotal);
+    const taxRate = taxableBase.equals(0)
+      ? new Decimal(0)
+      : totals.taxTotal.mul(100).div(taxableBase).toDecimalPlaces(2);
+
+    return {
+      taxId: uniqueTaxIds.size === 1 ? items[0]?.taxId : null,
+      taxRate,
+    };
+  }
+
   private async assertCustomerExists(businessId: string, customerId: string) {
-    const [customer] = await this.db
-      .select({ id: orderCustomer.id })
-      .from(orderCustomer)
+    const [existingCustomer] = await this.db
+      .select({ id: customer.id })
+      .from(customer)
       .where(
         and(
-          eq(orderCustomer.id, customerId),
-          eq(orderCustomer.businessId, businessId),
-          isNull(orderCustomer.deletedAt),
+          eq(customer.id, customerId),
+          eq(customer.businessId, businessId),
+          isNull(customer.deletedAt),
         ),
       );
 
-    if (!customer) {
-      throw new NotFoundException("Customer not found");
+    if (!existingCustomer) {
+      throw new NotFoundException(
+        "Customer could not be found. It may not exist, may have been deleted, or may not belong to the current business or storefront.",
+      );
+    }
+  }
+
+  private async resolveDefaultWarehouseIdOrThrow(businessId: string) {
+    const [settings] = await this.db
+      .select({ defaultWarehouseId: businessSetting.defaultWarehouseId })
+      .from(businessSetting)
+      .where(eq(businessSetting.businessId, businessId))
+      .limit(1);
+
+    if (!settings?.defaultWarehouseId) {
+      throw new BadRequestException(
+        "Storefront orders require a default warehouse. Please set an active default warehouse in business settings before accepting storefront orders.",
+      );
+    }
+
+    const [warehouseRow] = await this.db
+      .select({ id: warehouse.id })
+      .from(warehouse)
+      .where(
+        and(
+          eq(warehouse.id, settings.defaultWarehouseId),
+          eq(warehouse.businessId, businessId),
+          eq(warehouse.status, WarehouseStatus.ACTIVE),
+          isNull(warehouse.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!warehouseRow) {
+      throw new BadRequestException(
+        "Storefront orders require an active default warehouse. The configured default warehouse is missing, inactive, or deleted.",
+      );
+    }
+
+    return warehouseRow.id;
+  }
+
+  private async assertStorefrontPaymentSettings(
+    businessId: string,
+    dto: CreateOrderDto,
+  ) {
+    const [settings] = await this.db
+      .select({
+        codEnabled: businessSetting.codEnabled,
+        onlinePaymentEnabled: businessSetting.onlinePaymentEnabled,
+        autoConfirmOrder: businessSetting.autoConfirmOrder,
+      })
+      .from(businessSetting)
+      .where(eq(businessSetting.businessId, businessId))
+      .limit(1);
+
+    if (dto.isCod && !settings?.codEnabled) {
+      throw new BadRequestException(
+        "Cash on delivery is not enabled for this storefront",
+      );
+    }
+
+    if (dto.payment && !settings?.onlinePaymentEnabled) {
+      throw new BadRequestException(
+        "Online payment is not enabled for this storefront",
+      );
+    }
+
+    return {
+      codEnabled: settings?.codEnabled ?? false,
+      onlinePaymentEnabled: settings?.onlinePaymentEnabled ?? false,
+      autoConfirmOrder: settings?.autoConfirmOrder ?? false,
+    };
+  }
+
+  private async assertBusinessOrderSettings(
+    businessId: string,
+    dto: Pick<CreateOrderDto, "isCod">,
+  ) {
+    if (!dto.isCod) {
+      return;
+    }
+
+    const [settings] = await this.db
+      .select({ codEnabled: businessSetting.codEnabled })
+      .from(businessSetting)
+      .where(eq(businessSetting.businessId, businessId))
+      .limit(1);
+
+    if (!settings?.codEnabled) {
+      throw new BadRequestException(
+        "Cash on delivery is not enabled for this business",
+      );
     }
   }
 

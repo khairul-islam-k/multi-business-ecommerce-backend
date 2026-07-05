@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  AnyPgColumn,
   index,
   pgEnum,
   pgTable,
@@ -7,9 +9,7 @@ import {
   uniqueIndex,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
 import { business } from "./business";
 import { systemUser } from "./system";
@@ -100,6 +100,10 @@ export const rbacRole = pgTable(
       { onDelete: "set null" },
     ),
     updatedById: uuid("updated_by").references(
+      (): AnyPgColumn => systemUser.id,
+      { onDelete: "set null" },
+    ),
+    deletedById: uuid("deleted_by").references(
       (): AnyPgColumn => systemUser.id,
       { onDelete: "set null" },
     ),

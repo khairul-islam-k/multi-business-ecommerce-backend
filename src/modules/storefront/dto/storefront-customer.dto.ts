@@ -1,0 +1,326 @@
+import { Type } from "class-transformer";
+import {
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsIn,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+  ValidateNested,
+} from "class-validator";
+
+import {
+  CustomerAddressType,
+  OrderCartStatus,
+  OrderPaymentStatus,
+  OrderReturnStatus,
+  OrderStatus,
+  ProductReviewStatus,
+} from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+
+import {
+  PaginationQueryDto,
+  SortedPaginationQueryDto,
+} from "../../../common/http/query.dto";
+import { StorefrontCourierSelectionDto } from "../../couriers/dto/courier.dto";
+import { OrderSortBy } from "../../orders/dto/order.dto";
+
+export const StorefrontCheckoutPaymentMethod = {
+  ONLINE: "ONLINE",
+  COD: "COD",
+} as const;
+export type StorefrontCheckoutPaymentMethod =
+  (typeof StorefrontCheckoutPaymentMethod)[keyof typeof StorefrontCheckoutPaymentMethod];
+
+export class StorefrontAddressQueryDto extends PaginationQueryDto {}
+
+export class StorefrontCartQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({ enum: OrderCartStatus })
+  @IsOptional()
+  @IsEnum(OrderCartStatus)
+  status?: OrderCartStatus;
+}
+
+export const StorefrontWishlistSortBy = {
+  CREATED_AT: "createdAt",
+  UPDATED_AT: "updatedAt",
+} as const;
+export type StorefrontWishlistSortBy =
+  (typeof StorefrontWishlistSortBy)[keyof typeof StorefrontWishlistSortBy];
+
+export class StorefrontWishlistQueryDto extends SortedPaginationQueryDto<StorefrontWishlistSortBy> {
+  @ApiPropertyOptional({
+    enum: StorefrontWishlistSortBy,
+    example: StorefrontWishlistSortBy.CREATED_AT,
+  })
+  @IsOptional()
+  @IsIn(Object.values(StorefrontWishlistSortBy))
+  sortBy?: StorefrontWishlistSortBy = StorefrontWishlistSortBy.CREATED_AT;
+}
+
+export class StorefrontWishlistItemDto {
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsUUID()
+  productId!: string;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  variantId?: string;
+}
+
+export class AddStorefrontCartItemDto {
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsUUID()
+  productId!: string;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  variantId?: string;
+
+  @ApiProperty({ example: 1 })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.001)
+  quantity!: number;
+}
+
+export class UpdateStorefrontCartItemDto {
+  @ApiProperty({ example: 2 })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.001)
+  quantity!: number;
+}
+
+export class CreateStorefrontReviewDto {
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  productId!: string;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  variantId?: string;
+
+  @ApiProperty({ example: 5 })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  @Max(5)
+  rating!: number;
+
+  @ApiPropertyOptional({ example: "Great keyboard" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  title?: string;
+
+  @ApiPropertyOptional({ example: "The build quality feels excellent." })
+  @IsOptional()
+  @IsString()
+  comment?: string;
+}
+
+export class StorefrontReviewQueryDto {
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  page?: number = 1;
+
+  @ApiPropertyOptional({ example: 10 })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  @Max(100)
+  limit?: number = 10;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  productId?: string;
+
+  @ApiPropertyOptional({ enum: ProductReviewStatus })
+  @IsOptional()
+  @IsEnum(ProductReviewStatus)
+  status?: ProductReviewStatus;
+}
+
+export class CreateStorefrontCustomerAddressDto {
+  @ApiProperty({ enum: CustomerAddressType })
+  @IsEnum(CustomerAddressType)
+  addressType!: CustomerAddressType;
+
+  @ApiPropertyOptional({ example: "Home" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  name?: string;
+
+  @ApiProperty({ example: "House 42, Road 7, Dhanmondi" })
+  @IsString()
+  address!: string;
+
+  @ApiPropertyOptional({ example: "Dhaka" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  city?: string;
+
+  @ApiPropertyOptional({ example: "Bangladesh" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  country?: string;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @IsBoolean()
+  isDefault?: boolean;
+}
+
+export class UpdateStorefrontCustomerAddressDto {
+  @ApiPropertyOptional({ enum: CustomerAddressType })
+  @IsOptional()
+  @IsEnum(CustomerAddressType)
+  addressType?: CustomerAddressType;
+
+  @ApiPropertyOptional({ example: "Home" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  name?: string;
+
+  @ApiPropertyOptional({ example: "House 42, Road 7, Dhanmondi" })
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @ApiPropertyOptional({ example: "Dhaka" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  city?: string;
+
+  @ApiPropertyOptional({ example: "Bangladesh" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  country?: string;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  isDefault?: boolean;
+}
+
+export class PlaceStorefrontOrderDto {
+  @ApiProperty({ enum: StorefrontCheckoutPaymentMethod })
+  @IsEnum(StorefrontCheckoutPaymentMethod)
+  paymentMethod!: StorefrontCheckoutPaymentMethod;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  shippingAddressId?: string;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  courierConfigId?: string;
+
+  @ApiPropertyOptional({ type: StorefrontCourierSelectionDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => StorefrontCourierSelectionDto)
+  courierQuote?: StorefrontCourierSelectionDto;
+
+  @ApiPropertyOptional({ example: { address: "House 42, Dhaka" } })
+  @IsOptional()
+  @IsObject()
+  shippingAddressSnapshot?: unknown;
+
+  @ApiPropertyOptional({ example: "Please call before delivery" })
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
+export class StorefrontOrderQueryDto extends SortedPaginationQueryDto<OrderSortBy> {
+  @ApiPropertyOptional({
+    enum: OrderSortBy,
+    example: OrderSortBy.CREATED_AT,
+  })
+  @IsOptional()
+  @IsIn(Object.values(OrderSortBy))
+  sortBy?: OrderSortBy = OrderSortBy.CREATED_AT;
+
+  @ApiPropertyOptional({ enum: OrderStatus })
+  @IsOptional()
+  @IsEnum(OrderStatus)
+  status?: OrderStatus;
+
+  @ApiPropertyOptional({ enum: OrderPaymentStatus })
+  @IsOptional()
+  @IsEnum(OrderPaymentStatus)
+  paymentStatus?: OrderPaymentStatus;
+}
+
+export class CancelStorefrontOrderDto {
+  @ApiPropertyOptional({ example: "Ordered by mistake" })
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
+export class StorefrontReturnItemDto {
+  @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsUUID()
+  orderItemId!: string;
+
+  @ApiProperty({ example: 1 })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.001)
+  quantity!: number;
+
+  @ApiPropertyOptional({ example: "Damaged item" })
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
+export class CreateStorefrontOrderReturnDto {
+  @ApiPropertyOptional({ example: "Product arrived damaged" })
+  @IsOptional()
+  @IsString()
+  reason?: string;
+
+  @ApiProperty({ type: [StorefrontReturnItemDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StorefrontReturnItemDto)
+  items!: StorefrontReturnItemDto[];
+}
+
+export class StorefrontOrderReturnQueryDto extends SortedPaginationQueryDto<"createdAt"> {
+  @ApiPropertyOptional({ enum: OrderReturnStatus })
+  @IsOptional()
+  @IsEnum(OrderReturnStatus)
+  status?: OrderReturnStatus;
+
+  @ApiPropertyOptional({ example: "createdAt", enum: ["createdAt"] })
+  @IsOptional()
+  @IsIn(["createdAt"])
+  sortBy = "createdAt" as const;
+}

@@ -1,55 +1,29 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { SystemUserStatus } from "@/database/schema";
-import { Type } from "class-transformer";
-import {
-  IsEnum,
-  IsIn,
-  IsInt,
-  IsOptional,
-  IsString,
-  Max,
-  Min,
-} from "class-validator";
+import { IsEnum, IsIn, IsOptional } from "class-validator";
 
-export class QueryTenantDto {
-  @ApiPropertyOptional({ example: "" })
-  @IsOptional()
-  @IsString()
-  search?: string;
+import { SortedPaginationQueryDto } from "../../../common/http/query.dto";
 
+export const TenantSortBy = {
+  ID: "id",
+  NAME: "name",
+  STATUS: "status",
+  CREATED_AT: "createdAt",
+  UPDATED_AT: "updatedAt",
+} as const;
+export type TenantSortBy = (typeof TenantSortBy)[keyof typeof TenantSortBy];
+
+export class QueryTenantDto extends SortedPaginationQueryDto<TenantSortBy> {
   @ApiPropertyOptional({ enum: SystemUserStatus })
   @IsOptional()
   @IsEnum(SystemUserStatus)
   status?: SystemUserStatus;
 
-  @ApiPropertyOptional({ example: 1, default: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
-
-  @ApiPropertyOptional({ example: 10, default: 10 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit?: number = 10;
-
   @ApiPropertyOptional({
     example: "createdAt",
-    enum: ["id", "name", "status", "createdAt", "updatedAt"],
+    enum: TenantSortBy,
   })
   @IsOptional()
-  @IsIn(["id", "name", "status", "createdAt", "updatedAt"])
-  sortBy?: "id" | "name" | "status" | "createdAt" | "updatedAt" = "createdAt";
-
-  @ApiPropertyOptional({
-    example: "desc",
-    enum: ["asc", "desc"],
-  })
-  @IsOptional()
-  @IsIn(["asc", "desc"])
-  sortOrder?: "asc" | "desc" = "desc";
+  @IsIn(Object.values(TenantSortBy))
+  sortBy?: TenantSortBy = TenantSortBy.CREATED_AT;
 }

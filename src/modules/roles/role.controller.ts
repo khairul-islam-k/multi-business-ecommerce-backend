@@ -1,3 +1,4 @@
+import { PermissionAction, RbacFeature } from "@/database/schema";
 import {
   Body,
   Controller,
@@ -11,14 +12,12 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { PermissionAction, RbacFeature } from "@/database/schema";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
-import { RequirePermission } from "../permissions/decorators/require-permission.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { BusinessGuard } from "../business/guards/business.guard";
 import { SubscriptionGuard } from "../packages/guards/subscription.guard";
+import { RequirePermission } from "../permissions/decorators/require-permission.decorator";
 import { PermissionGuard } from "../permissions/guards/permission.guard";
 import { AssignRoleDto } from "./dto/assign-role.dto";
 import { CreateRoleDto } from "./dto/create-role.dto";
@@ -27,6 +26,8 @@ import { QueryRoleDto } from "./dto/query-role.dto";
 import { UpdateRoleAssignmentDto } from "./dto/update-role-assignment.dto";
 import { UpdateRoleDto } from "./dto/update-role.dto";
 import { RoleService } from "./role.service";
+
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 @ApiTags("Roles")
 @ApiBearerAuth()

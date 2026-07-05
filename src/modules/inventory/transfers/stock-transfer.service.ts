@@ -28,6 +28,7 @@ import {
 } from "./dto/stock-transfer.dto";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+
 import type {
   Database,
   DatabaseTransaction,
@@ -57,8 +58,8 @@ export class StockTransferService {
       );
     }
 
-    await Promise.all([
-      this.inventoryLookupService.assertWarehouseExists(
+    const [fromWarehouse] = await Promise.all([
+      await this.inventoryLookupService.assertWarehouseExists(
         businessId,
         dto.fromWarehouseId,
       ),
@@ -74,6 +75,26 @@ export class StockTransferService {
         ),
       ),
     ]);
+
+    const stockChecks = await Promise.all(
+      dto.items.map(async (item) => {
+        const availableStock =
+          await this.inventoryLookupService.getWarehouseStock(
+            businessId,
+            fromWarehouse.id,
+            item.productId,
+            item.variantId,
+          );
+
+        return availableStock.totalQuantity.lessThan(item.requestedQuantity);
+      }),
+    );
+
+    if (stockChecks.some(Boolean)) {
+      throw new BadRequestException(
+        "Transfer quantity cannot be greater than the available stock quantity.",
+      );
+    }
 
     const transferNo =
       await this.inventoryLookupService.generateUniqueTransferNo(businessId);
@@ -157,12 +178,16 @@ export class StockTransferService {
       rows.map((transfer) => this.withTransferRelations(transfer)),
     );
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Stock transfers were loaded successfully. The response includes the requested page of transfer records for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, transferId: string) {

@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  AnyPgColumn,
   boolean,
   index,
   integer,
@@ -9,12 +11,13 @@ import {
   uniqueIndex,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
-import { decimal } from "./common";
 import { business } from "./business";
+import { decimal } from "./common";
+import { customer } from "./customer";
+import { financeTax } from "./finance";
+import { systemUser } from "./system";
 
 export const ProductSimpleStatus = {
   ACTIVE: "ACTIVE",
@@ -81,9 +84,15 @@ export const productCategory = pgTable(
     description: text(),
     imageUrl: text("image_url"),
     status: productSimpleStatusEnum().notNull(),
-    sortOrder: integer("sort_order").default(0).notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -115,9 +124,15 @@ export const productBrand = pgTable(
     description: text(),
     logoUrl: text("logo_url"),
     status: productSimpleStatusEnum().notNull(),
-    sortOrder: integer("sort_order").default(0).notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -146,8 +161,15 @@ export const productUnit = pgTable(
       .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     name: varchar({ length: 100 }).notNull(),
     status: productSimpleStatusEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -176,8 +198,17 @@ export const productTag = pgTable(
       .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     name: varchar({ length: 100 }).notNull(),
     status: productSimpleStatusEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    // TODO: make it notNull
+    isFeatured: boolean("is_featured").notNull(),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -204,16 +235,26 @@ export const product = pgTable(
     businessId: uuid("business_id")
       .notNull()
       .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
-    categoryId: uuid("category_id").references(
-      (): AnyPgColumn => productCategory.id,
-      { onDelete: "set null" },
-    ),
-    brandId: uuid("brand_id").references((): AnyPgColumn => productBrand.id, {
-      onDelete: "set null",
-    }),
-    unitId: uuid("unit_id").references((): AnyPgColumn => productUnit.id, {
-      onDelete: "set null",
-    }),
+    categoryId: uuid("category_id")
+      .notNull()
+      .references((): AnyPgColumn => productCategory.id, {
+        onDelete: "set null",
+      }),
+    brandId: uuid("brand_id")
+      .notNull()
+      .references((): AnyPgColumn => productBrand.id, {
+        onDelete: "set null",
+      }),
+    unitId: uuid("unit_id")
+      .notNull()
+      .references((): AnyPgColumn => productUnit.id, {
+        onDelete: "set null",
+      }),
+    taxId: uuid("tax_id")
+      .notNull()
+      .references((): AnyPgColumn => financeTax.id, {
+        onDelete: "restrict",
+      }),
     name: varchar({ length: 200 }).notNull(),
     slug: varchar({ length: 220 }).notNull(),
     description: text(),
@@ -222,8 +263,15 @@ export const product = pgTable(
     price: decimal({ precision: 12, scale: 2 }).notNull(),
     weight: decimal({ precision: 10, scale: 2 }),
     status: catalogProductStatusEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -235,18 +283,17 @@ export const product = pgTable(
     uniqueIndex("products_business_id_name_deleted_unique")
       .on(table.businessId, table.name)
       .where(sql`${table.deletedAt} IS NULL`),
-    uniqueIndex("product_products_business_id_sku_unique").on(
-      table.businessId,
-      table.sku,
-    ),
-    uniqueIndex("product_products_business_id_barcode_unique").on(
-      table.businessId,
-      table.barcode,
-    ),
+    uniqueIndex("product_products_business_id_sku_active_unique")
+      .on(table.businessId, table.sku)
+      .where(sql`${table.deletedAt} IS NULL`),
+    uniqueIndex("product_products_business_id_barcode_active_unique")
+      .on(table.businessId, table.barcode)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("product_products_business_id_idx").on(table.businessId),
     index("product_products_category_id_idx").on(table.categoryId),
     index("product_products_brand_id_idx").on(table.brandId),
     index("product_products_unit_id_idx").on(table.unitId),
+    index("product_products_tax_id_idx").on(table.taxId),
     index("product_products_status_idx").on(table.status),
     index("product_products_deleted_at_idx").on(table.deletedAt),
   ],
@@ -270,8 +317,15 @@ export const productVariant = pgTable(
     priceOverride: decimal("price_override", { precision: 12, scale: 2 }),
     weight: decimal({ precision: 10, scale: 2 }),
     status: productVariantStatusEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -283,14 +337,12 @@ export const productVariant = pgTable(
     uniqueIndex("product_variants_business_id_product_id_deleted_unique")
       .on(table.businessId, table.productId, table.title)
       .where(sql`${table.deletedAt} IS NULL`),
-    uniqueIndex("product_variants_business_id_sku_unique").on(
-      table.businessId,
-      table.sku,
-    ),
-    uniqueIndex("product_variants_business_id_barcode_unique").on(
-      table.businessId,
-      table.barcode,
-    ),
+    uniqueIndex("product_variants_business_id_sku_active_unique")
+      .on(table.businessId, table.sku)
+      .where(sql`${table.deletedAt} IS NULL`),
+    uniqueIndex("product_variants_business_id_barcode_active_unique")
+      .on(table.businessId, table.barcode)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("product_variants_business_id_idx").on(table.businessId),
     index("product_variants_product_id_idx").on(table.productId),
     index("product_variants_status_idx").on(table.status),
@@ -309,8 +361,15 @@ export const productAttribute = pgTable(
       .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     name: varchar({ length: 100 }).notNull(),
     status: productSimpleStatusEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -343,8 +402,15 @@ export const productAttributeValue = pgTable(
         onDelete: "cascade",
       }),
     value: varchar({ length: 150 }).notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -426,9 +492,15 @@ export const productImage = pgTable(
     imageUrl: text("image_url").notNull(),
     altText: text("alt_text"),
     isThumbnail: boolean("is_thumbnail").notNull(),
-    sortOrder: integer("sort_order").default(0).notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -480,6 +552,9 @@ export const productReview = pgTable(
     productId: uuid("product_id")
       .notNull()
       .references((): AnyPgColumn => product.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id").references((): AnyPgColumn => customer.id, {
+      onDelete: "set null",
+    }),
     variantId: uuid("variant_id").references(
       (): AnyPgColumn => productVariant.id,
       { onDelete: "set null" },
@@ -491,8 +566,15 @@ export const productReview = pgTable(
     reviewerEmail: varchar("reviewer_email", { length: 150 }),
     reviewerPhone: varchar("reviewer_phone", { length: 30 }),
     status: productReviewStatusEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -503,6 +585,11 @@ export const productReview = pgTable(
   (table) => [
     index("product_reviews_business_id_idx").on(table.businessId),
     index("product_reviews_product_id_idx").on(table.productId),
+    index("product_reviews_customer_id_idx").on(table.customerId),
+    index("product_reviews_business_id_customer_id_idx").on(
+      table.businessId,
+      table.customerId,
+    ),
     index("product_reviews_variant_id_idx").on(table.variantId),
     index("product_reviews_status_idx").on(table.status),
     index("product_reviews_rating_idx").on(table.rating),

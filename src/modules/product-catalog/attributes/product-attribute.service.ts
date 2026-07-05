@@ -1,21 +1,7 @@
 import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
-import {
-  type ProductAttribute,
-  type ProductAttributeValue,
-  ProductSimpleStatus,
-  productAttribute,
-  productAttributeValue,
-  productVariantAttribute,
-} from "@/database/schema";
-import {
   and,
   asc,
   count,
-  desc,
   eq,
   exists,
   ilike,
@@ -24,7 +10,31 @@ import {
   or,
 } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import {
+  ProductAttribute,
+  productAttribute,
+  ProductAttributeValue,
+  productAttributeValue,
+  ProductSimpleStatus,
+  productVariantAttribute,
+} from "@/database/schema";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+
+import {
+  buildOrderBy,
+  resolveSortColumn,
+  SortOrder,
+} from "../../../common/http/sort.util";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
 import {
   CreateProductAttributeDto,
   CreateProductAttributeValueDto,
@@ -33,13 +43,8 @@ import {
   UpdateProductAttributeDto,
   UpdateProductAttributeValueDto,
 } from "./dto/product-attribute.dto";
-import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
-import { CatalogSortOrder } from "../common/dto/query-catalog.dto";
-import { DatabaseService } from "../../../database/database.service";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 type AttributeWithValues = ProductAttribute & {
   values: ProductAttributeValue[];
@@ -106,8 +111,6 @@ export class ProductAttributeService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const sortBy = query.sortBy ?? ProductAttributeSortBy.NAME;
-    const sortOrder = query.sortOrder ?? CatalogSortOrder.ASC;
     const where = and(
       eq(productAttribute.businessId, businessId),
       isNull(productAttribute.deletedAt),
@@ -136,7 +139,21 @@ export class ProductAttributeService {
         .select()
         .from(productAttribute)
         .where(where)
-        .orderBy(this.attributeOrderBy(sortBy, sortOrder), asc(productAttribute.createdAt))
+        .orderBy(
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [ProductAttributeSortBy.NAME]: productAttribute.name,
+                [ProductAttributeSortBy.CREATED_AT]: productAttribute.createdAt,
+              },
+              ProductAttributeSortBy.NAME,
+            ),
+            query.sortOrder,
+            SortOrder.ASC,
+          ),
+          asc(productAttribute.createdAt),
+        )
         .limit(limit)
         .offset(skip)
         .then((rows) => this.withAttributesValues(rows)),
@@ -147,12 +164,16 @@ export class ProductAttributeService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Product attributes were loaded successfully. The response includes the requested page of attributes for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, attributeId: string) {
@@ -213,6 +234,7 @@ export class ProductAttributeService {
         .update(productAttributeValue)
         .set({
           deletedAt,
+          deletedBy: currentUser.id,
           updatedBy: currentUser.id,
         })
         .where(
@@ -227,6 +249,7 @@ export class ProductAttributeService {
         .set({
           status: ProductSimpleStatus.INACTIVE,
           deletedAt,
+          deletedBy: currentUser.id,
           updatedBy: currentUser.id,
         })
         .where(eq(productAttribute.id, attributeId));
@@ -307,6 +330,7 @@ export class ProductAttributeService {
       .update(productAttributeValue)
       .set({
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
         updatedBy: currentUser.id,
       })
       .where(eq(productAttributeValue.id, valueId));
@@ -461,17 +485,5 @@ export class ProductAttributeService {
       ...attribute,
       values,
     };
-  }
-
-  private attributeOrderBy(
-    sortBy: NonNullable<QueryProductAttributeDto["sortBy"]>,
-    sortOrder: NonNullable<QueryProductAttributeDto["sortOrder"]>,
-  ) {
-    const column =
-      sortBy === ProductAttributeSortBy.CREATED_AT
-          ? productAttribute.createdAt
-          : productAttribute.name;
-
-    return sortOrder === "asc" ? asc(column) : desc(column);
   }
 }

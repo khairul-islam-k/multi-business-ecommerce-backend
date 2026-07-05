@@ -308,7 +308,9 @@ export class AuthService {
     const user = await this.findUserWithProfileByEmail(email);
 
     if (!user) {
-      throw new UnauthorizedException("Invalid email or password.");
+      throw new UnauthorizedException(
+        "The email address or password is incorrect. Please check the credentials and try again. For security, this response does not reveal which field was wrong.",
+      );
     }
 
     const isPasswordMatched = await this.verifyPassword(
@@ -427,10 +429,10 @@ export class AuthService {
       });
 
     void this.mailService
-      .sendChangeEmailOtpEmail(newEmail, otp)
+      .sendChangeEmailOtpEmail(user.email, otp)
       .catch((error) => {
         this.logger.error(
-          `Failed to send verification email to ${newEmail}`,
+          `Failed to send verification email to ${user.email}`,
           error,
         );
       });
@@ -438,7 +440,8 @@ export class AuthService {
     return apiResponse(
       {
         verificationId: verification.id,
-        email: newEmail,
+        email: user.email,
+        newEmail,
         expiresAt: verification.expiresAt,
       },
       "A one-time password has been sent to your new email address. Please verify it before the email change can be completed.",

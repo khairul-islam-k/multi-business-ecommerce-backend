@@ -1,43 +1,45 @@
+import Decimal from "decimal.js";
+import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+
+import {
+  JsonValue,
+  PackageCreditEntryType,
+  PackagePayment,
+  packagePayment,
+  PackagePaymentStatus,
+  PackagePaymentType,
+  PackagePlan,
+  packagePlan,
+  PackagePlanFeature,
+  packagePlanFeature,
+  PackagePlanLimit,
+  packagePlanLimit,
+  PackageStatus,
+  packageSubscription,
+  packageTenantCreditLedger,
+} from "@/database/schema";
 import {
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  type JsonValue,
-  type PackagePlan,
-  type PackagePlanFeature,
-  type PackagePlanLimit,
-  PackageCreditEntryType,
-  PackagePaymentStatus,
-  PackagePaymentType,
-  PackageStatus,
-  PackagePayment,
-  packagePlan,
-  packagePlanFeature,
-  packagePlanLimit,
-  packageSubscription,
-  packageTenantCreditLedger,
-  packagePayment,
-} from "@/database/schema";
-import Decimal from "decimal.js";
-import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
-import { QueryPackageDto } from "../dto/query-package.dto";
-import {
-  type DatabaseTransaction,
-  DatabaseService,
-} from "../../../database/database.service";
-import { PackageLimitService } from "../package-limit.service";
-import { PackageSubscriptionService } from "../package-subscription.service";
-import type {
-  PackagePlanSnapshot,
-  PlanChangeCharge,
-} from "../package-subscription.service";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import {
+  DatabaseService,
+  DatabaseTransaction,
+} from "../../../database/database.service";
+import { QueryPackageDto } from "../dto/query-package.dto";
+import { PackageLimitService } from "../package-limit.service";
+import { PackageSubscriptionService } from "../package-subscription.service";
+
+import type {
+  PackagePlanSnapshot,
+  PlanChangeCharge,
+} from "../package-subscription.service";
 
 const MOCK_PAYMENT_EXPIRY_MINUTES = 15;
 
@@ -82,7 +84,7 @@ export class TenantPackageService {
         .select()
         .from(packagePlan)
         .where(where)
-        .orderBy(asc(packagePlan.sortOrder), desc(packagePlan.createdAt))
+        .orderBy(desc(packagePlan.createdAt))
         .limit(limit)
         .offset(skip)
         .then((rows) => this.withPlansDetails(rows)),
@@ -93,12 +95,16 @@ export class TenantPackageService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(plans, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      plans,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Available package plans were loaded successfully. The response includes the requested page of active plans and pagination metadata for browsing more results.",
+    );
   }
 
   async getCurrentSubscription(tenantId: string) {
@@ -106,7 +112,9 @@ export class TenantPackageService {
       await this.subscriptions.findCurrentSubscription(tenantId);
 
     if (!subscription) {
-      throw new NotFoundException("Current subscription not found");
+      throw new NotFoundException(
+        "Current subscription could not be found for this tenant. Make sure the tenant has an active package subscription before retrying.",
+      );
     }
 
     return apiResponse(subscription);
@@ -139,12 +147,16 @@ export class TenantPackageService {
       })),
     );
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Package payments were loaded successfully. The response includes the requested page of tenant package payments and pagination metadata for browsing more results.",
+    );
   }
 
   async getUsage(tenantId: string) {
@@ -350,7 +362,9 @@ export class TenantPackageService {
       .limit(1);
 
     if (!plan) {
-      throw new NotFoundException("Package plan not found");
+      throw new NotFoundException(
+        "Package plan could not be found. It may not exist, may have been archived, or may not be available for the requested package operation.",
+      );
     }
 
     return this.withPlanDetails(plan);
@@ -372,8 +386,7 @@ export class TenantPackageService {
             eq(packagePlanFeature.packageId, plan.id),
             eq(packagePlanFeature.isActive, true),
           ),
-        )
-        .orderBy(asc(packagePlanFeature.sortOrder)),
+        ),
     ]);
 
     return {

@@ -1,3 +1,24 @@
+import Decimal from "decimal.js";
+import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+
+import {
+  JsonValue,
+  PackageBillingCycle,
+  PackageLimitKey,
+  PackagePlan,
+  packagePlan,
+  PackagePlanFeature,
+  packagePlanFeature,
+  PackagePlanLimit,
+  packagePlanLimit,
+  PackageResetCycle,
+  PackageStatus,
+  PackageSubscription,
+  packageSubscription,
+  PackageSubscriptionStatus,
+  packageTenantCreditLedger,
+  SystemUserType,
+} from "@/database/schema";
 import {
   BadRequestException,
   ForbiddenException,
@@ -5,32 +26,13 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
+
 import {
-  type JsonValue,
-  type PackagePlan,
-  type PackagePlanFeature,
-  type PackagePlanLimit,
-  PackageBillingCycle,
-  PackageLimitKey,
-  PackageResetCycle,
-  type PackageSubscription,
-  PackageSubscriptionStatus,
-  PackageStatus,
-  SystemUserType,
-  packagePlan,
-  packagePlanFeature,
-  packagePlanLimit,
-  packageSubscription,
-  packageTenantCreditLedger,
-} from "@/database/schema";
-import Decimal from "decimal.js";
-import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+  DatabaseService,
+  DatabaseTransaction,
+} from "../../database/database.service";
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
-import {
-  type DatabaseTransaction,
-  DatabaseService,
-} from "../../database/database.service";
 
 const ACTIVE_SUBSCRIPTION_STATUSES = [
   PackageSubscriptionStatus.TRIALING,
@@ -68,7 +70,6 @@ export type PackagePlanSnapshot = {
   features: {
     title: string;
     description: string | null;
-    sortOrder: number;
   }[];
   capturedAt: string;
 };
@@ -233,7 +234,9 @@ export class PackageSubscriptionService {
     const plan = await this.findActivePlanById(client, planId);
 
     if (!plan) {
-      throw new NotFoundException("Package plan not found");
+      throw new NotFoundException(
+        "Package plan could not be found. It may not exist, may have been archived, or may not be available for the requested package operation.",
+      );
     }
 
     const now = new Date();
@@ -288,7 +291,9 @@ export class PackageSubscriptionService {
     const targetPlan = await this.findActivePlanById(client, targetPlanId);
 
     if (!targetPlan) {
-      throw new NotFoundException("Package plan not found");
+      throw new NotFoundException(
+        "Package plan could not be found. It may not exist, may have been archived, or may not be available for the requested package operation.",
+      );
     }
 
     const currentSubscription = await this.findCurrentSubscriptionRow(
@@ -433,7 +438,6 @@ export class PackageSubscriptionService {
           isNull(packagePlan.deletedAt),
         ),
       )
-      .orderBy(asc(packagePlan.sortOrder))
       .limit(1);
 
     return plan ? this.withPlanDetails(client, plan) : null;
@@ -494,8 +498,7 @@ export class PackageSubscriptionService {
             eq(packagePlanFeature.packageId, plan.id),
             eq(packagePlanFeature.isActive, true),
           ),
-        )
-        .orderBy(asc(packagePlanFeature.sortOrder)),
+        ),
     ]);
 
     return {
@@ -551,7 +554,6 @@ export class PackageSubscriptionService {
       features: plan.features.map((feature) => ({
         title: feature.title,
         description: feature.description,
-        sortOrder: feature.sortOrder,
       })),
       capturedAt: capturedAt.toISOString(),
     };

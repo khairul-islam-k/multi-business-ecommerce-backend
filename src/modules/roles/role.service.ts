@@ -1,31 +1,4 @@
 import {
-  BadRequestException,
-  ConflictException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
-import {
-  type PermissionAction,
-  type RbacFeature,
-  type RbacRole,
-  type RbacRolePermission,
-  type RbacUserRoleMap,
-  type SystemUser,
-  BusinessMemberStatus,
-  BusinessStatus,
-  CommonStatus,
-  SystemUserStatus,
-  SystemUserType,
-  UserRoleMapStatus,
-  business,
-  businessMember,
-  rbacRole,
-  rbacRolePermission,
-  rbacUserRoleMap,
-  systemUser,
-} from "@/database/schema";
-import {
   and,
   asc,
   count,
@@ -39,20 +12,48 @@ import {
   or,
 } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
-import { AssignRoleDto } from "./dto/assign-role.dto";
-import { CreateRoleDto } from "./dto/create-role.dto";
-import { QueryRoleAssignmentsDto } from "./dto/query-role-assignment.dto";
-import { QueryRoleDto } from "./dto/query-role.dto";
-import { RolePermissionDto } from "./dto/role-permission.dto";
-import { UpdateRoleAssignmentDto } from "./dto/update-role-assignment.dto";
-import { UpdateRoleDto } from "./dto/update-role.dto";
-import { DatabaseService } from "../../database/database.service";
+import {
+  business,
+  businessMember,
+  BusinessMemberStatus,
+  BusinessStatus,
+  CommonStatus,
+  RbacRole,
+  rbacRole,
+  RbacRolePermission,
+  rbacRolePermission,
+  RbacUserRoleMap,
+  rbacUserRoleMap,
+  SystemUser,
+  systemUser,
+  SystemUserStatus,
+  SystemUserType,
+  UserRoleMapStatus,
+} from "@/database/schema";
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+
 import { isUniqueConstraintError } from "../../common/database/db-error.util";
+import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
+import { DatabaseService } from "../../database/database.service";
+import { AssignRoleDto } from "./dto/assign-role.dto";
+import { CreateRoleDto } from "./dto/create-role.dto";
+import { QueryRoleAssignmentsDto } from "./dto/query-role-assignment.dto";
+import { QueryRoleDto, RoleSortBy } from "./dto/query-role.dto";
+import { RolePermissionDto } from "./dto/role-permission.dto";
+import { UpdateRoleAssignmentDto } from "./dto/update-role-assignment.dto";
+import { UpdateRoleDto } from "./dto/update-role.dto";
+
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 const ACCESSIBLE_BUSINESS_STATUSES = [
   BusinessStatus.ACTIVE,
@@ -128,7 +129,10 @@ export class RoleService {
         return this.withRoleDetails(created);
       });
 
-      return apiResponse(role, "Role created successfully");
+      return apiResponse(
+        role,
+        "Role was created successfully. The role record and requested permissions were saved for this business.",
+      );
     } catch (error) {
       this.handleDatabaseError(error);
     }
@@ -142,8 +146,6 @@ export class RoleService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const sortBy = query.sortBy ?? "createdAt";
-    const sortOrder = query.sortOrder ?? "desc";
     const canIncludeDeleted =
       currentUser.type === SystemUserType.ADMIN && query.includeDeleted;
     const where = and(
@@ -163,7 +165,21 @@ export class RoleService {
         .select()
         .from(rbacRole)
         .where(where)
-        .orderBy(this.roleOrderBy(sortBy, sortOrder))
+        .orderBy(
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [RoleSortBy.NAME]: rbacRole.name,
+                [RoleSortBy.STATUS]: rbacRole.status,
+                [RoleSortBy.CREATED_AT]: rbacRole.createdAt,
+                [RoleSortBy.UPDATED_AT]: rbacRole.updatedAt,
+              },
+              RoleSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
+          ),
+        )
         .limit(limit)
         .offset(skip)
         .then((rows) => this.withRolesDetails(rows)),
@@ -174,12 +190,16 @@ export class RoleService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(roles, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      roles,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Roles were loaded successfully. The response includes the requested page of roles for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, roleId: string) {
@@ -241,7 +261,7 @@ export class RoleService {
 
         return apiResponse(
           await this.withRoleDetails(updated),
-          "Role updated successfully",
+          "Role was updated successfully. The saved role details and permission assignments now reflect the request.",
         );
       });
     } catch (error) {
@@ -278,12 +298,16 @@ export class RoleService {
         .set({
           status: CommonStatus.INACTIVE,
           deletedAt: new Date(),
+          deletedById: currentUser.id,
           updatedById: currentUser.id,
         })
         .where(eq(rbacRole.id, roleId));
     });
 
-    return apiResponse(null, "Role deleted successfully");
+    return apiResponse(
+      null,
+      "Role was deleted successfully. The role has been soft-deleted and its active assignments were deactivated.",
+    );
   }
 
   async assignRole(
@@ -386,12 +410,16 @@ export class RoleService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(assignments, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      assignments,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Role assignments were loaded successfully. The response includes the requested page of user-role assignments for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async updateAssignment(
@@ -413,7 +441,7 @@ export class RoleService {
 
     return apiResponse(
       await this.withAssignmentDetails(assignment),
-      "Role assignment updated successfully",
+      "Role assignment was updated successfully. The selected user-role assignment now reflects the requested status, scope, or expiry changes.",
     );
   }
 
@@ -446,7 +474,9 @@ export class RoleService {
       .limit(1);
 
     if (!role) {
-      throw new NotFoundException("Role not found");
+      throw new NotFoundException(
+        "Role could not be found. It may not exist, may have been deleted, or may not belong to the requested business.",
+      );
     }
 
     return this.withRoleDetails(role);
@@ -469,7 +499,9 @@ export class RoleService {
       .limit(1);
 
     if (!role) {
-      throw new NotFoundException("Role not found");
+      throw new NotFoundException(
+        "Role could not be found. It may not exist, may have been deleted, or may not belong to the requested business.",
+      );
     }
   }
 
@@ -500,7 +532,9 @@ export class RoleService {
       .limit(1);
 
     if (!assignment) {
-      throw new NotFoundException("Role assignment not found");
+      throw new NotFoundException(
+        "Role assignment could not be found. It may not exist, may have been deleted, or may not belong to the requested business.",
+      );
     }
   }
 
@@ -576,7 +610,9 @@ export class RoleService {
       .limit(1);
 
     if (existingRole) {
-      throw new ConflictException("Role name already exists");
+      throw new ConflictException(
+        "Role name already exists in this business. Please choose a different role name before saving.",
+      );
     }
   }
 
@@ -654,7 +690,9 @@ export class RoleService {
       .limit(1);
 
     if (!role) {
-      throw new NotFoundException("Role not found");
+      throw new NotFoundException(
+        "Role could not be found. It may not exist, may have been deleted, or may not belong to the requested business.",
+      );
     }
 
     const permissions = await this.db
@@ -684,27 +722,13 @@ export class RoleService {
       .then(([user]) => user ?? null);
   }
 
-  private roleOrderBy(
-    sortBy: NonNullable<QueryRoleDto["sortBy"]>,
-    sortOrder: NonNullable<QueryRoleDto["sortOrder"]>,
-  ) {
-    const column =
-      sortBy === "name"
-        ? rbacRole.name
-        : sortBy === "status"
-          ? rbacRole.status
-          : sortBy === "updatedAt"
-            ? rbacRole.updatedAt
-            : rbacRole.createdAt;
-
-    return sortOrder === "asc" ? asc(column) : desc(column);
-  }
-
   private normalizeRoleName(name: string) {
     const normalizedName = name.trim();
 
     if (!normalizedName) {
-      throw new BadRequestException("Role name is required");
+      throw new BadRequestException(
+        "Role name is required. Provide a non-empty role name before saving this role.",
+      );
     }
 
     if (normalizedName.length > 100) {
@@ -756,7 +780,9 @@ export class RoleService {
 
   private handleDatabaseError(error: unknown): never {
     if (isUniqueConstraintError(error)) {
-      throw new ConflictException("Role name already exists");
+      throw new ConflictException(
+        "Role name already exists in this business. Please choose a different role name before saving.",
+      );
     }
 
     throw error;

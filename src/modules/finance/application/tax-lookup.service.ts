@@ -1,11 +1,12 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { FinanceTaxStatus, financeTax } from "@/database/schema";
 import { and, eq, isNull } from "drizzle-orm";
 
+import { financeTax, FinanceTaxStatus } from "@/database/schema";
+import { Injectable, NotFoundException } from "@nestjs/common";
+
 import {
-  type Database,
-  type DatabaseTransaction,
+  Database,
   DatabaseService,
+  DatabaseTransaction,
 } from "../../../database/database.service";
 
 @Injectable()
@@ -32,7 +33,9 @@ export class TaxLookupService {
       .limit(1);
 
     if (!tax) {
-      throw new NotFoundException("Tax not found");
+      throw new NotFoundException(
+        "Tax could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return tax;

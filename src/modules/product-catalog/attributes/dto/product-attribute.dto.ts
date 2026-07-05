@@ -1,20 +1,19 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { ProductSimpleStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
   IsArray,
   IsEnum,
-  IsInt,
   IsOptional,
   IsString,
-  Max,
   MaxLength,
-  Min,
   ValidateNested,
 } from "class-validator";
 
-import { CatalogSortOrder } from "../../common/dto/query-catalog.dto";
+import { ProductSimpleStatus } from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+
+import { SortedPaginationQueryDto } from "../../../../common/http/query.dto";
+import { SortOrder } from "../../../../common/http/sort.util";
 
 export class CreateProductAttributeValueDto {
   @ApiProperty({ example: "Red" })
@@ -58,27 +57,7 @@ export enum ProductAttributeSortBy {
   CREATED_AT = "createdAt",
 }
 
-export class QueryProductAttributeDto {
-  @ApiPropertyOptional({ example: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
-
-  @ApiPropertyOptional({ example: 10 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit?: number = 10;
-
-  @ApiPropertyOptional({ example: "color" })
-  @IsOptional()
-  @IsString()
-  search?: string;
-
+export class QueryProductAttributeDto extends SortedPaginationQueryDto<ProductAttributeSortBy> {
   @ApiPropertyOptional({ enum: ProductSimpleStatus })
   @IsOptional()
   @IsEnum(ProductSimpleStatus)
@@ -93,10 +72,10 @@ export class QueryProductAttributeDto {
   sortBy?: ProductAttributeSortBy = ProductAttributeSortBy.NAME;
 
   @ApiPropertyOptional({
-    enum: CatalogSortOrder,
-    example: CatalogSortOrder.ASC,
+    enum: SortOrder,
+    example: SortOrder.ASC,
   })
   @IsOptional()
-  @IsEnum(CatalogSortOrder)
-  sortOrder?: CatalogSortOrder = CatalogSortOrder.ASC;
+  @IsEnum(SortOrder)
+  sortOrder?: SortOrder = SortOrder.ASC;
 }

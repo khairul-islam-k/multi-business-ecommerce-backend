@@ -1,4 +1,5 @@
 import {
+  AnyPgColumn,
   date,
   index,
   integer,
@@ -9,7 +10,6 @@ import {
   timestamp,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 import { business } from "./business";
@@ -154,6 +154,10 @@ export const systemUserProfile = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
+    deletedById: uuid("deleted_by").references(
+      (): AnyPgColumn => systemUser.id,
+      { onDelete: "set null" },
+    ),
     deletedAt: timestamp("deleted_at", {
       precision: 6,
       withTimezone: true,
@@ -251,7 +255,9 @@ export const systemSession = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references((): AnyPgColumn => systemUser.id, { onDelete: "cascade" }),
-    businessId: uuid("business_id"),
+    businessId: uuid("business_id").references((): AnyPgColumn => business.id, {
+      onDelete: "set null",
+    }),
     refreshTokenHash: text("refresh_token_hash").unique().notNull(),
     expiresAt: timestamp("expires_at", {
       precision: 6,

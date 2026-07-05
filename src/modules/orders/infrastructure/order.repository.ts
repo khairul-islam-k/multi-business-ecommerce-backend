@@ -1,20 +1,25 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { and, asc, count, eq, ilike, isNull, or } from "drizzle-orm";
+
 import {
-  type Order,
-  orderCustomer,
+  customer,
+  Order,
   order,
   orderItem,
   orderPayment,
   orderStatusLog,
 } from "@/database/schema";
-import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+import { Injectable, NotFoundException } from "@nestjs/common";
 
-import type { QueryOrderDto } from "../dto/order.dto";
 import {
+  buildOrderBy,
+  resolveSortColumn,
+} from "../../../common/http/sort.util";
+import {
+  Database,
   DatabaseService,
-  type Database,
-  type DatabaseTransaction,
+  DatabaseTransaction,
 } from "../../../database/database.service";
+import { OrderSortBy, QueryOrderDto } from "../dto/order.dto";
 
 @Injectable()
 export class OrderRepository {
@@ -45,8 +50,19 @@ export class OrderRepository {
         : undefined,
     );
 
-    const orderBy =
-      query.sortOrder === "asc" ? asc(order.createdAt) : desc(order.createdAt);
+    const orderBy = buildOrderBy(
+      resolveSortColumn(
+        query.sortBy,
+        {
+          [OrderSortBy.ORDER_NO]: order.orderNo,
+          [OrderSortBy.TOTAL_AMOUNT]: order.totalAmount,
+          [OrderSortBy.CREATED_AT]: order.createdAt,
+          [OrderSortBy.UPDATED_AT]: order.updatedAt,
+        },
+        OrderSortBy.CREATED_AT,
+      ),
+      query.sortOrder,
+    );
 
     const [rows, total] = await Promise.all([
       this.db
@@ -103,7 +119,9 @@ export class OrderRepository {
       );
 
     if (!fetchedOrder) {
-      throw new NotFoundException("Order not found");
+      throw new NotFoundException(
+        "Order could not be found. It may not exist, may have been deleted, or may not belong to the current business or customer account.",
+      );
     }
 
     return fetchedOrder;
@@ -113,12 +131,12 @@ export class OrderRepository {
     order: Order,
     client: Database | DatabaseTransaction = this.db,
   ) {
-    const [customer, items, payments, statusLogs] = await Promise.all([
+    const [existingCustomer, items, payments, statusLogs] = await Promise.all([
       order.customerId
         ? client
             .select()
-            .from(orderCustomer)
-            .where(eq(orderCustomer.id, order.customerId))
+            .from(customer)
+            .where(eq(customer.id, order.customerId))
             .then(([row]) => row ?? null)
         : Promise.resolve(null),
       client.select().from(orderItem).where(eq(orderItem.orderId, order.id)),
@@ -135,7 +153,7 @@ export class OrderRepository {
 
     return {
       ...order,
-      customer,
+      existingCustomer,
       items,
       payments,
       statusLogs,

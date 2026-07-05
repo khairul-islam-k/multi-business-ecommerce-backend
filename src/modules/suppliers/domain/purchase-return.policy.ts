@@ -1,5 +1,6 @@
-import { BadRequestException } from "@nestjs/common";
 import Decimal from "decimal.js";
+
+import { BadRequestException } from "@nestjs/common";
 
 import { buildStockItemKey } from "../../inventory/domain/stock-item-key";
 
@@ -67,4 +68,3 @@ export function calculatePurchaseReturnTotals(
     },
   );
 }
-

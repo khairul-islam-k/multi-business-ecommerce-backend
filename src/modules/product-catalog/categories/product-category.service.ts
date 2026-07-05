@@ -1,28 +1,37 @@
+import { and, asc, count, eq, ilike, isNull, or } from "drizzle-orm";
+
+import {
+  product,
+  ProductCategory,
+  productCategory,
+  ProductSimpleStatus,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  type ProductCategory,
-  ProductSimpleStatus,
-  product,
-  productCategory,
-} from "@/database/schema";
-import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { QueryCatalogDto } from "../common/dto/query-catalog.dto";
 import {
-  CreateProductCategoryDto,
-  UpdateProductCategoryDto,
-} from "./dto/product-category.dto";
-import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
-import { DatabaseService } from "../../../database/database.service";
+  buildOrderBy,
+  resolveSortColumn,
+} from "../../../common/http/sort.util";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import {
+  CatalogSortBy,
+  QueryCatalogDto,
+} from "../common/dto/query-catalog.dto";
+import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import {
+  CreateProductCategoryDto,
+  UpdateProductCategoryDto,
+} from "./dto/product-category.dto";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 type CategoryWithDetails = ProductCategory & {
   parent: ProductCategory | null;
@@ -31,6 +40,13 @@ type CategoryWithDetails = ProductCategory & {
     children: number;
     products: number;
   };
+};
+
+type CategoryRow = typeof productCategory.$inferInsert;
+
+export type CategoryTreeNode = {
+  category: CategoryRow;
+  children: CategoryTreeNode[];
 };
 
 @Injectable()
@@ -66,7 +82,6 @@ export class ProductCategoryService {
           description: this.lookup.normalizeNullableText(dto.description),
           imageUrl: this.lookup.normalizeNullableText(dto.imageUrl),
           status: dto.status ?? ProductSimpleStatus.ACTIVE,
-          sortOrder: dto.sortOrder ?? 0,
           createdBy: currentUser.id,
           updatedBy: currentUser.id,
         })
@@ -100,40 +115,81 @@ export class ProductCategoryService {
         : undefined,
     );
 
-    const [items, total] = await Promise.all([
-      this.db
+    const [rows, total] = await Promise.all([
+      await this.db
         .select()
         .from(productCategory)
         .where(where)
         .orderBy(
-          asc(productCategory.sortOrder),
-          query.sortOrder === "asc"
-            ? asc(productCategory.createdAt)
-            : desc(productCategory.createdAt),
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [CatalogSortBy.NAME]: productCategory.name,
+                [CatalogSortBy.CREATED_AT]: productCategory.createdAt,
+                [CatalogSortBy.UPDATED_AT]: productCategory.updatedAt,
+              },
+              CatalogSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
+          ),
         )
         .limit(limit)
         .offset(skip)
         .then((rows) => this.withCategoriesDetails(rows)),
-      this.db
+      await this.db
         .select({ value: count() })
         .from(productCategory)
         .where(where)
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    const categoryMap = new Map<string, CategoryTreeNode>();
+
+    for (const row of rows) {
+      categoryMap.set(row.id, {
+        category: row,
+        children: [],
+      });
+    }
+
+    const categories: CategoryTreeNode[] = [];
+
+    for (const row of rows) {
+      const node = categoryMap.get(row.id)!;
+
+      if (row.parentId) {
+        const parentNode = categoryMap.get(row.parentId);
+
+        if (parentNode) {
+          parentNode.children.push(node);
+        } else {
+          // TODO: if parent is missing/deleted/inactive, treat as root
+          categories.push(node);
+        }
+      } else {
+        categories.push(node);
+      }
+    }
+    return paginatedResponse(
+      categories,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Product categories were loaded successfully. The response includes the requested page of categories for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, categoryId: string) {
     const category = await this.findCategoryRow(businessId, categoryId);
 
     if (!category) {
-      throw new NotFoundException("Category not found");
+      throw new NotFoundException(
+        "Category could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return apiResponse(
@@ -186,7 +242,6 @@ export class ProductCategoryService {
             imageUrl: this.lookup.normalizeNullableText(dto.imageUrl),
           }),
           ...(dto.status !== undefined && { status: dto.status }),
-          ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
           updatedBy: currentUser.id,
         })
         .where(eq(productCategory.id, categoryId))
@@ -217,6 +272,7 @@ export class ProductCategoryService {
       .set({
         status: ProductSimpleStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
         updatedBy: currentUser.id,
       })
       .where(eq(productCategory.id, categoryId));
@@ -228,11 +284,13 @@ export class ProductCategoryService {
     const category = await this.findCategoryRow(businessId, categoryId);
 
     if (!category) {
-      throw new NotFoundException("Category not found");
+      throw new NotFoundException(
+        "Category could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
   }
 
-  private findCategoryRow(businessId: string, categoryId: string) {
+  private async findCategoryRow(businessId: string, categoryId: string) {
     return this.db
       .select()
       .from(productCategory)
@@ -318,8 +376,7 @@ export class ProductCategoryService {
               ? isNull(productCategory.deletedAt)
               : undefined,
           ),
-        )
-        .orderBy(asc(productCategory.sortOrder)),
+        ),
       this.db
         .select({ value: count() })
         .from(productCategory)

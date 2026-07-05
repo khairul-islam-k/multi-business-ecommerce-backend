@@ -1,32 +1,35 @@
-import { Injectable } from "@nestjs/common";
-import {
-  CourierShipmentStatus,
-  FinanceReceivableStatus,
-  FinanceSourceType,
-  InventoryOrderAllocationStatus,
-  InvoiceStatus,
-  OrderStatus,
-  courierReceivable,
-  courierShipment,
-  financeReceivable,
-  inventoryOrderAllocation,
-  invoice,
-  order as orderTable,
-  orderStatusLog,
-} from "@/database/schema";
 import Decimal from "decimal.js";
 import { and, eq, isNull } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import {
+  courierShipment,
+  CourierShipmentStatus,
+  FinancePartyType,
+  financeReceivable,
+  FinanceReceivableStatus,
+  FinanceSourceType,
+  inventoryOrderAllocation,
+  InventoryOrderAllocationStatus,
+  invoice,
+  InvoiceStatus,
+  order as orderTable,
+  OrderStatus,
+  orderStatusLog,
+} from "@/database/schema";
+import { Injectable } from "@nestjs/common";
+
+import { apiResponse } from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import { FinanceCodeService } from "../../finance/application/finance-code.service";
+import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
 import {
   assertCanCancelOrder,
   assertCanDeliverOrder,
   assertCanShipOrder,
 } from "../domain/order-status-machine";
 import { OrderRepository } from "../infrastructure/order.repository";
-import { DatabaseService } from "../../../database/database.service";
-import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
-import { apiResponse } from "../../../common/utils/api-response.util";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class OrderStatusService {
@@ -34,6 +37,7 @@ export class OrderStatusService {
     private readonly database: DatabaseService,
     private readonly inventory: InventoryLookupService,
     private readonly orders: OrderRepository,
+    private readonly financeCodes: FinanceCodeService,
   ) {}
 
   private get db() {
@@ -81,7 +85,10 @@ export class OrderStatusService {
       return this.orders.hydrate(updated, tx);
     });
 
-    return apiResponse(updatedOrder, "Order shipped successfully");
+    return apiResponse(
+      updatedOrder,
+      "Order status updated to shipped. If this order had a pending courier shipment, the shipment was also marked as booked.",
+    );
   }
 
   async deliver(
@@ -151,22 +158,41 @@ export class OrderStatusService {
 
         if (new Decimal(shipment.codAmount).greaterThan(0)) {
           const [existingReceivable] = await tx
-            .select({ id: courierReceivable.id })
-            .from(courierReceivable)
-            .where(eq(courierReceivable.shipmentId, shipment.id));
+            .select({ id: financeReceivable.id })
+            .from(financeReceivable)
+            .where(
+              and(
+                eq(financeReceivable.businessId, businessId),
+                eq(
+                  financeReceivable.sourceType,
+                  FinanceSourceType.COURIER_RECEIVABLE,
+                ),
+                eq(financeReceivable.sourceId, shipment.id),
+              ),
+            );
 
           if (!existingReceivable && shipment.courierId) {
-            await tx.insert(courierReceivable).values({
-              businessId,
-              courierId: shipment.courierId,
-              shipmentId: shipment.id,
-              orderId,
-              codAmount: shipment.codAmount,
-              courierFee: shipment.courierFee,
-              netReceivable: new Decimal(shipment.codAmount).minus(
-                shipment.courierFee,
-              ),
-            });
+            const netReceivable = new Decimal(shipment.codAmount)
+              .minus(shipment.courierFee)
+              .toDecimalPlaces(2);
+
+            if (netReceivable.greaterThan(0)) {
+              await tx.insert(financeReceivable).values({
+                businessId,
+                receivableNo:
+                  await this.financeCodes.generateUniqueReceivableNo(
+                    businessId,
+                  ),
+                partyType: FinancePartyType.COURIER,
+                partyId: shipment.courierId,
+                sourceType: FinanceSourceType.COURIER_RECEIVABLE,
+                sourceId: shipment.id,
+                totalAmount: netReceivable,
+                receivedAmount: new Decimal(0),
+                status: FinanceReceivableStatus.PENDING,
+                note: `COD receivable for shipment ${shipment.shipmentNo}`,
+              });
+            }
           }
         }
       }
@@ -174,13 +200,33 @@ export class OrderStatusService {
       return this.orders.hydrate(updated, tx);
     });
 
-    return apiResponse(updatedOrder, "Order delivered successfully");
+    return apiResponse(
+      updatedOrder,
+      "Order status updated to delivered. Reserved stock was fulfilled, and any courier collection receivable was prepared when cash on delivery was due.",
+    );
   }
 
   async cancel(
     currentUser: CurrentUserPayload,
     businessId: string,
     orderId: string,
+  ) {
+    return this.cancelOrder(businessId, orderId, currentUser.id);
+  }
+
+  async cancelByCustomer(
+    businessId: string,
+    orderId: string,
+    note?: string | null,
+  ) {
+    return this.cancelOrder(businessId, orderId, undefined, note);
+  }
+
+  private async cancelOrder(
+    businessId: string,
+    orderId: string,
+    changedBy?: string,
+    note?: string | null,
   ) {
     const order = await this.orders.getByIdOrThrow(businessId, orderId);
 
@@ -205,7 +251,7 @@ export class OrderStatusService {
         await this.inventory.releaseOrderReservation(
           tx,
           { businessId, allocationId: allocation.id },
-          currentUser.id,
+          changedBy,
         );
       }
 
@@ -257,12 +303,16 @@ export class OrderStatusService {
         orderId,
         fromStatus: order.status,
         toStatus: OrderStatus.CANCELLED,
-        changedBy: currentUser.id,
+        changedBy,
+        note,
       });
 
       return this.orders.hydrate(updated, tx);
     });
 
-    return apiResponse(updatedOrder, "Order cancelled successfully");
+    return apiResponse(
+      updatedOrder,
+      "Order cancelled successfully. Reserved stock was released, the related invoice and courier shipment were cancelled when present, and the order receivable was cancelled.",
+    );
   }
 }

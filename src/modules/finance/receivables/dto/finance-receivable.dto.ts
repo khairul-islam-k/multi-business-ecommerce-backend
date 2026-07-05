@@ -1,9 +1,3 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import {
-  FinancePartyType,
-  FinanceReceivableStatus,
-  FinanceSourceType,
-} from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsEnum,
@@ -14,6 +8,13 @@ import {
   Max,
   Min,
 } from "class-validator";
+
+import {
+  FinancePartyType,
+  FinanceReceivableStatus,
+  FinanceSourceType,
+} from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class QueryFinanceReceivableDto {
   @ApiPropertyOptional({ example: 1 })
@@ -39,10 +40,20 @@ export class QueryFinanceReceivableDto {
   @IsEnum(FinancePartyType)
   partyType?: FinancePartyType;
 
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  partyId?: string;
+
   @ApiPropertyOptional({ enum: FinanceSourceType })
   @IsOptional()
   @IsEnum(FinanceSourceType)
   sourceType?: FinanceSourceType;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  sourceId?: string;
 
   @ApiPropertyOptional({ enum: FinanceReceivableStatus })
   @IsOptional()

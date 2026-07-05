@@ -1,10 +1,3 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import {
-  PackageBillingCycle,
-  PackageLimitKey,
-  PackageResetCycle,
-  PackageStatus,
-} from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
@@ -19,6 +12,14 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
+
+import {
+  PackageBillingCycle,
+  PackageLimitKey,
+  PackageResetCycle,
+  PackageStatus,
+} from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 
 export class PackagePlanLimitDto {
   @ApiProperty({
@@ -61,13 +62,6 @@ export class PackagePlanFeatureDto {
   @IsOptional()
   @IsString()
   description?: string;
-
-  @ApiPropertyOptional({ example: 0 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  sortOrder?: number;
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
@@ -121,13 +115,6 @@ export class CreatePackagePlanDto {
   @IsOptional()
   @IsEnum(PackageStatus)
   status?: PackageStatus;
-
-  @ApiPropertyOptional({ example: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  sortOrder?: number;
 
   @ApiPropertyOptional({ type: [PackagePlanLimitDto] })
   @IsOptional()

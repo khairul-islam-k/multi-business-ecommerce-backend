@@ -1,38 +1,22 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
-import { SystemUserStatus } from "@/database/schema";
 import { Type } from "class-transformer";
-import {
-  IsBoolean,
-  IsEnum,
-  IsIn,
-  IsInt,
-  IsOptional,
-  IsString,
-  Max,
-  Min,
-} from "class-validator";
+import { IsBoolean, IsEnum, IsIn, IsOptional } from "class-validator";
 
-export class QueryEmployeesDto {
-  @ApiPropertyOptional({ example: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
+import { SystemUserStatus } from "@/database/schema";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 
-  @ApiPropertyOptional({ example: 10 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit?: number = 10;
+import { SortedPaginationQueryDto } from "../../../common/http/query.dto";
 
-  @ApiPropertyOptional({ example: "john" })
-  @IsOptional()
-  @IsString()
-  search?: string;
+export const EmployeeSortBy = {
+  NAME: "name",
+  EMAIL: "email",
+  STATUS: "status",
+  CREATED_AT: "createdAt",
+  UPDATED_AT: "updatedAt",
+} as const;
+export type EmployeeSortBy =
+  (typeof EmployeeSortBy)[keyof typeof EmployeeSortBy];
 
+export class QueryEmployeesDto extends SortedPaginationQueryDto<EmployeeSortBy> {
   @ApiPropertyOptional({
     enum: SystemUserStatus,
     example: SystemUserStatus.ACTIVE,
@@ -48,18 +32,10 @@ export class QueryEmployeesDto {
   includeDeleted?: boolean;
 
   @ApiPropertyOptional({
-    enum: ["name", "email", "status", "createdAt", "updatedAt"],
+    enum: EmployeeSortBy,
     example: "createdAt",
   })
   @IsOptional()
-  @IsIn(["name", "email", "status", "createdAt", "updatedAt"])
-  sortBy?: "name" | "email" | "status" | "createdAt" | "updatedAt";
-
-  @ApiPropertyOptional({
-    enum: ["asc", "desc"],
-    example: "desc",
-  })
-  @IsOptional()
-  @IsIn(["asc", "desc"])
-  sortOrder?: "asc" | "desc";
+  @IsIn(Object.values(EmployeeSortBy))
+  sortBy?: EmployeeSortBy = EmployeeSortBy.CREATED_AT;
 }

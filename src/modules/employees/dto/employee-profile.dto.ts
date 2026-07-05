@@ -1,5 +1,3 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
-import { Gender } from "@/database/schema";
 import {
   IsDateString,
   IsEnum,
@@ -8,6 +6,9 @@ import {
   MaxLength,
   ValidateIf,
 } from "class-validator";
+
+import { Gender } from "@/database/schema";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 
 export class EmployeeProfileDto {
   @ApiPropertyOptional({ example: "John" })

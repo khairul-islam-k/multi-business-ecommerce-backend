@@ -1,6 +1,7 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { ProductSimpleStatus } from "@/database/schema";
 import { IsEnum, IsOptional, IsString, MaxLength } from "class-validator";
+
+import { ProductSimpleStatus } from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 
 export class CreateProductUnitDto {
   @ApiProperty({ example: "Piece" })

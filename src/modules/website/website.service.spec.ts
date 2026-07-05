@@ -6,6 +6,10 @@ import {
   WebsiteTemplate,
   website,
   websiteConfig,
+  websiteDomain,
+  WebsiteDomainSslStatus,
+  WebsiteDomainType,
+  WebsiteDomainVerificationStatus,
   websiteSeoSetting,
   websiteThemeSetting,
 } from "@/database/schema";
@@ -19,8 +23,10 @@ function createSelectQueue(rows: unknown[][]) {
     const result = rows.shift() ?? [];
     const builder = {
       from: () => builder,
+      innerJoin: () => builder,
       where: () => builder,
       limit: () => result,
+      orderBy: () => builder,
       then: (
         resolve: (value: unknown[]) => unknown,
         reject?: (error: unknown) => unknown,
@@ -59,43 +65,57 @@ function createService(rows: unknown[][] = []) {
       callback(tx),
     ),
   };
-  const packageLimits = {
-    assertWithinLimit: jest.fn(async () => undefined),
-  };
-  const service = new WebsiteService({ db } as never, packageLimits as never);
+  const appConfig = { corsSubdomainBases: ["localhost"] };
+  const service = new WebsiteService({ db } as never, appConfig as never);
 
-  jest.spyOn(service as any, "findWebsiteDetails").mockResolvedValue({
+  jest.spyOn(service as any, "findWebsiteDetails").mockImplementation(() => ({
     id: "website-1",
     businessId: "business-1",
     name: "Acme Store",
-  });
+    domains: insertedValues
+      .filter((item) => item.table === websiteDomain)
+      .map((item) => item.values),
+  }));
 
-  return { db, insertedValues, packageLimits, service, tx };
+  return { db, insertedValues, service, tx };
 }
 
 describe("WebsiteService", () => {
-  it("creates a manual website using the business name", async () => {
+  it("creates a manual website using the business name and a default subdomain", async () => {
     const { insertedValues, service } = createService([
       [{ id: "business-1", name: "Acme Store" }],
+      [],
       [],
       [],
     ]);
 
     const result = await service.create(currentUser, "business-1", {
-      template: WebsiteTemplate.ELECTRONIC,
+      template: WebsiteTemplate.FASHION,
     });
 
     expect(result.data).toMatchObject({
       id: "website-1",
       name: "Acme Store",
     });
+    expect(result.data.domains).toContainEqual(
+      expect.objectContaining({
+        websiteId: "website-1",
+        domain: null,
+        subdomain: "acme-store.localhost",
+        domainType: WebsiteDomainType.SUBDOMAIN,
+        isPrimary: true,
+        verificationStatus: WebsiteDomainVerificationStatus.VERIFIED,
+        sslStatus: WebsiteDomainSslStatus.ACTIVE,
+        verifiedAt: expect.any(Date),
+      }),
+    );
     expect(insertedValues).toContainEqual({
       table: website,
       values: expect.objectContaining({
         businessId: "business-1",
         name: "Acme Store",
         status: WebsiteStatus.DRAFT,
-        template: WebsiteTemplate.ELECTRONIC,
+        template: WebsiteTemplate.FASHION,
       }),
     });
     expect(insertedValues.some((item) => item.table === websiteConfig)).toBe(
@@ -109,18 +129,90 @@ describe("WebsiteService", () => {
     ).toBe(true);
   });
 
+  it("uses a readable numeric suffix when the default subdomain is taken", async () => {
+    const { insertedValues, service } = createService([
+      [{ id: "business-1", name: "Acme Store Ltd." }],
+      [],
+      [],
+      [{ id: "domain-existing" }],
+      [],
+    ]);
+
+    await service.create(currentUser, "business-1", {
+      template: WebsiteTemplate.FASHION,
+    });
+
+    expect(insertedValues).toContainEqual({
+      table: websiteDomain,
+      values: expect.objectContaining({
+        subdomain: "acme-store-ltd-2.localhost",
+      }),
+    });
+  });
+
+  it("resolves storefronts by exact subdomain only", async () => {
+    const { service } = createService([
+      [
+        {
+          site: {
+            id: "website-1",
+            status: WebsiteStatus.PUBLISHED,
+            deletedAt: null,
+          },
+          domain: {
+            verificationStatus: WebsiteDomainVerificationStatus.VERIFIED,
+            sslStatus: WebsiteDomainSslStatus.ACTIVE,
+          },
+        },
+      ],
+      [],
+    ]);
+
+    jest
+      .spyOn(service as any, "hydrateWebsite")
+      .mockImplementation(async (item) => item);
+
+    await expect(service.findPublishedByHost("acme")).resolves.toMatchObject({
+      id: "website-1",
+    });
+    await expect(
+      service.findPublishedByHost("acme.example.com"),
+    ).resolves.toBeNull();
+  });
+
+  it("explains why a registered storefront domain is not ready", async () => {
+    const { service } = createService([
+      [
+        {
+          site: {
+            id: "website-1",
+            status: WebsiteStatus.PUBLISHED,
+            deletedAt: null,
+          },
+          domain: {
+            verificationStatus: WebsiteDomainVerificationStatus.PENDING,
+            sslStatus: WebsiteDomainSslStatus.ACTIVE,
+          },
+        },
+      ],
+    ]);
+
+    await expect(service.findPublishedByHostOrThrow("acme")).rejects.toThrow(
+      'The storefront domain "acme" is registered but cannot be used yet because its verification status is PENDING.',
+    );
+  });
+
   it("rejects a second active website for the same business", async () => {
-    const { db, packageLimits, service, tx } = createService([
+    const { db, service, tx } = createService([
       [{ id: "business-1", name: "Acme Store" }],
       [{ id: "website-existing" }],
     ]);
 
     await expect(
       service.create(currentUser, "business-1", {
-        template: WebsiteTemplate.ELECTRONIC,
+        template: WebsiteTemplate.FASHION,
       }),
     ).rejects.toThrow(BadRequestException);
-    expect(packageLimits.assertWithinLimit).not.toHaveBeenCalled();
     expect(db.transaction).not.toHaveBeenCalled();
     expect(tx.insert).not.toHaveBeenCalled();
   });
@@ -130,8 +222,10 @@ describe("WebsiteService", () => {
 
     await expect(
       service.create(currentUser, "missing-business", {
-        template: WebsiteTemplate.ELECTRONIC,
+        template: WebsiteTemplate.FASHION,
       }),
-    ).rejects.toThrow("Business not found");
+    ).rejects.toThrow(
+      "Business could not be found. It may not exist, may have been deleted, or may not be accessible to the current user.",
+    );
   });
 });

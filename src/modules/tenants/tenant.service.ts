@@ -1,16 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  ilike,
-  inArray,
-  isNull,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, count, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import {
   business,
   BusinessStatus,
@@ -20,8 +9,9 @@ import {
 } from "@/database/schema";
 
 import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
-import { QueryTenantDto } from "./dto/query-tenant.dto";
+import { QueryTenantDto, TenantSortBy } from "./dto/query-tenant.dto";
 import { UpdateTenantStatusDto } from "./dto/update-tenant-status.dto";
+import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 import { DatabaseService } from "../../database/database.service";
 import {
   apiResponse,
@@ -40,7 +30,9 @@ export class TenantService {
       .limit(1);
 
     if (!tenant) {
-      throw new NotFoundException();
+      throw new NotFoundException(
+        "Tenant could not be found. It may not exist, may have been deleted, or may not be available to the current administrative request.",
+      );
     }
 
     const [profile, ownedBusinesses] = await Promise.all([
@@ -68,9 +60,6 @@ export class TenantService {
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
 
-    const sortBy = query.sortBy ?? "createdAt";
-    const sortOrder = query.sortOrder ?? "desc";
-
     const conditions = [
       eq(systemUser.type, SystemUserType.TENANT),
       isNull(systemUser.deletedAt),
@@ -91,8 +80,20 @@ export class TenantService {
     ].filter(Boolean);
 
     const where = and(...conditions);
-    const orderColumn = systemUser[sortBy];
-    const orderBy = sortOrder === "asc" ? asc(orderColumn) : desc(orderColumn);
+    const orderBy = buildOrderBy(
+      resolveSortColumn(
+        query.sortBy,
+        {
+          [TenantSortBy.ID]: systemUser.id,
+          [TenantSortBy.NAME]: systemUser.name,
+          [TenantSortBy.STATUS]: systemUser.status,
+          [TenantSortBy.CREATED_AT]: systemUser.createdAt,
+          [TenantSortBy.UPDATED_AT]: systemUser.updatedAt,
+        },
+        TenantSortBy.CREATED_AT,
+      ),
+      query.sortOrder,
+    );
 
     const items = await this.database.db
       .select({
@@ -129,12 +130,16 @@ export class TenantService {
       .where(where);
     const total = totalRow?.value ?? 0;
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Tenants were loaded successfully. The response includes the requested page of tenant accounts and pagination metadata for browsing more results.",
+    );
   }
 
   async updateStatus(

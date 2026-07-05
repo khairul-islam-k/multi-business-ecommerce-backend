@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  AnyPgColumn,
   index,
   pgEnum,
   pgTable,
@@ -7,11 +9,11 @@ import {
   uniqueIndex,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
+import { business } from "./business";
 import { decimal } from "./common";
+import { systemUser } from "./system";
 
 export const FinanceAccountType = {
   CASH: "CASH",
@@ -138,7 +140,6 @@ export const financePayableStatusEnum = pgEnum("FinancePayableStatus", [
 
 export const FinanceSourceType = {
   ORDER: "ORDER",
-  INVOICE: "INVOICE",
   SUPPLIER_INVOICE: "SUPPLIER_INVOICE",
   SUPPLIER_PAYMENT: "SUPPLIER_PAYMENT",
   SUPPLIER_RETURN: "SUPPLIER_RETURN",
@@ -152,7 +153,6 @@ export type FinanceSourceType =
   (typeof FinanceSourceType)[keyof typeof FinanceSourceType];
 export const financeSourceTypeEnum = pgEnum("FinanceSourceType", [
   "ORDER",
-  "INVOICE",
   "SUPPLIER_INVOICE",
   "SUPPLIER_PAYMENT",
   "SUPPLIER_RETURN",
@@ -178,13 +178,22 @@ export const financeTax = pgTable(
   "finance_taxes",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     name: varchar({ length: 150 }).notNull(),
     rate: decimal({ precision: 5, scale: 2 }).notNull(),
     description: text(),
     status: financeTaxStatusEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -208,7 +217,9 @@ export const financeAccount = pgTable(
   "finance_accounts",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     name: varchar({ length: 150 }).notNull(),
     accountType: financeAccountTypeEnum("account_type").notNull(),
     accountNumber: varchar("account_number", { length: 100 }),
@@ -222,8 +233,15 @@ export const financeAccount = pgTable(
       scale: 2,
     }).notNull(),
     status: financeAccountStatusEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -247,7 +265,9 @@ export const financeAccountTransaction = pgTable(
   "finance_account_transactions",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     accountId: uuid("account_id")
       .notNull()
       .references((): AnyPgColumn => financeAccount.id, {
@@ -267,7 +287,9 @@ export const financeAccountTransaction = pgTable(
     referenceType: financeSourceTypeEnum("reference_type"),
     referenceId: uuid("reference_id"),
     note: text(),
-    createdBy: uuid("created_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   },
   (table) => [
@@ -295,7 +317,9 @@ export const financeExpenseCategory = pgTable(
   "finance_expense_categories",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     name: varchar({ length: 150 }).notNull(),
     description: text(),
     status: financeExpenseCategoryStatusEnum().notNull(),
@@ -304,6 +328,9 @@ export const financeExpenseCategory = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
@@ -322,7 +349,9 @@ export const financeExpense = pgTable(
   "finance_expenses",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     accountId: uuid("account_id")
       .notNull()
       .references((): AnyPgColumn => financeAccount.id, {
@@ -340,7 +369,12 @@ export const financeExpense = pgTable(
     status: financeExpenseStatusEnum().notNull(),
     referenceNo: varchar("reference_no", { length: 150 }),
     note: text(),
-    createdBy: uuid("created_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -368,7 +402,9 @@ export const financeReceivable = pgTable(
   "finance_receivables",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     receivableNo: varchar("receivable_no", { length: 100 }).notNull(),
     partyType: financePartyTypeEnum("party_type").notNull(),
     partyId: uuid("party_id"),
@@ -413,7 +449,9 @@ export const financePayable = pgTable(
   "finance_payables",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     payableNo: varchar("payable_no", { length: 100 }).notNull(),
     partyType: financePartyTypeEnum("party_type").notNull(),
     partyId: uuid("party_id"),
@@ -455,7 +493,9 @@ export const financeJournalEntry = pgTable(
   "finance_journal_entries",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     journalNo: varchar("journal_no", { length: 100 }).notNull(),
     journalDate: timestamp("journal_date", { mode: "date" }).notNull(),
     referenceType: financeSourceTypeEnum("reference_type"),

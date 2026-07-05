@@ -1,3 +1,4 @@
+import { PermissionAction, RbacFeature } from "@/database/schema";
 import {
   Body,
   Controller,
@@ -10,21 +11,23 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { PermissionAction, RbacFeature } from "@/database/schema";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
-import { RequirePermission } from "../permissions/decorators/require-permission.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { BusinessGuard } from "../business/guards/business.guard";
 import { SubscriptionGuard } from "../packages/guards/subscription.guard";
+import { RequirePermission } from "../permissions/decorators/require-permission.decorator";
 import { PermissionGuard } from "../permissions/guards/permission.guard";
 import {
   AddOrderPaymentDto,
   CreateOrderDto,
   QueryOrderDto,
+  QueryOrderReturnDto,
+  UpdateOrderReturnStatusDto,
 } from "./dto/order.dto";
 import { OrderService } from "./order.service";
+
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 @ApiTags("Orders")
 @ApiBearerAuth()
@@ -60,6 +63,50 @@ export class OrderController {
     @Query() query: QueryOrderDto,
   ) {
     return this.orders.findAll(businessId, query);
+  }
+
+  @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.READ)
+  @Get("returns")
+  @ApiOperation({
+    summary: "Get order returns",
+    description:
+      "Shows return requests for this business so staff can review what customers sent back or asked to send back.",
+  })
+  findReturns(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Query() query: QueryOrderReturnDto,
+  ) {
+    return this.orders.findReturns(businessId, query);
+  }
+
+  @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.READ)
+  @Get("returns/:returnId")
+  @ApiOperation({
+    summary: "Get order return",
+    description:
+      "Shows a single return request with its order and item details so staff can decide the next step.",
+  })
+  findReturn(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("returnId", ParseUUIDPipe) returnId: string,
+  ) {
+    return this.orders.findReturn(businessId, returnId);
+  }
+
+  @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.UPDATE)
+  @Patch("returns/:returnId/status")
+  @ApiOperation({
+    summary: "Update order return status",
+    description:
+      "Moves a return request through review. Requested returns can be approved, rejected, or cancelled; approved returns can be completed or cancelled.",
+  })
+  updateReturnStatus(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("returnId", ParseUUIDPipe) returnId: string,
+    @Body() dto: UpdateOrderReturnStatusDto,
+  ) {
+    return this.orders.updateReturnStatus(user, businessId, returnId, dto);
   }
 
   @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.READ)

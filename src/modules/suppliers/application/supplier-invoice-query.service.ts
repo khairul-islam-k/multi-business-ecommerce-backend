@@ -1,14 +1,15 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { supplierInvoice } from "@/database/schema";
 import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
-import { QuerySupplierInvoiceDto } from "../dto/supplier.dto";
-import { SupplierInvoiceRepository } from "../infrastructure/supplier-invoice.repository";
-import { DatabaseService } from "../../../database/database.service";
+import { supplierInvoice } from "@/database/schema";
+import { Injectable, NotFoundException } from "@nestjs/common";
+
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import { QuerySupplierInvoiceDto } from "../dto/supplier.dto";
+import { SupplierInvoiceRepository } from "../infrastructure/supplier-invoice.repository";
 
 @Injectable()
 export class SupplierInvoiceQueryService {
@@ -61,12 +62,16 @@ export class SupplierInvoiceQueryService {
       rows.map((invoice) => this.invoices.hydrate(invoice)),
     );
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Supplier invoices were loaded successfully. The response includes the requested page of supplier invoice records and pagination metadata for browsing more results.",
+    );
   }
 
   async findSupplierInvoice(businessId: string, supplierInvoiceId: string) {

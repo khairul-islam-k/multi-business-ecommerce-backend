@@ -1,51 +1,59 @@
+import Decimal from "decimal.js";
+import { and, count, eq, ilike, isNull, or, sql, SQL } from "drizzle-orm";
+
+import {
+  business,
+  businessBranding,
+  businessMember,
+  businessSetting,
+  BusinessStatus,
+  courier,
+  courierConfig,
+  CourierConfigMode,
+  CourierConfigStatus,
+  financeAccount,
+  FinanceAccountStatus,
+  FinanceAccountType,
+  financeTax,
+  FinanceTaxStatus,
+  paymentGateway,
+  paymentGatewayConfig,
+  PaymentGatewayConfigStatus,
+  PaymentGatewayMode,
+  ProductSimpleStatus,
+  productUnit,
+  systemUser,
+  SystemUserType,
+  warehouse,
+  WarehouseStatus,
+  website,
+} from "@/database/schema";
 import {
   ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  ilike,
-  inArray,
-  isNull,
-  or,
-  sql,
-  type SQL,
-} from "drizzle-orm";
-import {
-  business,
-  businessBranding,
-  BusinessMemberStatus,
-  businessMember,
-  businessSetting,
-  BusinessStatus,
-  systemUser,
-  SystemUserType,
-  website,
-} from "@/database/schema";
 
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
-import { CreateBusinessDto } from "./dto/create-business.dto";
-import { QueryBusinessDto } from "./dto/query-business.dto";
-import { UpdateBusinessDto } from "./dto/update-business.dto";
-import {
-  DatabaseService,
-  type Database,
-  type DatabaseTransaction,
-} from "../../database/database.service";
-import { BusinessAccessService } from "../access/services/business-access.service";
 import { throwConflictOnUnique } from "../../common/database/db-error.util";
+import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 import { BusinessAccessContext } from "../../common/request-context/request-context.types";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
 import { generateRandomSlug } from "../../common/utils/slug-generator.util";
+import {
+  Database,
+  DatabaseService,
+  DatabaseTransaction,
+} from "../../database/database.service";
+import { BusinessAccessService } from "../access/services/business-access.service";
+import { CreateBusinessDto } from "./dto/create-business.dto";
+import { BusinessSortBy, QueryBusinessDto } from "./dto/query-business.dto";
+import { UpdateBusinessDto } from "./dto/update-business.dto";
+
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 const BUSINESS_SLUG_MAX_LENGTH = 180;
 const BUSINESS_SLUG_RETRY_LIMIT = 5;
@@ -69,6 +77,48 @@ const BUSINESS_SETTING_PREFIX_FIELDS = [
   "variantSkuPrefix",
   "variantBarcodePrefix",
 ] as const;
+const BUSINESS_BRANDING_COLOR_FIELDS = [
+  "primaryColor",
+  "primaryHoverColor",
+  "primaryActiveColor",
+  "secondaryColor",
+  "accentColor",
+  "successColor",
+  "warningColor",
+  "errorColor",
+  "infoColor",
+  "dashboardBackgroundColor",
+  "sidebarBackgroundColor",
+  "sidebarTextColor",
+  "sidebarMutedTextColor",
+  "sidebarActiveBackgroundColor",
+  "sidebarActiveTextColor",
+  "sidebarHoverBackgroundColor",
+  "headerBackgroundColor",
+  "headerTextColor",
+  "cardBackgroundColor",
+  "elevatedBackgroundColor",
+  "tableHeaderBackgroundColor",
+  "tableRowHoverColor",
+  "inputBackgroundColor",
+  "disabledBackgroundColor",
+  "textPrimaryColor",
+  "textSecondaryColor",
+  "textMutedColor",
+  "textInverseColor",
+  "borderColor",
+  "borderSubtleColor",
+  "focusRingColor",
+] as const;
+const BUSINESS_BRANDING_TEXT_FIELDS = [
+  "logoUrl",
+  "faviconUrl",
+  "fontFamily",
+  "borderRadius",
+  "seoTitle",
+  "seoDescription",
+] as const;
+const DEFAULT_CURRENCY_CODE = "BDT";
 
 type BusinessClient = Database | DatabaseTransaction;
 
@@ -92,6 +142,7 @@ export class BusinessService {
       client,
     );
 
+    const currencyCode = this.normalizeCurrency(dto.currencyCode);
     const settingsData = dto.settings
       ? this.buildBusinessSettingData(dto.settings)
       : {};
@@ -110,7 +161,7 @@ export class BusinessService {
             email: dto.email ? this.normalizeEmail(dto.email) : null,
             phone: dto.phone?.trim() || null,
             country: dto.country?.trim() || null,
-            currencyCode: dto.currencyCode?.trim().toUpperCase(),
+            currencyCode,
             timezone: dto.timezone?.trim(),
             status: dto.status ?? BusinessStatus.ACTIVE,
             ownerUserId: userId,
@@ -118,9 +169,20 @@ export class BusinessService {
           })
           .returning();
 
+        const defaults = await this.createDefaultBusinessResources(
+          transaction,
+          created.id,
+          userId,
+          currencyCode,
+        );
+
         await transaction.insert(businessSetting).values({
           businessId: created.id,
           ...settingsData,
+          defaultWarehouseId: defaults.defaultWarehouseId,
+          defaultFinanceAccountId: defaults.defaultFinanceAccountId,
+          defaultUnitId: defaults.defaultUnitId,
+          defaultTaxId: defaults.defaultTaxId,
         });
 
         await transaction.insert(businessBranding).values({
@@ -128,10 +190,21 @@ export class BusinessService {
           ...brandingData,
         });
 
+        await this.createDefaultPaymentGatewayConfigs(
+          transaction,
+          created.id,
+          defaults.defaultFinanceAccountId,
+          userId,
+        );
+        await this.createDefaultCourierConfigs(transaction, created.id, userId);
+
         return this.findBusinessById(created.id, transaction);
       });
 
-      return apiResponse(createdBusiness, "Business created successfully");
+      return apiResponse(
+        createdBusiness,
+        "Business was created successfully. Default operational resources were created with it, and the response includes the saved business profile, settings, branding, and owner details.",
+      );
     } catch (error) {
       this.handleDatabaseError(error);
     }
@@ -141,9 +214,6 @@ export class BusinessService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-
-    const sortBy = query.sortBy ?? "createdAt";
-    const sortOrder = query.sortOrder ?? "desc";
 
     const canIncludeDeleted =
       currentUser.type === SystemUserType.ADMIN && query.includeDeleted;
@@ -168,8 +238,20 @@ export class BusinessService {
     ].filter(Boolean);
 
     const where = and(...conditions);
-    const orderColumn = business[sortBy];
-    const orderBy = sortOrder === "asc" ? asc(orderColumn) : desc(orderColumn);
+    const orderBy = buildOrderBy(
+      resolveSortColumn(
+        query.sortBy,
+        {
+          [BusinessSortBy.ID]: business.id,
+          [BusinessSortBy.NAME]: business.name,
+          [BusinessSortBy.STATUS]: business.status,
+          [BusinessSortBy.CREATED_AT]: business.createdAt,
+          [BusinessSortBy.UPDATED_AT]: business.updatedAt,
+        },
+        BusinessSortBy.CREATED_AT,
+      ),
+      query.sortOrder,
+    );
 
     const items = await this.selectBusinesses(where)
       .orderBy(orderBy)
@@ -183,12 +265,16 @@ export class BusinessService {
 
     const total = totalRow?.value ?? 0;
 
-    return paginatedResponse(this.mapBusinessRows(items), {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      this.mapBusinessRows(items),
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Businesses were loaded successfully. The response includes the businesses visible to the current user and pagination metadata for continuing through the result set.",
+    );
   }
 
   async findOne(currentUser: CurrentUserPayload, businessId: string) {
@@ -201,7 +287,9 @@ export class BusinessService {
     );
 
     if (!matchedBusiness) {
-      throw new NotFoundException("Business not found");
+      throw new NotFoundException(
+        "Business could not be found. It may not exist, may have been deleted, or may not be accessible to the current user.",
+      );
     }
 
     return apiResponse(matchedBusiness);
@@ -241,7 +329,7 @@ export class BusinessService {
                 country: dto.country?.trim() || null,
               }),
               ...(dto.currencyCode !== undefined && {
-                currencyCode: dto.currencyCode.trim().toUpperCase(),
+                currencyCode: this.normalizeCurrency(dto.currencyCode),
               }),
               ...(dto.timezone !== undefined && {
                 timezone: dto.timezone.trim(),
@@ -269,10 +357,43 @@ export class BusinessService {
           }
 
           if (settingData && this.hasKeys(settingData)) {
+            if (dto.settings?.defaultWarehouseId) {
+              await this.assertActiveWarehouse(
+                transaction,
+                businessId,
+                dto.settings.defaultWarehouseId,
+              );
+            }
+
+            if (dto.settings?.defaultFinanceAccountId) {
+              await this.assertActiveFinanceAccount(
+                transaction,
+                businessId,
+                dto.settings.defaultFinanceAccountId,
+              );
+            }
+
+            if (dto.settings?.defaultUnitId) {
+              await this.assertActiveUnit(
+                transaction,
+                businessId,
+                dto.settings.defaultUnitId,
+              );
+            }
+
+            if (dto.settings?.defaultTaxId) {
+              await this.assertActiveTax(
+                transaction,
+                businessId,
+                dto.settings.defaultTaxId,
+              );
+            }
+
             await this.upsertBusinessSettings(
               transaction,
               businessId,
               settingData,
+              currentUser.id,
             );
           }
 
@@ -288,7 +409,10 @@ export class BusinessService {
         },
       );
 
-      return apiResponse(updatedBusiness, "Business updated successfully");
+      return apiResponse(
+        updatedBusiness,
+        "Business was updated successfully. The saved profile, settings, branding, and related website name changes are included in the response.",
+      );
     } catch (error) {
       this.handleDatabaseError(error);
     }
@@ -325,11 +449,15 @@ export class BusinessService {
       .set({
         status: BusinessStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedById: currentUser.id,
         updatedById: currentUser.id,
       })
       .where(eq(business.id, businessId));
 
-    return apiResponse(null, "Business deleted successfully");
+    return apiResponse(
+      null,
+      "Business was deleted successfully. It has been marked inactive and soft-deleted, so it will no longer appear in normal business lists.",
+    );
   }
 
   async assertCanAccessBusiness(
@@ -369,7 +497,9 @@ export class BusinessService {
       .limit(1);
 
     if (!matchedBusiness) {
-      throw new NotFoundException("Business not found");
+      throw new NotFoundException(
+        "Business could not be found. It may not exist, may have been deleted, or may not be accessible to the current user.",
+      );
     }
 
     return matchedBusiness;
@@ -429,7 +559,9 @@ export class BusinessService {
     );
 
     if (!matchedBusiness) {
-      throw new NotFoundException("Business not found");
+      throw new NotFoundException(
+        "Business could not be found. It may not exist, may have been deleted, or may not be accessible to the current user.",
+      );
     }
 
     return matchedBusiness;
@@ -488,6 +620,7 @@ export class BusinessService {
     transaction: DatabaseTransaction,
     businessId: string,
     data: ReturnType<BusinessService["buildBusinessSettingData"]>,
+    currentUserId: string,
   ) {
     const [existing] = await transaction
       .select({ id: businessSetting.id })
@@ -503,9 +636,25 @@ export class BusinessService {
       return;
     }
 
+    const [businessRow] = await transaction
+      .select({ currencyCode: business.currencyCode })
+      .from(business)
+      .where(eq(business.id, businessId))
+      .limit(1);
+    const defaults = await this.createDefaultBusinessResources(
+      transaction,
+      businessId,
+      currentUserId,
+      this.normalizeCurrency(businessRow?.currencyCode),
+    );
+
     await transaction.insert(businessSetting).values({
       businessId,
       ...data,
+      defaultWarehouseId: defaults.defaultWarehouseId,
+      defaultFinanceAccountId: defaults.defaultFinanceAccountId,
+      defaultUnitId: defaults.defaultUnitId,
+      defaultTaxId: defaults.defaultTaxId,
     });
   }
 
@@ -541,9 +690,6 @@ export class BusinessService {
       ...(dto.lowStockThreshold !== undefined && {
         lowStockThreshold: dto.lowStockThreshold,
       }),
-      ...(dto.allowBackorder !== undefined && {
-        allowBackorder: dto.allowBackorder,
-      }),
       ...(dto.autoConfirmOrder !== undefined && {
         autoConfirmOrder: dto.autoConfirmOrder,
       }),
@@ -552,6 +698,18 @@ export class BusinessService {
       }),
       ...(dto.onlinePaymentEnabled !== undefined && {
         onlinePaymentEnabled: dto.onlinePaymentEnabled,
+      }),
+      ...(dto.defaultWarehouseId !== undefined && {
+        defaultWarehouseId: dto.defaultWarehouseId,
+      }),
+      ...(dto.defaultFinanceAccountId !== undefined && {
+        defaultFinanceAccountId: dto.defaultFinanceAccountId,
+      }),
+      ...(dto.defaultUnitId !== undefined && {
+        defaultUnitId: dto.defaultUnitId,
+      }),
+      ...(dto.defaultTaxId !== undefined && {
+        defaultTaxId: dto.defaultTaxId,
       }),
     };
 
@@ -564,35 +722,142 @@ export class BusinessService {
     return data;
   }
 
+  private async createDefaultBusinessResources(
+    transaction: DatabaseTransaction,
+    businessId: string,
+    userId: string,
+    currencyCode: string,
+  ) {
+    const [[defaultWarehouse], [defaultFinanceAccount], [defaultUnit], [tax]] =
+      await Promise.all([
+        transaction
+          .insert(warehouse)
+          .values({
+            businessId,
+            name: "Default Warehouse",
+            status: WarehouseStatus.ACTIVE,
+            createdBy: userId,
+            updatedBy: userId,
+          })
+          .returning({ id: warehouse.id }),
+        transaction
+          .insert(financeAccount)
+          .values({
+            businessId,
+            name: "Main Cash",
+            accountType: FinanceAccountType.CASH,
+            currencyCode,
+            openingBalance: new Decimal(0),
+            currentBalance: new Decimal(0),
+            status: FinanceAccountStatus.ACTIVE,
+            createdBy: userId,
+            updatedBy: userId,
+          })
+          .returning({ id: financeAccount.id }),
+        transaction
+          .insert(productUnit)
+          .values({
+            businessId,
+            name: "Piece",
+            status: ProductSimpleStatus.ACTIVE,
+            createdBy: userId,
+            updatedBy: userId,
+          })
+          .returning({ id: productUnit.id }),
+        transaction
+          .insert(financeTax)
+          .values({
+            businessId,
+            name: "No Tax",
+            rate: new Decimal(0),
+            description: "Default zero-percent tax",
+            status: FinanceTaxStatus.ACTIVE,
+            createdBy: userId,
+            updatedBy: userId,
+          })
+          .returning({ id: financeTax.id }),
+      ]);
+
+    return {
+      defaultWarehouseId: defaultWarehouse.id,
+      defaultFinanceAccountId: defaultFinanceAccount.id,
+      defaultUnitId: defaultUnit.id,
+      defaultTaxId: tax.id,
+    };
+  }
+
+  private async createDefaultPaymentGatewayConfigs(
+    transaction: DatabaseTransaction,
+    businessId: string,
+    defaultFinanceAccountId: string,
+    userId: string,
+  ) {
+    const gateways = await transaction.select().from(paymentGateway);
+
+    if (gateways.length === 0) {
+      return;
+    }
+
+    await transaction.insert(paymentGatewayConfig).values(
+      gateways.map((gateway) => ({
+        businessId,
+        gatewayId: gateway.id,
+        financeAccountId: defaultFinanceAccountId,
+        configData: "",
+        mode: PaymentGatewayMode.SANDBOX,
+        status: PaymentGatewayConfigStatus.INACTIVE,
+        createdBy: userId,
+        updatedBy: userId,
+      })),
+    );
+  }
+
+  private async createDefaultCourierConfigs(
+    transaction: DatabaseTransaction,
+    businessId: string,
+    userId: string,
+  ) {
+    const couriers = await transaction.select().from(courier);
+
+    if (couriers.length === 0) {
+      return;
+    }
+
+    await transaction.insert(courierConfig).values(
+      couriers.map((row) => ({
+        businessId,
+        courierId: row.id,
+        configData: { baseUrl: "https://openapi.redx.com.bd" },
+        mode: CourierConfigMode.LIVE,
+        status: CourierConfigStatus.INACTIVE,
+        createdBy: userId,
+        updatedBy: userId,
+      })),
+    );
+  }
+
   private buildBusinessBrandingData(
     dto: NonNullable<CreateBusinessDto["branding"]>,
   ) {
-    return {
-      ...(dto.logoUrl !== undefined && {
-        logoUrl: dto.logoUrl || null,
-      }),
-      ...(dto.faviconUrl !== undefined && {
-        faviconUrl: dto.faviconUrl || null,
-      }),
-      ...(dto.primaryColor !== undefined && {
-        primaryColor: dto.primaryColor || null,
-      }),
-      ...(dto.secondaryColor !== undefined && {
-        secondaryColor: dto.secondaryColor || null,
-      }),
-      ...(dto.accentColor !== undefined && {
-        accentColor: dto.accentColor || null,
-      }),
-      ...(dto.fontFamily !== undefined && {
-        fontFamily: dto.fontFamily || null,
-      }),
-      ...(dto.seoTitle !== undefined && {
-        seoTitle: dto.seoTitle || null,
-      }),
-      ...(dto.seoDescription !== undefined && {
-        seoDescription: dto.seoDescription || null,
-      }),
-    };
+    const data: Record<string, unknown> = {};
+
+    for (const field of BUSINESS_BRANDING_COLOR_FIELDS) {
+      if (dto[field] !== undefined) {
+        data[field] = this.normalizeNullableText(dto[field]);
+      }
+    }
+
+    for (const field of BUSINESS_BRANDING_TEXT_FIELDS) {
+      if (dto[field] !== undefined) {
+        data[field] = this.normalizeNullableText(dto[field].toString());
+      }
+    }
+
+    if (dto.density !== undefined) {
+      data.density = dto.density;
+    }
+
+    return data;
   }
 
   private async generateUniqueBusinessSlug(
@@ -626,8 +891,18 @@ export class BusinessService {
     return email.trim().toLowerCase();
   }
 
+  private normalizeCurrency(currencyCode?: string | null) {
+    return currencyCode?.trim().toUpperCase() || DEFAULT_CURRENCY_CODE;
+  }
+
   private normalizeNullablePrefix(value?: string | null) {
     const normalized = value?.trim().toUpperCase();
+
+    return normalized || null;
+  }
+
+  private normalizeNullableText(value?: string | null) {
+    const normalized = value?.trim();
 
     return normalized || null;
   }
@@ -636,7 +911,110 @@ export class BusinessService {
     return Object.keys(value).length > 0;
   }
 
+  private async assertActiveWarehouse(
+    client: BusinessClient,
+    businessId: string,
+    warehouseId: string,
+  ) {
+    const [warehouseRow] = await client
+      .select({ id: warehouse.id })
+      .from(warehouse)
+      .where(
+        and(
+          eq(warehouse.id, warehouseId),
+          eq(warehouse.businessId, businessId),
+          eq(warehouse.status, WarehouseStatus.ACTIVE),
+          isNull(warehouse.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!warehouseRow) {
+      throw new NotFoundException(
+        "Default warehouse must be an active warehouse for this business",
+      );
+    }
+  }
+
+  private async assertActiveFinanceAccount(
+    client: BusinessClient,
+    businessId: string,
+    accountId: string,
+  ) {
+    const [account] = await client
+      .select({ id: financeAccount.id })
+      .from(financeAccount)
+      .where(
+        and(
+          eq(financeAccount.id, accountId),
+          eq(financeAccount.businessId, businessId),
+          eq(financeAccount.status, FinanceAccountStatus.ACTIVE),
+          isNull(financeAccount.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!account) {
+      throw new NotFoundException(
+        "Default finance account must be an active account for this business",
+      );
+    }
+  }
+
+  private async assertActiveUnit(
+    client: BusinessClient,
+    businessId: string,
+    unitId: string,
+  ) {
+    const [unit] = await client
+      .select({ id: productUnit.id })
+      .from(productUnit)
+      .where(
+        and(
+          eq(productUnit.id, unitId),
+          eq(productUnit.businessId, businessId),
+          eq(productUnit.status, ProductSimpleStatus.ACTIVE),
+          isNull(productUnit.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!unit) {
+      throw new NotFoundException(
+        "Default product unit must be an active unit for this business",
+      );
+    }
+  }
+
+  private async assertActiveTax(
+    client: BusinessClient,
+    businessId: string,
+    taxId: string,
+  ) {
+    const [tax] = await client
+      .select({ id: financeTax.id })
+      .from(financeTax)
+      .where(
+        and(
+          eq(financeTax.id, taxId),
+          eq(financeTax.businessId, businessId),
+          eq(financeTax.status, FinanceTaxStatus.ACTIVE),
+          isNull(financeTax.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!tax) {
+      throw new NotFoundException(
+        "Default tax must be an active tax for this business",
+      );
+    }
+  }
+
   private handleDatabaseError(error: unknown): never {
-    throwConflictOnUnique(error, "Business name or slug already exists");
+    throwConflictOnUnique(
+      error,
+      "Business name or slug already exists. Please choose a different business name or slug before trying to save this business again.",
+    );
   }
 }

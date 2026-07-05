@@ -25,7 +25,9 @@ import { FinanceLedgerService } from "../../finance/common/finance-ledger.servic
 import {
   assertDirectOrderPayment,
   assertOrderCanAcceptPayment,
+  assertOrderIsNotCod,
   assertSettlementPayment,
+  calculatePaidAmount,
   getOrderPaymentStatus,
 } from "../domain/order-payment.policy";
 import { OrderCodeRepository } from "../infrastructure/order-code.repository";
@@ -59,6 +61,7 @@ export class OrderPaymentService {
     const order = await this.orders.getByIdOrThrow(businessId, orderId);
 
     assertOrderCanAcceptPayment(order.status);
+    assertOrderIsNotCod(order.isCod);
     assertDirectOrderPayment(dto);
 
     const updatedOrder = await this.db.transaction(async (tx) => {
@@ -135,17 +138,16 @@ export class OrderPaymentService {
       );
 
     if (!order) {
-      throw new NotFoundException("Order not found");
+      throw new NotFoundException(
+        "Order could not be found. It may not exist, may have been deleted, or may not belong to the current business or customer account.",
+      );
     }
 
     const payments = await tx
       .select()
       .from(orderPayment)
       .where(eq(orderPayment.orderId, order.id));
-    const paidAmount = payments.reduce(
-      (total, payment) => total.plus(payment.amount),
-      new Decimal(0),
-    );
+    const paidAmount = calculatePaidAmount(payments);
     const paymentStatus = getOrderPaymentStatus(order.totalAmount, paidAmount);
 
     await tx

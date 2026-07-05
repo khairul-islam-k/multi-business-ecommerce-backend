@@ -1,13 +1,14 @@
+import { SystemUserType } from "@/database/schema";
 import {
   CanActivate,
   ExecutionContext,
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
-import { SystemUserType } from "@/database/schema";
+
+import { PackageSubscriptionService } from "../package-subscription.service";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { PackageSubscriptionService } from "../package-subscription.service";
 
 @Injectable()
 export class SubscriptionGuard implements CanActivate {
@@ -21,7 +22,9 @@ export class SubscriptionGuard implements CanActivate {
     const user = request.user;
 
     if (!user) {
-      throw new UnauthorizedException("Unauthorized");
+      throw new UnauthorizedException(
+        "Authentication is required before subscription access can be checked. Please sign in, send a valid Bearer access token, and retry this request.",
+      );
     }
 
     if (user.type === SystemUserType.ADMIN) {

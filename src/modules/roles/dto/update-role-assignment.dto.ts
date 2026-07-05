@@ -1,7 +1,8 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
-import { UserRoleMapStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import { IsDate, IsEnum, IsOptional } from "class-validator";
+
+import { UserRoleMapStatus } from "@/database/schema";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 
 export class UpdateRoleAssignmentDto {
   @ApiPropertyOptional({

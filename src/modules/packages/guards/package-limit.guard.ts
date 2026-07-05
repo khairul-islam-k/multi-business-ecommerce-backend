@@ -6,12 +6,13 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import {
   PACKAGE_LIMIT_METADATA_KEY,
-  type PackageLimitRequirement,
+  PackageLimitRequirement,
 } from "../decorators/require-package-limit.decorator";
 import { PackageLimitService } from "../package-limit.service";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class PackageLimitGuard implements CanActivate {
@@ -39,7 +40,9 @@ export class PackageLimitGuard implements CanActivate {
     }>();
 
     if (!request.user) {
-      throw new UnauthorizedException("Unauthorized");
+      throw new UnauthorizedException(
+        "Authentication is required before package limits can be checked. Please sign in, send a valid Bearer access token, and retry this request.",
+      );
     }
 
     const amount = this.resolveAmount(request, requirement);

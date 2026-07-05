@@ -1,4 +1,5 @@
 import Decimal from "decimal.js";
+
 import { FinancePayableStatus } from "@/database/schema";
 
 import { toMoney } from "./money";
@@ -18,4 +19,3 @@ export function getPayableStatus(
     ? FinancePayableStatus.PENDING
     : FinancePayableStatus.PARTIALLY_PAID;
 }
-

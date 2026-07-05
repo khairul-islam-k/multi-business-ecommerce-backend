@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  AnyPgColumn,
   boolean,
   index,
   integer,
@@ -10,19 +12,18 @@ import {
   uniqueIndex,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
-import { type JsonValue } from "./common";
 import { business } from "./business";
+import { JsonValue } from "./common";
+import { systemUser } from "./system";
 
 export const WebsiteTemplate = {
-  ELECTRONIC: "ELECTRONIC",
+  FASHION: "FASHION",
 } as const;
 export type WebsiteTemplate =
   (typeof WebsiteTemplate)[keyof typeof WebsiteTemplate];
-export const websiteTemplateEnum = pgEnum("WebsiteTemplate", ["ELECTRONIC"]);
+export const websiteTemplateEnum = pgEnum("WebsiteTemplate", ["FASHION"]);
 
 export const WebsiteStatus = {
   DRAFT: "DRAFT",
@@ -90,8 +91,15 @@ export const website = pgTable(
     slug: varchar({ length: 180 }).notNull(),
     status: websiteStatusEnum().notNull(),
     template: websiteTemplateEnum().notNull(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -118,9 +126,9 @@ export const websiteConfig = pgTable(
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
     websiteId: uuid("website_id")
-      .unique()
       .notNull()
-      .references((): AnyPgColumn => website.id, { onDelete: "cascade" }),
+      .references((): AnyPgColumn => website.id, { onDelete: "cascade" })
+      .unique(),
     headerConfig: jsonb("header_config").$type<JsonValue>(),
     footerConfig: jsonb("footer_config").$type<JsonValue>(),
     navigationConfig: jsonb("navigation_config").$type<JsonValue>(),
@@ -142,7 +150,6 @@ export const websiteDomain = pgTable(
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
     websiteId: uuid("website_id")
-      .unique()
       .notNull()
       .references((): AnyPgColumn => website.id, { onDelete: "cascade" }),
     domain: varchar({ length: 255 }),
@@ -159,17 +166,22 @@ export const websiteDomain = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
     uniqueIndex("website_domains_domain_unique")
       .on(table.domain)
-      .where(sql`${table.domain} IS NOT NULL`),
+      .where(sql`${table.domain} IS NOT NULL AND ${table.deletedAt} IS NULL`),
+
     uniqueIndex("website_domains_subdomain_unique")
       .on(table.subdomain)
-      .where(sql`${table.subdomain} IS NOT NULL`),
+      .where(
+        sql`${table.subdomain} IS NOT NULL AND ${table.deletedAt} IS NULL`,
+      ),
+
     uniqueIndex("website_domains_one_primary_per_website_unique")
       .on(table.websiteId)
-      .where(sql`${table.isPrimary} = true`),
+      .where(sql`${table.isPrimary} = true AND ${table.deletedAt} IS NULL`),
     index("website_domains_website_id_idx").on(table.websiteId),
     index("website_domains_domain_idx").on(table.domain),
     index("website_domains_subdomain_idx").on(table.subdomain),
@@ -216,6 +228,7 @@ export const websiteSeoSetting = pgTable(
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
     websiteId: uuid("website_id")
+      .unique()
       .notNull()
       .references((): AnyPgColumn => website.id, { onDelete: "cascade" }),
     metaTitle: varchar("meta_title", { length: 255 }),

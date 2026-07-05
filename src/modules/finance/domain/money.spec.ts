@@ -1,6 +1,7 @@
+import Decimal from "decimal.js";
+
 import { describe, expect, it } from "@jest/globals";
 import { BadRequestException } from "@nestjs/common";
-import Decimal from "decimal.js";
 
 import {
   assertPositiveMoney,
@@ -27,4 +28,3 @@ describe("money helpers", () => {
     );
   });
 });
-

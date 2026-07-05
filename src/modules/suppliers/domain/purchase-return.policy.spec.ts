@@ -1,6 +1,7 @@
+import Decimal from "decimal.js";
+
 import { describe, expect, it } from "@jest/globals";
 import { BadRequestException } from "@nestjs/common";
-import Decimal from "decimal.js";
 
 import {
   assertPurchaseOrderItems,
@@ -36,4 +37,3 @@ describe("purchase return policy", () => {
     expect(totals.totalAmount.toString()).toBe("209");
   });
 });
-

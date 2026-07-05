@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  AnyPgColumn,
   index,
   integer,
   pgEnum,
@@ -8,13 +10,13 @@ import {
   uniqueIndex,
   uuid,
   varchar,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
+import { business } from "./business";
 import { decimal } from "./common";
 import { financeTax } from "./finance";
 import { product, productVariant } from "./product";
+import { systemUser } from "./system";
 
 export const SupplierStatus = {
   ACTIVE: "ACTIVE",
@@ -69,9 +71,7 @@ export const supplierInvoiceStatusEnum = pgEnum("SupplierInvoiceStatus", [
 export const SupplierPaymentMethod = {
   CASH: "CASH",
   BANK_TRANSFER: "BANK_TRANSFER",
-  BKASH: "BKASH",
-  NAGAD: "NAGAD",
-  CHEQUE: "CHEQUE",
+  MOBILE_BANKING: "MOBILE_BANKING",
   OTHER: "OTHER",
 } as const;
 export type SupplierPaymentMethod =
@@ -79,9 +79,7 @@ export type SupplierPaymentMethod =
 export const supplierPaymentMethodEnum = pgEnum("SupplierPaymentMethod", [
   "CASH",
   "BANK_TRANSFER",
-  "BKASH",
-  "NAGAD",
-  "CHEQUE",
+  "MOBILE_BANKING",
   "OTHER",
 ]);
 
@@ -102,7 +100,9 @@ export const supplier = pgTable(
   "suppliers",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     name: varchar({ length: 150 }).notNull(),
     companyName: varchar("company_name", { length: 150 }),
     email: varchar({ length: 150 }),
@@ -112,8 +112,15 @@ export const supplier = pgTable(
     country: varchar({ length: 100 }),
     status: supplierStatusEnum().notNull(),
     note: text(),
-    createdBy: uuid("created_by"),
-    updatedBy: uuid("updated_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -138,7 +145,9 @@ export const supplierProductMap = pgTable(
   "supplier_product_map",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     supplierId: uuid("supplier_id")
       .notNull()
       .references((): AnyPgColumn => supplier.id, { onDelete: "cascade" }),
@@ -180,14 +189,16 @@ export const supplierPurchaseOrder = pgTable(
   "supplier_purchase_orders",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     supplierId: uuid("supplier_id")
       .notNull()
       .references((): AnyPgColumn => supplier.id, { onDelete: "restrict" }),
     warehouseId: uuid("warehouse_id").notNull(),
-    taxId: uuid("tax_id")
-      .notNull()
-      .references((): AnyPgColumn => financeTax.id, { onDelete: "restrict" }),
+    taxId: uuid("tax_id").references((): AnyPgColumn => financeTax.id, {
+      onDelete: "restrict",
+    }),
     purchaseOrderNo: varchar("purchase_order_no", { length: 100 }).notNull(),
     orderDate: timestamp("order_date", { mode: "date" }).notNull(),
     expectedDeliveryDate: timestamp("expected_delivery_date", { mode: "date" }),
@@ -197,7 +208,6 @@ export const supplierPurchaseOrder = pgTable(
       precision: 12,
       scale: 2,
     }).notNull(),
-    // TODO: Can I normalize it by removing the following two fields?
     taxTotal: decimal("tax_total", { precision: 12, scale: 2 }).notNull(),
     taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
     shippingCost: decimal("shipping_cost", {
@@ -206,8 +216,16 @@ export const supplierPurchaseOrder = pgTable(
     }).notNull(),
     totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull(),
     note: text(),
-    createdBy: uuid("created_by"),
-    approvedBy: uuid("approved_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    approvedBy: uuid("approved_by").references(
+      (): AnyPgColumn => systemUser.id,
+      { onDelete: "set null" },
+    ),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     approvedAt: timestamp("approved_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
@@ -250,6 +268,9 @@ export const supplierPurchaseOrderItem = pgTable(
       (): AnyPgColumn => productVariant.id,
       { onDelete: "set null" },
     ),
+    taxId: uuid("tax_id")
+      .notNull()
+      .references((): AnyPgColumn => financeTax.id, { onDelete: "restrict" }),
     quantityOrdered: decimal("quantity_ordered", {
       precision: 14,
       scale: 3,
@@ -264,6 +285,7 @@ export const supplierPurchaseOrderItem = pgTable(
       scale: 2,
     }).notNull(),
     taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).notNull(),
+    taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
     lineTotal: decimal("line_total", { precision: 12, scale: 2 }).notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
@@ -277,6 +299,7 @@ export const supplierPurchaseOrderItem = pgTable(
     ),
     index("supplier_purchase_order_items_product_id_idx").on(table.productId),
     index("supplier_purchase_order_items_variant_id_idx").on(table.variantId),
+    index("supplier_purchase_order_items_tax_id_idx").on(table.taxId),
   ],
 );
 export type SupplierPurchaseOrderItem =
@@ -288,7 +311,9 @@ export const supplierInvoice = pgTable(
   "supplier_invoices",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     supplierId: uuid("supplier_id")
       .notNull()
       .references((): AnyPgColumn => supplier.id, { onDelete: "restrict" }),
@@ -308,7 +333,6 @@ export const supplierInvoice = pgTable(
       precision: 12,
       scale: 2,
     }).notNull(),
-    // TODO: Can I normalize it by removing the following two fields?
     taxTotal: decimal("tax_total", { precision: 12, scale: 2 }).notNull(),
     taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
     shippingCost: decimal("shipping_cost", {
@@ -318,7 +342,12 @@ export const supplierInvoice = pgTable(
     totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull(),
     paidAmount: decimal("paid_amount", { precision: 12, scale: 2 }).notNull(),
     note: text(),
-    createdBy: uuid("created_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -327,10 +356,9 @@ export const supplierInvoice = pgTable(
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
-    uniqueIndex("supplier_invoices_business_id_invoice_no_unique").on(
-      table.businessId,
-      table.invoiceNo,
-    ),
+    uniqueIndex("supplier_invoices_business_id_invoice_no_active_unique")
+      .on(table.businessId, table.invoiceNo)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("supplier_invoices_business_id_idx").on(table.businessId),
     index("supplier_invoices_supplier_id_idx").on(table.supplierId),
     index("supplier_invoices_purchase_order_id_idx").on(table.purchaseOrderId),
@@ -354,6 +382,9 @@ export const supplierInvoiceItem = pgTable(
       }),
     productId: uuid("product_id").notNull(),
     variantId: uuid("variant_id"),
+    taxId: uuid("tax_id")
+      .notNull()
+      .references((): AnyPgColumn => financeTax.id, { onDelete: "restrict" }),
     quantity: decimal({ precision: 14, scale: 3 }).notNull(),
     unitCost: decimal("unit_cost", { precision: 12, scale: 2 }).notNull(),
     discountAmount: decimal("discount_amount", {
@@ -361,6 +392,7 @@ export const supplierInvoiceItem = pgTable(
       scale: 2,
     }).notNull(),
     taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).notNull(),
+    taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
     lineTotal: decimal("line_total", { precision: 12, scale: 2 }).notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
@@ -374,6 +406,7 @@ export const supplierInvoiceItem = pgTable(
     ),
     index("supplier_invoice_items_product_id_idx").on(table.productId),
     index("supplier_invoice_items_variant_id_idx").on(table.variantId),
+    index("supplier_invoice_items_tax_id_idx").on(table.taxId),
   ],
 );
 export type SupplierInvoiceItem = typeof supplierInvoiceItem.$inferSelect;
@@ -383,7 +416,9 @@ export const supplierPayment = pgTable(
   "supplier_payments",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     supplierId: uuid("supplier_id")
       .notNull()
       .references((): AnyPgColumn => supplier.id, { onDelete: "restrict" }),
@@ -398,7 +433,12 @@ export const supplierPayment = pgTable(
     paymentMethod: supplierPaymentMethodEnum("payment_method").notNull(),
     referenceNo: varchar("reference_no", { length: 150 }),
     note: text(),
-    createdBy: uuid("created_by"),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -407,10 +447,9 @@ export const supplierPayment = pgTable(
     deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
-    uniqueIndex("supplier_payments_business_id_payment_no_unique").on(
-      table.businessId,
-      table.paymentNo,
-    ),
+    uniqueIndex("supplier_payments_business_id_payment_no_active_unique")
+      .on(table.businessId, table.paymentNo)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("supplier_payments_business_id_idx").on(table.businessId),
     index("supplier_payments_supplier_id_idx").on(table.supplierId),
     index("supplier_payments_supplier_invoice_id_idx").on(
@@ -426,7 +465,9 @@ export const supplierPurchaseReturn = pgTable(
   "supplier_purchase_returns",
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
-    businessId: uuid("business_id").notNull(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     supplierId: uuid("supplier_id")
       .notNull()
       .references((): AnyPgColumn => supplier.id, { onDelete: "restrict" }),
@@ -451,7 +492,6 @@ export const supplierPurchaseReturn = pgTable(
       precision: 12,
       scale: 2,
     }).notNull(),
-    // TODO: Can I normalize it by removing the following two fields?
     taxTotal: decimal("tax_total", { precision: 12, scale: 2 }).notNull(),
     taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
     totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull(),
@@ -496,6 +536,9 @@ export const supplierPurchaseReturnItem = pgTable(
       }),
     productId: uuid("product_id").notNull(),
     variantId: uuid("variant_id"),
+    taxId: uuid("tax_id")
+      .notNull()
+      .references((): AnyPgColumn => financeTax.id, { onDelete: "restrict" }),
     quantity: decimal({ precision: 14, scale: 3 }).notNull(),
     unitCost: decimal("unit_cost", { precision: 12, scale: 2 }).notNull(),
     discountAmount: decimal("discount_amount", {
@@ -503,6 +546,7 @@ export const supplierPurchaseReturnItem = pgTable(
       scale: 2,
     }).notNull(),
     taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).notNull(),
+    taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull(),
     lineTotal: decimal("line_total", { precision: 12, scale: 2 }).notNull(),
     reason: text(),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
@@ -517,6 +561,7 @@ export const supplierPurchaseReturnItem = pgTable(
     ),
     index("supplier_purchase_return_items_product_id_idx").on(table.productId),
     index("supplier_purchase_return_items_variant_id_idx").on(table.variantId),
+    index("supplier_purchase_return_items_tax_id_idx").on(table.taxId),
   ],
 );
 export type SupplierPurchaseReturnItem =

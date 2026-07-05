@@ -1,28 +1,38 @@
+import { and, count, eq, ilike, isNull } from "drizzle-orm";
+
+import {
+  businessSetting,
+  product,
+  ProductSimpleStatus,
+  ProductUnit,
+  productUnit,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  type ProductUnit,
-  ProductSimpleStatus,
-  product,
-  productUnit,
-} from "@/database/schema";
-import { and, asc, count, desc, eq, ilike, isNull } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { QueryCatalogDto } from "../common/dto/query-catalog.dto";
 import {
-  CreateProductUnitDto,
-  UpdateProductUnitDto,
-} from "./dto/product-unit.dto";
-import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
-import { DatabaseService } from "../../../database/database.service";
+  buildOrderBy,
+  resolveSortColumn,
+} from "../../../common/http/sort.util";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import {
+  CatalogSortBy,
+  QueryCatalogDto,
+} from "../common/dto/query-catalog.dto";
+import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import {
+  CreateProductUnitDto,
+  UpdateProductUnitDto,
+} from "./dto/product-unit.dto";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 type UnitWithCount = ProductUnit & {
   _count: { products: number };
@@ -56,7 +66,10 @@ export class ProductUnitService {
         })
         .returning();
 
-      return apiResponse(await this.withUnitCount(unit), "Unit created successfully");
+      return apiResponse(
+        await this.withUnitCount(unit),
+        "Unit created successfully",
+      );
     } catch (error) {
       this.lookup.handleUniqueError(error, "Unit name already exists");
     }
@@ -79,9 +92,18 @@ export class ProductUnitService {
         .from(productUnit)
         .where(where)
         .orderBy(
-          query.sortOrder === "asc"
-            ? asc(productUnit.createdAt)
-            : desc(productUnit.createdAt),
+          buildOrderBy(
+            resolveSortColumn(
+              query.sortBy,
+              {
+                [CatalogSortBy.NAME]: productUnit.name,
+                [CatalogSortBy.CREATED_AT]: productUnit.createdAt,
+                [CatalogSortBy.UPDATED_AT]: productUnit.updatedAt,
+              },
+              CatalogSortBy.CREATED_AT,
+            ),
+            query.sortOrder,
+          ),
         )
         .limit(limit)
         .offset(skip)
@@ -93,19 +115,25 @@ export class ProductUnitService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Product units were loaded successfully. The response includes the requested page of units for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, unitId: string) {
     const unit = await this.findUnitRow(businessId, unitId);
 
     if (!unit) {
-      throw new NotFoundException("Unit not found");
+      throw new NotFoundException(
+        "Unit could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return apiResponse(await this.withUnitCount(unit));
@@ -132,7 +160,10 @@ export class ProductUnitService {
         .where(eq(productUnit.id, unitId))
         .returning();
 
-      return apiResponse(await this.withUnitCount(unit), "Unit updated successfully");
+      return apiResponse(
+        await this.withUnitCount(unit),
+        "Unit updated successfully",
+      );
     } catch (error) {
       this.lookup.handleUniqueError(error, "Unit name already exists");
     }
@@ -151,6 +182,7 @@ export class ProductUnitService {
       .set({
         status: ProductSimpleStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
         updatedBy: currentUser.id,
       })
       .where(eq(productUnit.id, unitId));
@@ -162,7 +194,9 @@ export class ProductUnitService {
     const unit = await this.findUnitRow(businessId, unitId);
 
     if (!unit) {
-      throw new NotFoundException("Unit not found");
+      throw new NotFoundException(
+        "Unit could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
   }
 
@@ -182,18 +216,37 @@ export class ProductUnitService {
   }
 
   private async assertUnitCanBeDeleted(businessId: string, unitId: string) {
-    const [{ value }] = await this.db
-      .select({ value: count() })
-      .from(product)
-      .where(
-        and(
-          eq(product.businessId, businessId),
-          eq(product.unitId, unitId),
-          isNull(product.deletedAt),
-        ),
-      );
+    const [defaultReference, productReference] = await Promise.all([
+      this.db
+        .select({ value: count() })
+        .from(businessSetting)
+        .where(
+          and(
+            eq(businessSetting.businessId, businessId),
+            eq(businessSetting.defaultUnitId, unitId),
+          ),
+        )
+        .then(([row]) => row?.value ?? 0),
+      this.db
+        .select({ value: count() })
+        .from(product)
+        .where(
+          and(
+            eq(product.businessId, businessId),
+            eq(product.unitId, unitId),
+            isNull(product.deletedAt),
+          ),
+        )
+        .then(([row]) => row?.value ?? 0),
+    ]);
 
-    if (value > 0) {
+    if (defaultReference > 0) {
+      throw new BadRequestException(
+        "Default unit cannot be deleted. Select another active default unit in business settings first.",
+      );
+    }
+
+    if (productReference > 0) {
       throw new BadRequestException(
         "Unit cannot be deleted while assigned to active products",
       );

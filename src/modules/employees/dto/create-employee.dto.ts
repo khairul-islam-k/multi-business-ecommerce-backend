@@ -1,5 +1,3 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { SystemUserStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   ArrayUnique,
@@ -14,6 +12,9 @@ import {
   MinLength,
   ValidateNested,
 } from "class-validator";
+
+import { SystemUserStatus } from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 import { EmployeeProfileDto } from "./employee-profile.dto";
 

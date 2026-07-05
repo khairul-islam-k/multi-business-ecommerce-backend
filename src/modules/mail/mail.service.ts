@@ -10,6 +10,7 @@ type OtpEmailOptions = {
   title: string;
   description: string;
   otp: string;
+  brandName?: string;
 };
 
 @Injectable()
@@ -70,6 +71,38 @@ export class MailService {
     });
   }
 
+  async sendCustomerEmailVerificationOtp(
+    to: string,
+    otp: string,
+    websiteName: string,
+  ) {
+    await this.sendOtpEmail({
+      to,
+      otp,
+      brandName: websiteName,
+      subject: "Verify your email",
+      title: "Verify your email",
+      description:
+        "Use the verification code below to complete your customer account registration.",
+    });
+  }
+
+  async sendCustomerForgotPasswordOtp(
+    to: string,
+    otp: string,
+    websiteName: string,
+  ) {
+    await this.sendOtpEmail({
+      to,
+      otp,
+      brandName: websiteName,
+      subject: "Reset your password",
+      title: "Reset your password",
+      description:
+        "Use the verification code below to reset your customer account password.",
+    });
+  }
+
   private async sendOtpEmail(options: OtpEmailOptions) {
     await this.transporter.sendMail({
       from: this.from,
@@ -90,11 +123,11 @@ If you did not request this, you can safely ignore this email.`,
     });
   }
 
-  private buildOtpEmailHtml(options: Required<Omit<OtpEmailOptions, "to">>) {
+  private buildOtpEmailHtml(options: Omit<OtpEmailOptions, "to">) {
     const safeTitle = this.escapeHtml(options.title);
     const safeDescription = this.escapeHtml(options.description);
     const safeOtp = this.escapeHtml(options.otp);
-    const safeAppName = this.escapeHtml(this.appName);
+    const safeBrandName = this.escapeHtml(options.brandName ?? this.appName);
 
     return `
       <!DOCTYPE html>
@@ -114,7 +147,7 @@ If you did not request this, you can safely ignore this email.`,
                   <tr>
                     <td style="padding:28px 32px; background-color:#111827;">
                       <h1 style="margin:0; font-size:22px; line-height:1.3; color:#ffffff; font-weight:700;">
-                        ${safeAppName}
+                        ${safeBrandName}
                       </h1>
                       <p style="margin:6px 0 0; font-size:14px; color:#d1d5db;">
                         Secure account verification
@@ -164,7 +197,7 @@ If you did not request this, you can safely ignore this email.`,
                   <tr>
                     <td style="padding:20px 32px; background-color:#f9fafb; border-top:1px solid #e5e7eb;">
                       <p style="margin:0; font-size:12px; line-height:1.6; color:#9ca3af; text-align:center;">
-                        © ${new Date().getFullYear()} ${safeAppName}. All rights reserved.
+                        (c) ${new Date().getFullYear()} ${safeBrandName}. All rights reserved.
                       </p>
                     </td>
                   </tr>

@@ -1,13 +1,13 @@
-import { describe, expect, it, jest } from "@jest/globals";
 import Decimal from "decimal.js";
 
 import {
   InventoryMovementType,
   InventoryReferenceType,
-  InventoryTransferStatus,
   inventoryStockTransfer,
   inventoryStockTransferItem,
+  InventoryTransferStatus,
 } from "@/database/schema";
+import { describe, expect, it, jest } from "@jest/globals";
 
 import { StockTransferService } from "./stock-transfer.service";
 
@@ -33,6 +33,9 @@ function createService() {
     ),
     applyStockDelta: jest.fn(async (..._args: unknown[]) => ({
       id: "stock-1",
+    })),
+    getWarehouseStock: jest.fn(() => ({
+      totalQuantity: new Decimal(5),
     })),
   };
   const service = new StockTransferService({ db } as never, lookup as never);

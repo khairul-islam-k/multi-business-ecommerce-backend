@@ -1,42 +1,42 @@
+import Decimal from "decimal.js";
+import { and, count, desc, eq, ilike, isNull, lte, ne, or } from "drizzle-orm";
+
+import {
+  PackagePayment,
+  packagePayment,
+  PackagePaymentStatus,
+  PackagePlan,
+  packagePlan,
+  PackagePlanFeature,
+  packagePlanFeature,
+  PackagePlanLimit,
+  packagePlanLimit,
+  PackageResetCycle,
+  PackageStatus,
+  PackageSubscription,
+  packageSubscription,
+  PackageSubscriptionStatus,
+  PackageUsageCounter,
+  packageUsageCounter,
+  systemUser,
+} from "@/database/schema";
 import {
   ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  type PackagePayment,
-  type PackagePlan,
-  type PackagePlanFeature,
-  type PackagePlanLimit,
-  type PackageSubscription,
-  type PackageUsageCounter,
-  PackagePaymentStatus,
-  PackageResetCycle,
-  PackageStatus,
-  PackageSubscriptionStatus,
-  packagePayment,
-  packagePlan,
-  packagePlanFeature,
-  packagePlanLimit,
-  packageSubscription,
-  packageUsageCounter,
-  systemUser,
-} from "@/database/schema";
-import Decimal from "decimal.js";
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  ilike,
-  isNull,
-  lte,
-  ne,
-  or,
-} from "drizzle-orm";
 
+import { isUniqueConstraintError } from "../../../common/database/db-error.util";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
+import {
+  DatabaseService,
+  DatabaseTransaction,
+} from "../../../database/database.service";
 import { QueryPackageDto } from "../dto/query-package.dto";
+import { PackageSubscriptionService } from "../package-subscription.service";
 import {
   CreatePackagePlanDto,
   UpdatePackagePlanDto,
@@ -47,16 +47,8 @@ import {
   CreateTenantSubscriptionDto,
   QueryPackageSubscriptionDto,
 } from "./dto/package-subscription.dto";
-import {
-  type DatabaseTransaction,
-  DatabaseService,
-} from "../../../database/database.service";
-import { PackageSubscriptionService } from "../package-subscription.service";
-import { isUniqueConstraintError } from "../../../common/database/db-error.util";
-import {
-  apiResponse,
-  paginatedResponse,
-} from "../../../common/utils/api-response.util";
+
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 
 type PackagePlanWithAdminDetails = PackagePlan & {
   limits: PackagePlanLimit[];
@@ -112,7 +104,6 @@ export class AdminPackageService {
             freeTrialDays: dto.freeTrialDays ?? 0,
             isDefault: dto.isDefault ?? false,
             status: dto.status ?? PackageStatus.ACTIVE,
-            sortOrder: dto.sortOrder ?? 0,
           })
           .returning();
 
@@ -147,7 +138,7 @@ export class AdminPackageService {
         .select()
         .from(packagePlan)
         .where(where)
-        .orderBy(asc(packagePlan.sortOrder), desc(packagePlan.createdAt))
+        .orderBy(desc(packagePlan.createdAt))
         .limit(limit)
         .offset(skip)
         .then((rows) => this.withPlansDetails(rows)),
@@ -158,19 +149,25 @@ export class AdminPackageService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(plans, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      plans,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Package plans were loaded successfully. The response includes the requested page of package plans and pagination metadata for browsing more results.",
+    );
   }
 
   async findPlan(planId: string) {
     const plan = await this.findPlanRow(planId);
 
     if (!plan) {
-      throw new NotFoundException("Package plan not found");
+      throw new NotFoundException(
+        "Package plan could not be found. It may not exist, may have been archived, or may not be available for the requested package operation.",
+      );
     }
 
     return apiResponse(await this.withPlanDetails(plan));
@@ -216,7 +213,6 @@ export class AdminPackageService {
             }),
             ...(dto.isDefault !== undefined && { isDefault: dto.isDefault }),
             ...(dto.status !== undefined && { status: dto.status }),
-            ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
           })
           .where(eq(packagePlan.id, planId))
           .returning();
@@ -232,7 +228,7 @@ export class AdminPackageService {
     }
   }
 
-  async deletePlan(planId: string) {
+  async deletePlan(currentUser: CurrentUserPayload, planId: string) {
     await this.assertPlanExists(planId);
 
     await this.db
@@ -241,6 +237,7 @@ export class AdminPackageService {
         status: PackageStatus.ARCHIVED,
         isDefault: false,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
       })
       .where(eq(packagePlan.id, planId));
 
@@ -286,12 +283,16 @@ export class AdminPackageService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(subscriptions, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      subscriptions,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Package subscriptions were loaded successfully. The response includes the requested page of tenant subscriptions and pagination metadata for browsing more results.",
+    );
   }
 
   async findSubscription(subscriptionId: string) {
@@ -302,7 +303,9 @@ export class AdminPackageService {
       .limit(1);
 
     if (!subscription) {
-      throw new NotFoundException("Subscription not found");
+      throw new NotFoundException(
+        "Subscription could not be found. It may not exist, may have been cancelled, or may not belong to the requested tenant.",
+      );
     }
 
     return apiResponse(await this.withSubscriptionFullDetails(subscription));
@@ -319,7 +322,9 @@ export class AdminPackageService {
       .limit(1);
 
     if (!subscription) {
-      throw new NotFoundException("Subscription not found");
+      throw new NotFoundException(
+        "Subscription could not be found. It may not exist, may have been cancelled, or may not belong to the requested tenant.",
+      );
     }
 
     const updatedSubscription =
@@ -345,7 +350,9 @@ export class AdminPackageService {
       .limit(1);
 
     if (!subscription) {
-      throw new NotFoundException("Subscription not found");
+      throw new NotFoundException(
+        "Subscription could not be found. It may not exist, may have been cancelled, or may not belong to the requested tenant.",
+      );
     }
 
     const [updatedSubscription] = await this.db
@@ -386,7 +393,9 @@ export class AdminPackageService {
     const plan = await this.findPlanRow(planId);
 
     if (!plan) {
-      throw new NotFoundException("Package plan not found");
+      throw new NotFoundException(
+        "Package plan could not be found. It may not exist, may have been archived, or may not be available for the requested package operation.",
+      );
     }
   }
 
@@ -430,11 +439,10 @@ export class AdminPackageService {
 
     if (dto.features?.length) {
       await tx.insert(packagePlanFeature).values(
-        dto.features.map((feature, index) => ({
+        dto.features.map((feature) => ({
           packageId: planId,
           title: feature.title.trim(),
           description: feature.description?.trim() || null,
-          sortOrder: feature.sortOrder ?? index,
           isActive: feature.isActive ?? true,
         })),
       );
@@ -456,8 +464,7 @@ export class AdminPackageService {
       this.db
         .select()
         .from(packagePlanFeature)
-        .where(eq(packagePlanFeature.packageId, plan.id))
-        .orderBy(asc(packagePlanFeature.sortOrder)),
+        .where(eq(packagePlanFeature.packageId, plan.id)),
       this.db
         .select({ value: count() })
         .from(packageSubscription)
@@ -545,7 +552,9 @@ export class AdminPackageService {
       .limit(1);
 
     if (!plan) {
-      throw new NotFoundException("Package plan not found");
+      throw new NotFoundException(
+        "Package plan could not be found. It may not exist, may have been archived, or may not be available for the requested package operation.",
+      );
     }
 
     return plan;

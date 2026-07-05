@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { supplierProductMap } from "@/database/schema";
 import { and, eq } from "drizzle-orm";
+
+import { supplierProductMap } from "@/database/schema";
+import { Injectable, NotFoundException } from "@nestjs/common";
 
 import { DatabaseService } from "../../../database/database.service";
 
@@ -33,7 +34,9 @@ export class SupplierProductRepository {
       );
 
     if (!productMap) {
-      throw new NotFoundException("Supplier product not found");
+      throw new NotFoundException(
+        "Supplier product could not be found. It may not exist, may have been removed, or may not belong to this supplier and business.",
+      );
     }
 
     return productMap;

@@ -70,10 +70,16 @@ export class StockAdjustmentService {
           item.variantId ?? null,
         );
 
+        if (warehouseStock.totalQuantity.lessThan(item.adjustmentQty)) {
+          throw new BadRequestException(
+            "Adjustment quantity cannot be greater than the available stock quantity.",
+          );
+        }
+
         return {
           productId: item.productId,
           variantId: item.variantId ?? null,
-          oldQuantity: warehouseStock?.totalQuantity ?? new Decimal(0),
+          oldQuantity: warehouseStock.totalQuantity,
           adjustmentQty: new Decimal(item.adjustmentQty),
           reason: this.lookup.normalizeNullableText(item.reason),
         };
@@ -155,12 +161,16 @@ export class StockAdjustmentService {
       rows.map((adjustment) => this.withAdjustmentRelations(adjustment)),
     );
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Stock adjustments were loaded successfully. The response includes the requested page of adjustment records for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, adjustmentId: string) {

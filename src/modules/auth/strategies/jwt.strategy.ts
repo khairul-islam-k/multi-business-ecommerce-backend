@@ -56,19 +56,19 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
 
     if (!user) {
       throw new UnauthorizedException(
-        "Invalid token. Please login to get a new valid token.",
+        "The access token is missing, expired, malformed, or belongs to a user account that no longer exists. Please sign in again to get a fresh token.",
       );
     }
 
     if (user.status !== SystemUserStatus.ACTIVE) {
       throw new UnauthorizedException(
-        `Non-active account. This account was marked as ${user.status}.`,
+        `This account cannot use the API because its current status is ${user.status}. Please complete the required activation steps or contact an administrator before trying again.`,
       );
     }
 
     if (payload.type !== user.type) {
       throw new UnauthorizedException(
-        "Invalid token. Please login to get a new valid token.",
+        "The access token does not match the current user account type. Please sign in again so the API receives a token with the correct account context.",
       );
     }
 
@@ -81,7 +81,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
 
     if (!payload.businessId) {
       throw new UnauthorizedException(
-        "No business. The user doesn't have any business selected.",
+        "This access token does not include an active business context. Please select a business again so future requests can be scoped to the correct tenant workspace.",
       );
     }
 

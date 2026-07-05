@@ -1,16 +1,18 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { WarehouseStatus } from "@/database/schema";
-import { Type } from "class-transformer";
-import {
-  IsEnum,
-  IsOptional,
-  IsString,
-  Max,
-  MaxLength,
-  Min,
-} from "class-validator";
+import { IsEnum, IsIn, IsOptional, IsString, MaxLength } from "class-validator";
 
-import { CatalogSortOrder } from "../../../product-catalog/common/dto/query-catalog.dto";
+import { WarehouseStatus } from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+
+import { SortedPaginationQueryDto } from "../../../../common/http/query.dto";
+
+export const WarehouseSortBy = {
+  NAME: "name",
+  STATUS: "status",
+  CREATED_AT: "createdAt",
+  UPDATED_AT: "updatedAt",
+} as const;
+export type WarehouseSortBy =
+  (typeof WarehouseSortBy)[keyof typeof WarehouseSortBy];
 
 export class CreateWarehouseDto {
   @ApiProperty({ example: "Main warehouse" })
@@ -29,6 +31,30 @@ export class CreateWarehouseDto {
   @IsString()
   address?: string;
 
+  @ApiPropertyOptional({ example: "115" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  redxAreaId?: string;
+
+  @ApiPropertyOptional({ example: "Dhanmondi" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  redxAreaName?: string;
+
+  @ApiPropertyOptional({ example: "1209" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  redxPostCode?: string;
+
+  @ApiPropertyOptional({ example: "store_123" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  redxPickupStoreId?: string;
+
   @ApiPropertyOptional({ enum: WarehouseStatus })
   @IsOptional()
   @IsEnum(WarehouseStatus)
@@ -37,35 +63,17 @@ export class CreateWarehouseDto {
 
 export class UpdateWarehouseDto extends PartialType(CreateWarehouseDto) {}
 
-export class QueryWarehouseDto {
-  @ApiPropertyOptional({ example: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @Min(1)
-  page?: number = 1;
-
-  @ApiPropertyOptional({ example: 10 })
-  @IsOptional()
-  @Type(() => Number)
-  @Min(1)
-  @Max(100)
-  limit?: number = 10;
-
-  @ApiPropertyOptional({ example: "main" })
-  @IsOptional()
-  @IsString()
-  search?: string;
-
+export class QueryWarehouseDto extends SortedPaginationQueryDto<WarehouseSortBy> {
   @ApiPropertyOptional({ enum: WarehouseStatus })
   @IsOptional()
   @IsEnum(WarehouseStatus)
   status?: WarehouseStatus;
 
   @ApiPropertyOptional({
-    enum: CatalogSortOrder,
-    example: CatalogSortOrder.DESC,
+    enum: WarehouseSortBy,
+    example: WarehouseSortBy.CREATED_AT,
   })
   @IsOptional()
-  @IsEnum(CatalogSortOrder)
-  sortOrder?: CatalogSortOrder = CatalogSortOrder.DESC;
+  @IsIn(Object.values(WarehouseSortBy))
+  sortBy?: WarehouseSortBy = WarehouseSortBy.CREATED_AT;
 }

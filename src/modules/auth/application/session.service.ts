@@ -91,7 +91,7 @@ export class SessionService {
 
       if (revokedSession.length !== 1) {
         throw new UnauthorizedException(
-          "This session token has already been used. Please login again to continue safely.",
+          "This refresh token has already been used or revoked, so it cannot be rotated again safely. Please sign in again to create a new session.",
         );
       }
 
@@ -131,7 +131,7 @@ export class SessionService {
 
     if (result.length !== 1) {
       throw new UnauthorizedException(
-        "This session could not be matched to an active login-session. Please login before switching businesses.",
+        "This refresh token could not be matched to an active login session for this user. Please sign in again before switching businesses.",
       );
     }
   }

@@ -1,26 +1,32 @@
+import Decimal from "decimal.js";
+import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+
+import {
+  businessSetting,
+  financeTax,
+  FinanceTaxStatus,
+  product,
+} from "@/database/schema";
 import {
   BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { FinanceTaxStatus, financeTax } from "@/database/schema";
-import Decimal from "decimal.js";
-import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
-import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import {
-  CreateFinanceTaxDto,
-  QueryFinanceTaxDto,
-  UpdateFinanceTaxDto,
-} from "./dto/finance-tax.dto";
-import { DatabaseService } from "../../../database/database.service";
 import { isUniqueConstraintError } from "../../../common/database/db-error.util";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import { DatabaseService } from "../../../database/database.service";
+import {
+  CreateFinanceTaxDto,
+  QueryFinanceTaxDto,
+  UpdateFinanceTaxDto,
+} from "./dto/finance-tax.dto";
 
+import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 @Injectable()
 export class FinanceTaxService {
   constructor(private readonly database: DatabaseService) {}
@@ -85,19 +91,25 @@ export class FinanceTaxService {
         .then(([row]) => row?.value ?? 0),
     ]);
 
-    return paginatedResponse(items, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    });
+    return paginatedResponse(
+      items,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Taxes were loaded successfully. The response includes the requested page of tax records for this business and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, taxId: string) {
     const tax = await this.findTaxRow(businessId, taxId);
 
     if (!tax) {
-      throw new NotFoundException("Tax not found");
+      throw new NotFoundException(
+        "Tax could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
     }
 
     return apiResponse(tax);
@@ -138,12 +150,14 @@ export class FinanceTaxService {
     taxId: string,
   ) {
     await this.assertTaxExists(businessId, taxId);
+    await this.assertTaxCanBeDeleted(businessId, taxId);
 
     await this.db
       .update(financeTax)
       .set({
         status: FinanceTaxStatus.INACTIVE,
         deletedAt: new Date(),
+        deletedBy: currentUser.id,
         updatedBy: currentUser.id,
       })
       .where(eq(financeTax.id, taxId));
@@ -155,7 +169,47 @@ export class FinanceTaxService {
     const tax = await this.findTaxRow(businessId, taxId);
 
     if (!tax) {
-      throw new NotFoundException("Tax not found");
+      throw new NotFoundException(
+        "Tax could not be found. It may not exist, may have been deleted, or may not belong to the current business.",
+      );
+    }
+  }
+
+  private async assertTaxCanBeDeleted(businessId: string, taxId: string) {
+    const [defaultReference, productReference] = await Promise.all([
+      this.db
+        .select({ value: count() })
+        .from(businessSetting)
+        .where(
+          and(
+            eq(businessSetting.businessId, businessId),
+            eq(businessSetting.defaultTaxId, taxId),
+          ),
+        )
+        .then(([row]) => row?.value ?? 0),
+      this.db
+        .select({ value: count() })
+        .from(product)
+        .where(
+          and(
+            eq(product.businessId, businessId),
+            eq(product.taxId, taxId),
+            isNull(product.deletedAt),
+          ),
+        )
+        .then(([row]) => row?.value ?? 0),
+    ]);
+
+    if (defaultReference > 0) {
+      throw new BadRequestException(
+        "Default tax cannot be deleted. Select another active default tax in business settings first.",
+      );
+    }
+
+    if (productReference > 0) {
+      throw new BadRequestException(
+        "Tax cannot be deleted while assigned to active products",
+      );
     }
   }
 

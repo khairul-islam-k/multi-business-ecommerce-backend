@@ -1,5 +1,3 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { ProductSimpleStatus } from "@/database/schema";
 import { Type } from "class-transformer";
 import {
   IsEnum,
@@ -10,6 +8,9 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
+
+import { ProductSimpleStatus } from "@/database/schema";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 
 export class CreateProductCategoryDto {
   @ApiProperty({ example: "Shoes" })
@@ -38,13 +39,6 @@ export class CreateProductCategoryDto {
   @IsOptional()
   @IsEnum(ProductSimpleStatus)
   status?: ProductSimpleStatus;
-
-  @ApiPropertyOptional({ example: 0 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  sortOrder?: number;
 }
 
 export class UpdateProductCategoryDto extends PartialType(
