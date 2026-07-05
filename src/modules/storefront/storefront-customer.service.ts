@@ -56,6 +56,7 @@ import {
   CreateStorefrontOrderReturnDto,
   CreateStorefrontReviewDto,
   PlaceStorefrontOrderDto,
+  StorefrontAddressQueryDto,
   StorefrontCartQueryDto,
   StorefrontCheckoutPaymentMethod,
   StorefrontOrderQueryDto,
@@ -87,23 +88,45 @@ export class StorefrontCustomerService {
   async findAddresses(
     currentCustomer: CurrentCustomerPayload,
     websiteId: string | undefined,
+    query: StorefrontAddressQueryDto = {},
   ) {
     await this.assertStorefrontCustomer(currentCustomer, websiteId);
-    const addresses = await this.db
-      .select()
-      .from(customerAddress)
-      .where(
-        and(
-          eq(customerAddress.customerId, currentCustomer.customerId),
-          isNull(customerAddress.deletedAt),
-        ),
-      )
-      .orderBy(
-        desc(customerAddress.isDefault),
-        desc(customerAddress.updatedAt),
-      );
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const skip = (page - 1) * limit;
+    const where = and(
+      eq(customerAddress.customerId, currentCustomer.customerId),
+      isNull(customerAddress.deletedAt),
+    );
 
-    return apiResponse(addresses);
+    const [addresses, total] = await Promise.all([
+      this.db
+        .select()
+        .from(customerAddress)
+        .where(where)
+        .orderBy(
+          desc(customerAddress.isDefault),
+          desc(customerAddress.updatedAt),
+        )
+        .limit(limit)
+        .offset(skip),
+      this.db
+        .select({ value: count() })
+        .from(customerAddress)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
+    ]);
+
+    return paginatedResponse(
+      addresses,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Customer addresses were loaded successfully. The response includes the requested page of storefront addresses and pagination metadata for browsing more results.",
+    );
   }
 
   async findAddress(
@@ -254,25 +277,70 @@ export class StorefrontCustomerService {
   async findCarts(
     currentCustomer: CurrentCustomerPayload,
     websiteId: string | undefined,
-    query: StorefrontCartQueryDto,
+    query: StorefrontCartQueryDto = {},
+  ) {
+    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const skip = (page - 1) * limit;
+    const where = and(
+      eq(orderCart.businessId, currentCustomer.businessId),
+      eq(orderCart.customerId, currentCustomer.customerId),
+      query.status ? eq(orderCart.status, query.status) : undefined,
+    );
+
+    const [carts, total] = await Promise.all([
+      this.db
+        .select()
+        .from(orderCart)
+        .where(where)
+        .orderBy(desc(orderCart.updatedAt))
+        .limit(limit)
+        .offset(skip),
+      this.db
+        .select({ value: count() })
+        .from(orderCart)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
+    ]);
+
+    return paginatedResponse(
+      await Promise.all(carts.map((cart) => this.hydrateCart(cart))),
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Customer carts were loaded successfully. The response includes the requested page of carts and pagination metadata for browsing more results.",
+    );
+  }
+
+  async findCart(
+    currentCustomer: CurrentCustomerPayload,
+    websiteId: string | undefined,
+    cartId: string,
   ) {
     await this.assertStorefrontCustomer(currentCustomer, websiteId);
 
-    const carts = await this.db
+    const cart = await this.db
       .select()
       .from(orderCart)
       .where(
         and(
+          eq(orderCart.id, cartId),
           eq(orderCart.businessId, currentCustomer.businessId),
           eq(orderCart.customerId, currentCustomer.customerId),
-          query.status ? eq(orderCart.status, query.status) : undefined,
         ),
       )
-      .orderBy(desc(orderCart.updatedAt));
+      .limit(1)
+      .then(([row]) => row ?? null);
 
-    return apiResponse(
-      await Promise.all(carts.map((cart) => this.hydrateCart(cart))),
-    );
+    if (!cart) {
+      throw new NotFoundException("Cart not found");
+    }
+
+    return apiResponse(await this.hydrateCart(cart));
   }
 
   async getActiveCart(
@@ -719,12 +787,12 @@ export class StorefrontCustomerService {
       },
     );
 
-    if (courierSelection) {
-      await this.couriers.bookShipmentForOrder(
-        currentCustomer.businessId,
-        createdOrderResponse.data.id,
-      );
-    }
+    const courierBooking = courierSelection
+      ? await this.couriers.tryBookShipmentForOrder(
+          currentCustomer.businessId,
+          createdOrderResponse.data.id,
+        )
+      : null;
 
     await this.db
       .update(orderCart)
@@ -738,7 +806,12 @@ export class StorefrontCustomerService {
       createdOrderResponse.data.id,
     );
 
-    return apiResponse(placedOrder, "Order placed successfully");
+    return apiResponse(
+      placedOrder,
+      courierBooking?.bookingError
+        ? "Order placed successfully, but REDX parcel booking failed. Please retry courier booking from the admin courier shipment action."
+        : "Order placed successfully",
+    );
   }
 
   async findOrders(
@@ -868,6 +941,30 @@ export class StorefrontCustomerService {
 
     if (orderRow.status !== OrderStatus.DELIVERED) {
       throw new BadRequestException("Only delivered orders can be returned");
+    }
+
+    const openReturnStatuses = [
+      OrderReturnStatus.REQUESTED,
+      OrderReturnStatus.APPROVED,
+      OrderReturnStatus.COMPLETED,
+    ];
+    const existingOpenReturnCount = await this.db
+      .select({ value: count() })
+      .from(orderReturn)
+      .where(
+        and(
+          eq(orderReturn.businessId, currentCustomer.businessId),
+          eq(orderReturn.orderId, orderId),
+          inArray(orderReturn.status, openReturnStatuses),
+          isNull(orderReturn.deletedAt),
+        ),
+      )
+      .then(([row]) => row?.value ?? 0);
+
+    if (existingOpenReturnCount > 0) {
+      throw new BadRequestException(
+        "A return request already exists for this order",
+      );
     }
 
     if (dto.items.length === 0) {

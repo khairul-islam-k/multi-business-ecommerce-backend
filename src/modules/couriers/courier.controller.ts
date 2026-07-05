@@ -147,4 +147,25 @@ export class CourierController {
   ) {
     return this.couriers.assignCourierToOrder(user, businessId, orderId, dto);
   }
+
+  @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.READ)
+  @Get("shipments/:shipmentId/track")
+  @ApiOperation({ summary: "Track a REDX shipment" })
+  trackShipment(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("shipmentId", ParseUUIDPipe) shipmentId: string,
+  ) {
+    return this.couriers.trackShipment(businessId, shipmentId);
+  }
+
+  @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.UPDATE)
+  @Post("shipments/:shipmentId/book")
+  @ApiOperation({ summary: "Retry REDX parcel booking for a local shipment" })
+  retryBookShipment(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("shipmentId", ParseUUIDPipe) shipmentId: string,
+  ) {
+    return this.couriers.retryBookShipment(user, businessId, shipmentId);
+  }
 }

@@ -3,6 +3,7 @@ import { and, count, desc, eq, ilike, isNull, max, or } from "drizzle-orm";
 import { AppConfigService } from "@/common/config/app-config.service";
 import {
   business,
+  customerAccount,
   JsonValue,
   website,
   websiteConfig,
@@ -79,6 +80,7 @@ export class WebsiteService {
 
     try {
       const created = await this.db.transaction(async (tx) => {
+        console.log("before items");
         const [item] = await tx
           .insert(website)
           .values({
@@ -92,6 +94,7 @@ export class WebsiteService {
           })
           .returning();
 
+        console.log("before subdomains");
         await Promise.all(
           this.appConfig.corsSubdomainBases.map(async (domain) => {
             await tx.insert(websiteDomain).values({
@@ -107,6 +110,7 @@ export class WebsiteService {
           }),
         );
 
+        console.log("before config");
         await tx.insert(websiteConfig).values({
           websiteId: item.id,
           headerConfig: (dto.config?.headerConfig ?? null) as JsonValue,
@@ -485,15 +489,39 @@ export class WebsiteService {
   ) {
     await this.getWebsiteOrThrow(businessId, websiteId);
 
-    await this.db
-      .update(website)
-      .set({
-        status: WebsiteStatus.ARCHIVED,
-        deletedAt: new Date(),
-        deletedBy: currentUser.id,
-        updatedBy: currentUser.id,
-      })
-      .where(eq(website.id, websiteId));
+    await this.db.transaction(async (tx) => {
+      const deletedAt = new Date();
+
+      await tx
+        .update(website)
+        .set({
+          status: WebsiteStatus.ARCHIVED,
+          deletedAt,
+          deletedBy: currentUser.id,
+          updatedBy: currentUser.id,
+        })
+        .where(eq(website.id, websiteId));
+
+      await tx
+        .update(websiteDomain)
+        .set({
+          deletedAt,
+        })
+        .where(eq(websiteDomain.websiteId, websiteId));
+
+      await tx
+        .update(customerAccount)
+        .set({
+          deletedAt,
+          deletedBy: currentUser.id,
+        })
+        .where(
+          and(
+            eq(customerAccount.websiteId, websiteId),
+            isNull(customerAccount.deletedAt),
+          ),
+        );
+    });
 
     return apiResponse(
       null,

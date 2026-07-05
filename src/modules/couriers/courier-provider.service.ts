@@ -233,9 +233,18 @@ export class CourierProviderService {
         return CourierShipmentStatus.IN_TRANSIT;
       case "delivered":
         return CourierShipmentStatus.DELIVERED;
+      case "delivery-failed":
+      case "failed-delivery":
+      case "failed":
+      case "lost":
+      case "damaged":
+        return CourierShipmentStatus.FAILED;
       case "agent-returning":
       case "returned":
         return CourierShipmentStatus.RETURNED;
+      case "cancelled":
+      case "canceled":
+        return CourierShipmentStatus.CANCELLED;
       default:
         return CourierShipmentStatus.PENDING;
     }
@@ -249,6 +258,18 @@ export class CourierProviderService {
         "tracking_number",
         "trackingNumber",
         "consignment_id",
+      ]) ?? null
+    );
+  }
+
+  extractProviderStatus(payload: unknown) {
+    return (
+      this.findString(payload, [
+        "status",
+        "current_status",
+        "currentStatus",
+        "parcel_status",
+        "parcelStatus",
       ]) ?? null
     );
   }
@@ -276,8 +297,6 @@ export class CourierProviderService {
     });
 
     const payload = await this.parseResponse(response);
-
-    console.log(payload);
 
     if (!response.ok) {
       throw new BadRequestException({

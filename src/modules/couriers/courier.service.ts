@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import Decimal from "decimal.js";
-import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+import { and, count, desc, eq, ilike, isNull, ne, or } from "drizzle-orm";
 
 import {
   businessSetting,
@@ -28,6 +28,8 @@ import {
   OrderPaymentStatus,
   OrderStatus,
   orderStatusLog,
+  invoice,
+  InvoiceStatus,
   product,
   productVariant,
   ProductVariantStatus,
@@ -452,6 +454,90 @@ export class CourierService {
     return this.bookShipment(undefined, businessId, shipment.id);
   }
 
+  async tryBookShipmentForOrder(businessId: string, orderId: string) {
+    try {
+      return {
+        shipment: await this.bookShipmentForOrder(businessId, orderId),
+        bookingError: null,
+      };
+    } catch (error) {
+      return {
+        shipment: null,
+        bookingError: this.errorPayload(error),
+      };
+    }
+  }
+
+  async retryBookShipment(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    shipmentId: string,
+  ) {
+    const booked = await this.bookShipment(
+      currentUser.id,
+      businessId,
+      shipmentId,
+    );
+
+    return apiResponse(booked, "REDX parcel booking retried successfully.");
+  }
+
+  async trackShipment(businessId: string, shipmentId: string) {
+    const shipment = await this.getShipmentOrThrow(businessId, shipmentId);
+
+    if (!shipment.trackingCode) {
+      throw new BadRequestException(
+        "Shipment has not been booked with REDX yet. Retry booking before tracking it.",
+      );
+    }
+
+    const { runtime } = await this.getActiveRedxRuntime(
+      businessId,
+      shipment.courierConfigId,
+    );
+    const providerTracking = await this.provider.trackParcel(
+      runtime,
+      shipment.trackingCode,
+    );
+    const providerStatus =
+      this.provider.extractProviderStatus(providerTracking);
+    const nextStatus = providerStatus
+      ? this.provider.mapWebhookStatus(providerStatus)
+      : shipment.status;
+    const updatedShipment = await this.db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(courierShipment)
+        .set({
+          providerStatus: providerStatus ?? shipment.providerStatus,
+          status: nextStatus,
+          providerResponse: providerTracking as JsonValue,
+          ...(nextStatus === CourierShipmentStatus.DELIVERED && {
+            deliveredAt: shipment.deliveredAt ?? new Date(),
+          }),
+          ...(nextStatus === CourierShipmentStatus.CANCELLED && {
+            cancelledAt: shipment.cancelledAt ?? new Date(),
+          }),
+        })
+        .where(eq(courierShipment.id, shipment.id))
+        .returning();
+
+      if (nextStatus === CourierShipmentStatus.DELIVERED) {
+        await this.applyDeliveredEffects(tx, shipment, undefined);
+      }
+
+      if (nextStatus === CourierShipmentStatus.RETURNED) {
+        await this.applyReturnedEffects(tx, shipment, undefined);
+      }
+
+      return updated;
+    });
+
+    return apiResponse({
+      shipment: updatedShipment,
+      providerTracking,
+    });
+  }
+
   async receiveRedxWebhook(token: string | undefined, dto: RedxWebhookPayload) {
     if (!token) {
       throw new BadRequestException("REDX webhook token is required");
@@ -507,11 +593,18 @@ export class CourierService {
           ...(nextStatus === CourierShipmentStatus.DELIVERED && {
             deliveredAt: shipment.deliveredAt ?? new Date(),
           }),
+          ...(nextStatus === CourierShipmentStatus.CANCELLED && {
+            cancelledAt: shipment.cancelledAt ?? new Date(),
+          }),
         })
         .where(eq(courierShipment.id, shipment.id));
 
       if (nextStatus === CourierShipmentStatus.DELIVERED) {
         await this.applyDeliveredEffects(tx, shipment, undefined);
+      }
+
+      if (nextStatus === CourierShipmentStatus.RETURNED) {
+        await this.applyReturnedEffects(tx, shipment, undefined);
       }
     });
 
@@ -576,8 +669,31 @@ export class CourierService {
       pickupStoreId: shipment.pickupStoreId,
       isClosedBox: runtime.isClosedBox,
     };
-    const response = await this.provider.createParcel(runtime, request);
-    const trackingId = this.provider.extractTrackingId(response);
+    let response: unknown;
+    let trackingId: string | null;
+
+    try {
+      response = await this.provider.createParcel(runtime, request);
+      trackingId = this.provider.extractTrackingId(response);
+
+      if (!trackingId) {
+        throw new BadRequestException(
+          "REDX parcel was created without a tracking id.",
+        );
+      }
+    } catch (error) {
+      await this.db
+        .update(courierShipment)
+        .set({
+          status: CourierShipmentStatus.FAILED,
+          providerStatus: "booking-failed",
+          providerRequest: request as unknown as JsonValue,
+          providerResponse: this.errorPayload(error),
+        })
+        .where(eq(courierShipment.id, shipment.id));
+
+      throw error;
+    }
 
     const [updated] = await this.db
       .update(courierShipment)
@@ -1033,6 +1149,83 @@ export class CourierService {
     await this.ensureCourierReceivable(tx, shipment);
   }
 
+  private async applyReturnedEffects(
+    tx: DatabaseTransaction,
+    shipment: CourierShipment,
+    changedBy?: string,
+  ) {
+    const [orderRow] = await tx
+      .select()
+      .from(order)
+      .where(
+        and(
+          eq(order.id, shipment.orderId),
+          eq(order.businessId, shipment.businessId),
+        ),
+      )
+      .limit(1);
+
+    if (!orderRow) {
+      await this.cancelOpenCourierReceivable(tx, shipment);
+      return;
+    }
+
+    const allocations = await tx
+      .select({ id: inventoryOrderAllocation.id })
+      .from(inventoryOrderAllocation)
+      .where(
+        and(
+          eq(inventoryOrderAllocation.businessId, shipment.businessId),
+          eq(inventoryOrderAllocation.orderId, shipment.orderId),
+          eq(
+            inventoryOrderAllocation.status,
+            InventoryOrderAllocationStatus.RESERVED,
+          ),
+        ),
+      );
+
+    for (const allocation of allocations) {
+      await this.inventory.releaseOrderReservation(
+        tx,
+        { businessId: shipment.businessId, allocationId: allocation.id },
+        changedBy,
+      );
+    }
+
+    if (
+      orderRow.status !== OrderStatus.RETURNED &&
+      orderRow.status !== OrderStatus.CANCELLED
+    ) {
+      await tx
+        .update(order)
+        .set({ status: OrderStatus.RETURNED })
+        .where(eq(order.id, shipment.orderId));
+
+      await tx.insert(orderStatusLog).values({
+        orderId: shipment.orderId,
+        fromStatus: orderRow.status,
+        toStatus: OrderStatus.RETURNED,
+        changedBy,
+        note: "REDX returned webhook",
+      });
+    }
+
+    await tx
+      .update(invoice)
+      .set({ status: InvoiceStatus.CANCELLED })
+      .where(
+        and(
+          eq(invoice.businessId, shipment.businessId),
+          eq(invoice.orderId, shipment.orderId),
+          ne(invoice.status, InvoiceStatus.PAID),
+          isNull(invoice.deletedAt),
+        ),
+      );
+
+    await this.cancelOpenOrderReceivable(tx, shipment);
+    await this.cancelOpenCourierReceivable(tx, shipment);
+  }
+
   private async ensureCourierReceivable(
     tx: DatabaseTransaction,
     shipment: CourierShipment,
@@ -1090,6 +1283,43 @@ export class CourierService {
       .returning();
 
     return created;
+  }
+
+  private async cancelOpenOrderReceivable(
+    tx: DatabaseTransaction,
+    shipment: CourierShipment,
+  ) {
+    await tx
+      .update(financeReceivable)
+      .set({ status: FinanceReceivableStatus.CANCELLED })
+      .where(
+        and(
+          eq(financeReceivable.businessId, shipment.businessId),
+          eq(financeReceivable.sourceType, FinanceSourceType.ORDER),
+          eq(financeReceivable.sourceId, shipment.orderId),
+          ne(financeReceivable.status, FinanceReceivableStatus.RECEIVED),
+        ),
+      );
+  }
+
+  private async cancelOpenCourierReceivable(
+    tx: DatabaseTransaction,
+    shipment: CourierShipment,
+  ) {
+    await tx
+      .update(financeReceivable)
+      .set({ status: FinanceReceivableStatus.CANCELLED })
+      .where(
+        and(
+          eq(financeReceivable.businessId, shipment.businessId),
+          eq(
+            financeReceivable.sourceType,
+            FinanceSourceType.COURIER_RECEIVABLE,
+          ),
+          eq(financeReceivable.sourceId, shipment.id),
+          ne(financeReceivable.status, FinanceReceivableStatus.RECEIVED),
+        ),
+      );
   }
 
   private async getActiveRedxRuntime(
@@ -1318,5 +1548,60 @@ export class CourierService {
     }
 
     return "Delivery address";
+  }
+
+  private errorPayload(error: unknown): JsonValue {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "getResponse" in error &&
+      typeof (error as { getResponse?: unknown }).getResponse === "function"
+    ) {
+      const response = (error as { getResponse: () => unknown }).getResponse();
+
+      if (this.isJsonValue(response)) {
+        return response;
+      }
+    }
+
+    if (typeof error === "object" && error !== null && "response" in error) {
+      const response = (error as { response?: unknown }).response;
+
+      if (this.isJsonValue(response)) {
+        return response;
+      }
+    }
+
+    if (error instanceof Error) {
+      return {
+        message: error.message,
+        name: error.name,
+      };
+    }
+
+    return {
+      message: String(error),
+    };
+  }
+
+  private isJsonValue(value: unknown): value is JsonValue {
+    if (
+      value === null ||
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
+      return true;
+    }
+
+    if (Array.isArray(value)) {
+      return value.every((item) => this.isJsonValue(item));
+    }
+
+    if (typeof value === "object") {
+      return Object.values(value).every((item) => this.isJsonValue(item));
+    }
+
+    return false;
   }
 }

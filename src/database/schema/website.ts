@@ -166,17 +166,22 @@ export const websiteDomain = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),
   },
   (table) => [
     uniqueIndex("website_domains_domain_unique")
       .on(table.domain)
-      .where(sql`${table.domain} IS NOT NULL`),
+      .where(sql`${table.domain} IS NOT NULL AND ${table.deletedAt} IS NULL`),
+
     uniqueIndex("website_domains_subdomain_unique")
       .on(table.subdomain)
-      .where(sql`${table.subdomain} IS NOT NULL`),
+      .where(
+        sql`${table.subdomain} IS NOT NULL AND ${table.deletedAt} IS NULL`,
+      ),
+
     uniqueIndex("website_domains_one_primary_per_website_unique")
       .on(table.websiteId)
-      .where(sql`${table.isPrimary} = true`),
+      .where(sql`${table.isPrimary} = true AND ${table.deletedAt} IS NULL`),
     index("website_domains_website_id_idx").on(table.websiteId),
     index("website_domains_domain_idx").on(table.domain),
     index("website_domains_subdomain_idx").on(table.subdomain),
@@ -223,6 +228,7 @@ export const websiteSeoSetting = pgTable(
   {
     id: uuid().primaryKey().defaultRandom().notNull(),
     websiteId: uuid("website_id")
+      .unique()
       .notNull()
       .references((): AnyPgColumn => website.id, { onDelete: "cascade" }),
     metaTitle: varchar("meta_title", { length: 255 }),

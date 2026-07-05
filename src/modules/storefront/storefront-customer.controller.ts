@@ -23,6 +23,7 @@ import {
   CreateStorefrontOrderReturnDto,
   CreateStorefrontReviewDto,
   PlaceStorefrontOrderDto,
+  StorefrontAddressQueryDto,
   StorefrontCartQueryDto,
   StorefrontOrderQueryDto,
   StorefrontOrderReturnQueryDto,
@@ -51,10 +52,12 @@ export class StorefrontCustomerController {
     @CurrentCustomer() customer: CurrentCustomerPayload,
     @Headers("host") host: string | undefined,
     @Headers("x-forwarded-host") forwardedHost: string | undefined,
+    @Query() query: StorefrontAddressQueryDto,
   ) {
     return this.storefrontCustomers.findAddresses(
       customer,
       this.getRequestHost(host, forwardedHost),
+      query,
     );
   }
 
@@ -132,6 +135,21 @@ export class StorefrontCustomerController {
       customer,
       this.getRequestHost(host, forwardedHost),
       query,
+    );
+  }
+
+  @Get("carts/:cartId")
+  @ApiOperation({ summary: "Get customer cart details" })
+  findCart(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+    @Param("cartId", ParseUUIDPipe) cartId: string,
+  ) {
+    return this.storefrontCustomers.findCart(
+      customer,
+      this.getRequestHost(host, forwardedHost),
+      cartId,
     );
   }
 

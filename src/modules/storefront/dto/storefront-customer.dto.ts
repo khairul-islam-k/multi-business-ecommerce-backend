@@ -26,7 +26,10 @@ import {
 } from "@/database/schema";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
-import { SortedPaginationQueryDto } from "../../../common/http/query.dto";
+import {
+  PaginationQueryDto,
+  SortedPaginationQueryDto,
+} from "../../../common/http/query.dto";
 import { StorefrontCourierSelectionDto } from "../../couriers/dto/courier.dto";
 import { OrderSortBy } from "../../orders/dto/order.dto";
 
@@ -37,7 +40,9 @@ export const StorefrontCheckoutPaymentMethod = {
 export type StorefrontCheckoutPaymentMethod =
   (typeof StorefrontCheckoutPaymentMethod)[keyof typeof StorefrontCheckoutPaymentMethod];
 
-export class StorefrontCartQueryDto {
+export class StorefrontAddressQueryDto extends PaginationQueryDto {}
+
+export class StorefrontCartQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ enum: OrderCartStatus })
   @IsOptional()
   @IsEnum(OrderCartStatus)

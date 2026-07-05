@@ -9,6 +9,7 @@ import {
   customerPasswordReset,
   customerSession,
   CustomerStatus,
+  website,
 } from "@/database/schema";
 import {
   BadRequestException,
@@ -44,10 +45,6 @@ import type {
   CustomerVerifyResetOtpDto,
 } from "./dto/customer-auth.dto";
 import type { CurrentCustomerPayload } from "./strategies/customer-jwt.strategy";
-
-type PublishedWebsite = Awaited<
-  ReturnType<WebsiteService["findPublishedByHostOrThrow"]>
->;
 
 @Injectable()
 export class CustomerAuthService {
@@ -124,6 +121,33 @@ export class CustomerAuthService {
         if (customerRow.status !== CustomerStatus.ACTIVE) {
           throw new ForbiddenException(
             "Customer is not active. This customer profile cannot use the requested operation until it is restored to active status.",
+          );
+        }
+
+        const activeCustomerAccount = await tx
+          .select({
+            id: customerAccount.id,
+            websiteDeletedAt: website.deletedAt,
+          })
+          .from(customerAccount)
+          .innerJoin(website, eq(website.id, customerAccount.websiteId))
+          .where(
+            and(
+              eq(customerAccount.customerId, customerRow.id),
+              isNull(customerAccount.deletedAt),
+            ),
+          )
+          .limit(1)
+          .then(([row]) => row ?? null);
+
+        if (activeCustomerAccount?.websiteDeletedAt) {
+          await tx
+            .update(customerAccount)
+            .set({ deletedAt: new Date() })
+            .where(eq(customerAccount.id, activeCustomerAccount.id));
+        } else if (activeCustomerAccount) {
+          throw new ConflictException(
+            "A customer account already exists for this customer profile",
           );
         }
 
@@ -710,7 +734,8 @@ export class CustomerAuthService {
   }
 
   private toSafeAccount(account: typeof customerAccount.$inferSelect) {
-    const { passwordHash: _, ...safeAccount } = account;
+    const { passwordHash, ...safeAccount } = account;
+    void passwordHash;
 
     return safeAccount;
   }
