@@ -34,6 +34,9 @@ function createService() {
     applyStockDelta: jest.fn(async (..._args: unknown[]) => ({
       id: "stock-1",
     })),
+    getWarehouseStock: jest.fn(() => ({
+      totalQuantity: new Decimal(5),
+    })),
   };
   const service = new StockTransferService({ db } as never, lookup as never);
 

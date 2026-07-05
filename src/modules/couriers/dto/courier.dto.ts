@@ -70,7 +70,7 @@ export class BulkUpdateCourierConfigItem extends UpdateCourierConfigDto {
 }
 
 export class BulkUpdateCourierConfigDto {
-  @ApiProperty({ type: [UpdateCourierConfigDto] })
+  @ApiProperty({ type: [BulkUpdateCourierConfigItem] })
   configs!: BulkUpdateCourierConfigItem[];
 }
 
