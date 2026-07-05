@@ -42,7 +42,10 @@ export class CourierController {
   @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.READ)
   @Get("couriers")
   @ApiOperation({ summary: "Get predefined REDX courier" })
-  findCouriers(@Query() query: QueryCourierDto) {
+  findCouriers(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Query() query: QueryCourierDto,
+  ) {
     return this.couriers.findCouriers(query);
   }
 

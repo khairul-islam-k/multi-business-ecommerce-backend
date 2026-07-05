@@ -1,31 +1,36 @@
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
-
 import Decimal from "decimal.js";
 import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
 
 import {
   businessSetting,
+  CatalogProductStatus,
   courier,
   courierConfig,
   CourierConfigStatus,
   CourierProvider,
   CourierShipment,
   courierShipment,
-  CourierShipmentStatus,
   courierShipmentItem,
+  CourierShipmentStatus,
   CourierStatus,
-  financeReceivable,
   FinancePartyType,
+  financeReceivable,
   FinanceReceivableStatus,
   FinanceSourceType,
+  financeTax,
+  FinanceTaxStatus,
   inventoryOrderAllocation,
   InventoryOrderAllocationStatus,
   JsonValue,
   order,
+  orderItem,
   OrderPaymentStatus,
   OrderStatus,
-  orderItem,
   orderStatusLog,
+  product,
+  productVariant,
+  ProductVariantStatus,
   warehouse,
   WarehouseStatus,
 } from "@/database/schema";
@@ -36,7 +41,6 @@ import {
 } from "@nestjs/common";
 
 import { AppConfigService } from "../../common/config/app-config.service";
-import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 import {
   apiResponse,
   paginatedResponse,
@@ -55,12 +59,12 @@ import {
 import {
   AssignCourierToOrderDto,
   BulkUpdateCourierConfigDto,
-  CourierSortBy,
   QueryCourierConfigDto,
   QueryCourierDto,
   RedxAreaQueryDto,
   RedxChargeQuoteDto,
   RedxCreatePickupStoreDto,
+  StorefrontCourierSelectionDto,
   StorefrontCourierQuoteDto,
   UpdateCourierConfigDto,
 } from "./dto/courier.dto";
@@ -75,6 +79,12 @@ type CourierConfigRow = typeof courierConfig.$inferSelect & {
 type RedxPickupWarehouse = typeof warehouse.$inferSelect & {
   redxAreaId: string;
   redxAreaName: string;
+};
+
+type CourierItemMetricInput = {
+  productId: string;
+  variantId?: string | null;
+  quantity: Decimal.Value;
 };
 
 @Injectable()
@@ -115,21 +125,7 @@ export class CourierService {
         .select()
         .from(courier)
         .where(where)
-        .orderBy(
-          buildOrderBy(
-            resolveSortColumn(
-              query.sortBy,
-              {
-                [CourierSortBy.NAME]: courier.name,
-                [CourierSortBy.CODE]: courier.code,
-                [CourierSortBy.STATUS]: courier.status,
-                [CourierSortBy.CREATED_AT]: courier.createdAt,
-              },
-              CourierSortBy.CREATED_AT,
-            ),
-            query.sortOrder,
-          ),
-        )
+        .orderBy(courier.name)
         .limit(limit)
         .offset(skip),
       this.db
@@ -359,8 +355,9 @@ export class CourierService {
   async prepareStorefrontOrderCourier(
     businessId: string,
     configId: string,
-    dto: StorefrontCourierQuoteDto | undefined,
+    dto: StorefrontCourierSelectionDto | undefined,
     isCod: boolean,
+    items: CourierItemMetricInput[],
   ) {
     if (!dto) {
       throw new BadRequestException(
@@ -368,9 +365,9 @@ export class CourierService {
       );
     }
 
-    const quote = await this.calculateBusinessQuote(businessId, configId, {
-      ...dto,
-      cashCollectionAmount: isCod ? (dto.cashCollectionAmount ?? 0) : 0,
+    const quote = await this.calculateBusinessQuote(businessId, configId, dto, {
+      items,
+      collectCash: isCod,
     });
 
     return {
@@ -383,7 +380,7 @@ export class CourierService {
         deliveryAreaName: dto.deliveryAreaName,
         deliveryPostCode: dto.deliveryPostCode,
         deliveryDivisionName: dto.deliveryDivisionName,
-        weight: dto.weight,
+        weight: quote.weight,
         deliveryCharge: quote.deliveryCharge,
         codCharge: quote.codCharge,
         courierFee: quote.courierFee,
@@ -402,7 +399,7 @@ export class CourierService {
       businessId,
       dto.courierConfigId,
       dto,
-      orderId,
+      { orderId },
     );
     const shipment = await this.createOrUpdateShipmentForOrder(
       businessId,
@@ -415,7 +412,7 @@ export class CourierService {
         deliveryAreaName: dto.deliveryAreaName,
         deliveryPostCode: dto.deliveryPostCode,
         deliveryDivisionName: dto.deliveryDivisionName,
-        weight: dto.weight,
+        weight: quote.weight,
         deliveryCharge: quote.deliveryCharge,
         codCharge: quote.codCharge,
         courierFee: quote.courierFee,
@@ -603,8 +600,12 @@ export class CourierService {
   private async calculateBusinessQuote(
     businessId: string,
     configId: string,
-    dto: RedxChargeQuoteDto,
-    orderId?: string,
+    dto: RedxChargeQuoteDto | StorefrontCourierSelectionDto,
+    options: {
+      orderId?: string;
+      items?: CourierItemMetricInput[];
+      collectCash?: boolean;
+    } = {},
   ) {
     const { row, runtime } = await this.getActiveRedxRuntime(
       businessId,
@@ -613,21 +614,59 @@ export class CourierService {
     const pickupWarehouse = await this.resolvePickupWarehouse(
       businessId,
       dto.warehouseId,
-      orderId,
+      options.orderId,
     );
-    const cashCollectionAmount =
-      dto.cashCollectionAmount ??
-      (orderId ? await this.getOrderCodDueAmount(businessId, orderId) : 0);
+    const itemMetrics = options.items
+      ? await this.calculateItemMetrics(
+          businessId,
+          options.items,
+          runtime.defaultParcelWeight,
+        )
+      : null;
+    const orderWeight = options.orderId
+      ? await this.calculatePersistedOrderWeight(
+          businessId,
+          options.orderId,
+          runtime.defaultParcelWeight,
+        )
+      : null;
+    const requestWeight =
+      "weight" in dto && typeof dto.weight === "number" ? dto.weight : null;
+    const requestCashCollectionAmount =
+      "cashCollectionAmount" in dto &&
+      typeof dto.cashCollectionAmount === "number"
+        ? dto.cashCollectionAmount
+        : null;
+    const weight = itemMetrics?.weight ?? orderWeight ?? requestWeight;
+
+    if (!weight || new Decimal(weight).lessThanOrEqualTo(0)) {
+      throw new BadRequestException(
+        "Courier weight could not be calculated from order items.",
+      );
+    }
+
+    const cashCollectionAmount = itemMetrics
+      ? options.collectCash
+        ? itemMetrics.collectableAmount
+        : 0
+      : (requestCashCollectionAmount ??
+        (options.orderId
+          ? await this.getOrderCodDueAmount(businessId, options.orderId)
+          : 0));
     const charge = await this.provider.calculateCharge(runtime, {
       pickupAreaId: pickupWarehouse.redxAreaId,
       deliveryAreaId: dto.deliveryAreaId,
-      weight: dto.weight,
+      weight: Number(new Decimal(weight).toDecimalPlaces(2).toString()),
       cashCollectionAmount,
     });
 
     return {
       courierId: row.courier.id,
       configId: row.id,
+      weight: Number(new Decimal(weight).toDecimalPlaces(2).toString()),
+      collectableAmount: Number(
+        new Decimal(cashCollectionAmount).toDecimalPlaces(2).toString(),
+      ),
       shippingCharge: Number(charge.courierFee.toFixed(2)),
       deliveryCharge: Number(charge.deliveryCharge.toFixed(2)),
       codCharge: Number(charge.codCharge.toFixed(2)),
@@ -773,6 +812,161 @@ export class CourierService {
     }
 
     return created;
+  }
+
+  private async calculateItemMetrics(
+    businessId: string,
+    items: CourierItemMetricInput[],
+    defaultWeight?: number,
+  ) {
+    let weight = new Decimal(0);
+    let collectableAmount = new Decimal(0);
+    const fallbackWeight = new Decimal(defaultWeight ?? 1);
+
+    for (const item of items) {
+      const quantity = new Decimal(item.quantity);
+      const details = await this.getItemCourierDetails(
+        businessId,
+        item.productId,
+        item.variantId ?? null,
+      );
+      const unitWeight =
+        details.variantWeight ?? details.productWeight ?? fallbackWeight;
+      const unitPrice = details.priceOverride ?? details.price;
+      const lineSubtotal = quantity.mul(unitPrice);
+      const taxAmount = lineSubtotal
+        .mul(details.taxRate)
+        .div(100)
+        .toDecimalPlaces(2);
+
+      weight = weight.plus(quantity.mul(unitWeight));
+      collectableAmount = collectableAmount.plus(lineSubtotal).plus(taxAmount);
+    }
+
+    return {
+      weight: Number(weight.toDecimalPlaces(2).toString()),
+      collectableAmount: Number(
+        collectableAmount.toDecimalPlaces(2).toString(),
+      ),
+    };
+  }
+
+  private async calculatePersistedOrderWeight(
+    businessId: string,
+    orderId: string,
+    defaultWeight?: number,
+  ) {
+    const items = await this.db
+      .select({
+        productId: orderItem.productId,
+        variantId: orderItem.variantId,
+        quantity: orderItem.quantity,
+      })
+      .from(orderItem)
+      .innerJoin(order, eq(order.id, orderItem.orderId))
+      .where(and(eq(order.id, orderId), eq(order.businessId, businessId)));
+
+    return (await this.calculateItemMetrics(businessId, items, defaultWeight))
+      .weight;
+  }
+
+  private async getItemCourierDetails(
+    businessId: string,
+    productId: string,
+    variantId: string | null,
+  ) {
+    const [productRow] = await this.db
+      .select({
+        id: product.id,
+        price: product.price,
+        weight: product.weight,
+        taxId: product.taxId,
+      })
+      .from(product)
+      .where(
+        and(
+          eq(product.id, productId),
+          eq(product.businessId, businessId),
+          eq(product.status, CatalogProductStatus.ACTIVE),
+          isNull(product.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!productRow) {
+      throw new BadRequestException("One or more order items are invalid");
+    }
+
+    const [{ value: variantCount }] = await this.db
+      .select({ value: count() })
+      .from(productVariant)
+      .where(
+        and(
+          eq(productVariant.businessId, businessId),
+          eq(productVariant.productId, productId),
+          isNull(productVariant.deletedAt),
+        ),
+      );
+
+    const selectedVariant = variantId
+      ? await this.db
+          .select({
+            id: productVariant.id,
+            priceOverride: productVariant.priceOverride,
+            weight: productVariant.weight,
+          })
+          .from(productVariant)
+          .where(
+            and(
+              eq(productVariant.id, variantId),
+              eq(productVariant.productId, productId),
+              eq(productVariant.businessId, businessId),
+              eq(productVariant.status, ProductVariantStatus.ACTIVE),
+              isNull(productVariant.deletedAt),
+            ),
+          )
+          .limit(1)
+          .then(([row]) => row ?? null)
+      : null;
+
+    if (variantId && !selectedVariant) {
+      throw new BadRequestException("One or more order items are invalid");
+    }
+
+    if (!variantId && variantCount > 0) {
+      throw new BadRequestException(
+        "Variant must be selected for a product that has variants",
+      );
+    }
+
+    const [tax] = await this.db
+      .select({ rate: financeTax.rate })
+      .from(financeTax)
+      .where(
+        and(
+          eq(financeTax.id, productRow.taxId),
+          eq(financeTax.businessId, businessId),
+          eq(financeTax.status, FinanceTaxStatus.ACTIVE),
+          isNull(financeTax.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!tax) {
+      throw new BadRequestException("One or more order item taxes are invalid");
+    }
+
+    return {
+      price: new Decimal(productRow.price),
+      productWeight: productRow.weight ? new Decimal(productRow.weight) : null,
+      priceOverride: selectedVariant?.priceOverride
+        ? new Decimal(selectedVariant.priceOverride)
+        : null,
+      variantWeight: selectedVariant?.weight
+        ? new Decimal(selectedVariant.weight)
+        : null,
+      taxRate: new Decimal(tax.rate),
+    };
   }
 
   private async applyDeliveredEffects(

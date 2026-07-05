@@ -19,17 +19,9 @@ import {
 } from "@/database/schema";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
-import { SortedPaginationQueryDto } from "../../../common/http/query.dto";
+import { SearchablePaginationQueryDto } from "../../../common/http/query.dto";
 
-export const CourierSortBy = {
-  NAME: "name",
-  CODE: "code",
-  STATUS: "status",
-  CREATED_AT: "createdAt",
-} as const;
-export type CourierSortBy = (typeof CourierSortBy)[keyof typeof CourierSortBy];
-
-export class QueryCourierDto extends SortedPaginationQueryDto<CourierSortBy> {
+export class QueryCourierDto extends SearchablePaginationQueryDto {
   @ApiPropertyOptional({ enum: CourierProvider })
   @IsOptional()
   @IsEnum(CourierProvider)
@@ -41,7 +33,7 @@ export class QueryCourierDto extends SortedPaginationQueryDto<CourierSortBy> {
   status?: CourierStatus;
 }
 
-export class QueryCourierConfigDto extends SortedPaginationQueryDto<"createdAt"> {
+export class QueryCourierConfigDto extends SearchablePaginationQueryDto {
   @ApiPropertyOptional({ enum: CourierConfigStatus })
   @IsOptional()
   @IsEnum(CourierConfigStatus)
@@ -139,7 +131,42 @@ export class StorefrontCourierQuoteDto extends RedxChargeQuoteDto {
   specialInstruction?: string;
 }
 
-export class AssignCourierToOrderDto extends StorefrontCourierQuoteDto {
+export class StorefrontCourierSelectionDto {
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  warehouseId?: string;
+
+  @ApiProperty({ example: "115" })
+  @IsString()
+  @MaxLength(80)
+  deliveryAreaId!: string;
+
+  @ApiPropertyOptional({ example: "Dhanmondi" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  deliveryAreaName?: string;
+
+  @ApiPropertyOptional({ example: "1209" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  deliveryPostCode?: string;
+
+  @ApiPropertyOptional({ example: "Dhaka" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  deliveryDivisionName?: string;
+
+  @ApiPropertyOptional({ example: "Please call before delivery" })
+  @IsOptional()
+  @IsString()
+  specialInstruction?: string;
+}
+
+export class AssignCourierToOrderDto extends StorefrontCourierSelectionDto {
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsUUID()
   courierConfigId!: string;

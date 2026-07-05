@@ -89,7 +89,6 @@ export class CourierProviderService {
   redactRedxConfig(config: Record<string, unknown>) {
     return {
       ...config,
-      ...(config.apiAccessToken ? { apiAccessToken: "********" } : {}),
     };
   }
 
@@ -149,6 +148,7 @@ export class CourierProviderService {
       merchant_parcel_id: dto.merchantParcelId,
       customer_name: dto.customerName,
       customer_phone: dto.customerPhone,
+      customer_address: dto.deliveryAddress,
       delivery_area: dto.deliveryAreaName,
       delivery_area_id: Number(dto.deliveryAreaId),
       delivery_address: dto.deliveryAddress,
@@ -156,6 +156,10 @@ export class CourierProviderService {
         new Decimal(dto.cashCollectionAmount).toFixed(2),
       ),
       parcel_weight: dto.parcelWeight,
+      value:
+        dto.parcelValue === undefined
+          ? undefined
+          : new Decimal(dto.parcelValue).toFixed(2),
       parcel_value:
         dto.parcelValue === undefined
           ? undefined
@@ -272,6 +276,8 @@ export class CourierProviderService {
     });
 
     const payload = await this.parseResponse(response);
+
+    console.log(payload);
 
     if (!response.ok) {
       throw new BadRequestException({
