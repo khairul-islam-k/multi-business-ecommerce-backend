@@ -191,8 +191,8 @@ export const customerAccount = pgTable(
     }),
   },
   (table) => [
-    uniqueIndex("customer_accounts_customer_id_active_unique")
-      .on(table.customerId)
+    uniqueIndex("customer_accounts_website_id_customer_id_active_unique")
+      .on(table.websiteId, table.customerId)
       .where(sql`${table.deletedAt} IS NULL`),
     uniqueIndex("customer_accounts_website_id_email_active_unique")
       .on(table.websiteId, table.email)

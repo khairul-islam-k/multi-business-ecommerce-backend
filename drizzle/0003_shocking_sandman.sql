@@ -1,0 +1,2 @@
+DROP INDEX "customer_accounts_customer_id_active_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX "customer_accounts_website_id_customer_id_active_unique" ON "customer_accounts" USING btree ("website_id","customer_id") WHERE "customer_accounts"."deleted_at" IS NULL;

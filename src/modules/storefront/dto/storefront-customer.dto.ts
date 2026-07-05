@@ -4,7 +4,6 @@ import {
   IsBoolean,
   IsEnum,
   IsIn,
-  IsInt,
   IsNumber,
   IsObject,
   IsOptional,
@@ -115,8 +114,8 @@ export class CreateStorefrontReviewDto {
 
   @ApiProperty({ example: 5 })
   @Type(() => Number)
-  @IsInt()
-  @Min(1)
+  @IsNumber()
+  @Min(0.01)
   @Max(5)
   rating!: number;
 

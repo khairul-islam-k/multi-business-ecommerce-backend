@@ -22,6 +22,13 @@
       "when": 1783231286404,
       "tag": "0002_faithful_bruce_banner",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783239870415,
+      "tag": "0003_shocking_sandman",
+      "breakpoints": true
     }
   ]
 }

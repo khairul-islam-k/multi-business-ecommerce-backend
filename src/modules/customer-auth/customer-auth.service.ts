@@ -1,5 +1,14 @@
 import * as argon2 from "argon2";
-import { and, desc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  sql,
+} from "drizzle-orm";
 
 import {
   customer,
@@ -124,31 +133,30 @@ export class CustomerAuthService {
           );
         }
 
-        const activeCustomerAccount = await tx
+        const staleCustomerAccounts = await tx
           .select({
             id: customerAccount.id,
-            websiteDeletedAt: website.deletedAt,
           })
           .from(customerAccount)
           .innerJoin(website, eq(website.id, customerAccount.websiteId))
           .where(
             and(
               eq(customerAccount.customerId, customerRow.id),
+              isNotNull(website.deletedAt),
               isNull(customerAccount.deletedAt),
             ),
-          )
-          .limit(1)
-          .then(([row]) => row ?? null);
+          );
 
-        if (activeCustomerAccount?.websiteDeletedAt) {
+        if (staleCustomerAccounts.length > 0) {
           await tx
             .update(customerAccount)
             .set({ deletedAt: new Date() })
-            .where(eq(customerAccount.id, activeCustomerAccount.id));
-        } else if (activeCustomerAccount) {
-          throw new ConflictException(
-            "A customer account already exists for this customer profile",
-          );
+            .where(
+              inArray(
+                customerAccount.id,
+                staleCustomerAccounts.map((account) => account.id),
+              ),
+            );
         }
 
         const [account] = await tx
