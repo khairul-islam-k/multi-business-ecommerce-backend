@@ -70,10 +70,16 @@ export class StockAdjustmentService {
           item.variantId ?? null,
         );
 
+        if (warehouseStock.totalQuantity.lessThan(item.adjustmentQty)) {
+          throw new BadRequestException(
+            "Adjustment quantity cannot be greater than the available stock quantity.",
+          );
+        }
+
         return {
           productId: item.productId,
           variantId: item.variantId ?? null,
-          oldQuantity: warehouseStock?.totalQuantity ?? new Decimal(0),
+          oldQuantity: warehouseStock.totalQuantity,
           adjustmentQty: new Decimal(item.adjustmentQty),
           reason: this.lookup.normalizeNullableText(item.reason),
         };

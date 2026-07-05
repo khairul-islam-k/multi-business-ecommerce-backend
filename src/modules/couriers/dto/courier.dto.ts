@@ -62,9 +62,16 @@ export class UpdateCourierConfigDto {
   rotateWebhookToken?: boolean;
 }
 
+export class BulkUpdateCourierConfigItem extends UpdateCourierConfigDto {
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  configId!: string;
+}
+
 export class BulkUpdateCourierConfigDto {
   @ApiProperty({ type: [UpdateCourierConfigDto] })
-  configs!: (UpdateCourierConfigDto & { configId: string })[];
+  configs!: BulkUpdateCourierConfigItem[];
 }
 
 export class RedxAreaQueryDto {

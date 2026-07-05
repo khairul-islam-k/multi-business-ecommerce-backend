@@ -80,7 +80,6 @@ export class WebsiteService {
 
     try {
       const created = await this.db.transaction(async (tx) => {
-        console.log("before items");
         const [item] = await tx
           .insert(website)
           .values({
@@ -94,7 +93,6 @@ export class WebsiteService {
           })
           .returning();
 
-        console.log("before subdomains");
         await Promise.all(
           this.appConfig.corsSubdomainBases.map(async (domain) => {
             await tx.insert(websiteDomain).values({
@@ -110,7 +108,6 @@ export class WebsiteService {
           }),
         );
 
-        console.log("before config");
         await tx.insert(websiteConfig).values({
           websiteId: item.id,
           headerConfig: (dto.config?.headerConfig ?? null) as JsonValue,
