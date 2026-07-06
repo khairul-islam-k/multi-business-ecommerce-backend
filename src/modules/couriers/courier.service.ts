@@ -7,6 +7,7 @@ import {
   CatalogProductStatus,
   courier,
   courierConfig,
+  CourierConfigMode,
   CourierConfigStatus,
   CourierProvider,
   CourierShipment,
@@ -55,7 +56,6 @@ import { WebsiteService } from "../website/website.service";
 import { CourierConfigEncryptionService } from "./courier-config-encryption.service";
 import {
   CourierProviderService,
-  REDX_PRODUCTION_BASE_URL,
   RedxWebhookPayload,
 } from "./courier-provider.service";
 import {
@@ -66,6 +66,7 @@ import {
   RedxAreaQueryDto,
   RedxChargeQuoteDto,
   RedxCreatePickupStoreDto,
+  RedxUpdatePickupStoreDto,
   StorefrontCourierSelectionDto,
   StorefrontCourierQuoteDto,
   UpdateCourierConfigDto,
@@ -187,18 +188,15 @@ export class CourierService {
   ) {
     const row = await this.getConfigRowOrThrow(businessId, configId);
     const decrypted = this.configEncryption.decrypt(row.configData);
-    const nextConfigData = {
+    const nextMode = dto.mode ?? row.mode;
+    const nextConfigData = this.provider.sanitizeRedxConfigData({
       ...decrypted,
       ...(dto.configData ?? {}),
-      baseUrl:
-        (dto.configData?.baseUrl as string | undefined) ??
-        (decrypted.baseUrl as string | undefined) ??
-        REDX_PRODUCTION_BASE_URL,
-    };
+    });
     const nextStatus = dto.status ?? row.status;
 
     if (nextStatus === CourierConfigStatus.ACTIVE) {
-      this.assertRedxConfigUsable(nextConfigData);
+      this.assertRedxConfigUsable(nextConfigData, nextMode);
     }
 
     const nextWebhookToken = dto.rotateWebhookToken
@@ -208,7 +206,7 @@ export class CourierService {
     const [updated] = await this.db
       .update(courierConfig)
       .set({
-        ...(dto.configData !== undefined && {
+        ...((dto.configData !== undefined || "baseUrl" in decrypted) && {
           configData: this.configEncryption.encrypt(nextConfigData),
         }),
         ...(dto.mode !== undefined && { mode: dto.mode }),
@@ -309,6 +307,48 @@ export class CourierService {
     const { runtime } = await this.getActiveRedxRuntime(businessId, configId);
     return apiResponse(
       await this.provider.getPickupStoreDetails(runtime, storeId),
+    );
+  }
+
+  async updateRedxPickupStore(
+    businessId: string,
+    configId: string,
+    storeId: string,
+    dto: RedxUpdatePickupStoreDto,
+  ) {
+    const name = dto.name?.trim();
+    const phone = dto.phone?.trim();
+    const address = dto.address?.trim();
+    const areaId = dto.areaId?.trim();
+    const payload = {
+      ...(name && { name }),
+      ...(phone && { phone }),
+      ...(address && { address }),
+      ...(areaId && { areaId }),
+    };
+
+    if (Object.keys(payload).length === 0) {
+      throw new BadRequestException(
+        "At least one pickup store field is required for update.",
+      );
+    }
+
+    const { runtime } = await this.getActiveRedxRuntime(businessId, configId);
+    return apiResponse(
+      await this.provider.updatePickupStore(runtime, storeId, payload),
+      "REDX pickup store updated successfully.",
+    );
+  }
+
+  async deleteRedxPickupStore(
+    businessId: string,
+    configId: string,
+    storeId: string,
+  ) {
+    const { runtime } = await this.getActiveRedxRuntime(businessId, configId);
+    return apiResponse(
+      await this.provider.deletePickupStore(runtime, storeId),
+      "REDX pickup store deleted successfully.",
     );
   }
 
@@ -1344,6 +1384,7 @@ export class CourierService {
       row,
       runtime: this.provider.normalizeRedxConfig(
         this.configEncryption.decrypt(row.configData),
+        row.mode,
       ),
     };
   }
@@ -1475,14 +1516,18 @@ export class CourierService {
     return {
       ...row,
       configData: this.provider.redactRedxConfig(decrypted),
+      baseUrl: this.provider.resolveRedxBaseUrl(row.mode),
       webhookTokenHash: undefined,
       webhookConfigured: Boolean(row.webhookTokenHash),
       webhookUrlHint: `${this.appConfig.publicApiUrl}/couriers/webhooks/redx?token=<token>`,
     };
   }
 
-  private assertRedxConfigUsable(config: Record<string, unknown>) {
-    this.provider.normalizeRedxConfig(config);
+  private assertRedxConfigUsable(
+    config: Record<string, unknown>,
+    mode: CourierConfigMode,
+  ) {
+    this.provider.normalizeRedxConfig(config, mode);
   }
 
   private buildWebhookUrl(token: string) {

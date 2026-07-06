@@ -1,17 +1,19 @@
 import Decimal from "decimal.js";
 
-import { CourierShipmentStatus } from "@/database/schema";
+import { CourierConfigMode, CourierShipmentStatus } from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
 } from "@nestjs/common";
 
-export const REDX_PRODUCTION_BASE_URL = "https://openapi.redx.com.bd";
+export const REDX_LIVE_BASE_URL = "https://openapi.redx.com.bd";
+export const REDX_SANDBOX_BASE_URL = "https://sandbox.redx.com.bd";
 
 export type RedxConfig = {
   apiAccessToken: string;
   baseUrl: string;
+  mode: CourierConfigMode;
   defaultParcelWeight?: number;
   defaultParcelValue?: number;
   isClosedBox?: boolean;
@@ -54,6 +56,8 @@ export type RedxPickupStoreRequest = {
   areaId: string | number;
 };
 
+export type RedxPickupStoreUpdateRequest = Partial<RedxPickupStoreRequest>;
+
 export type RedxWebhookPayload = {
   tracking_number?: string;
   timestamp?: string;
@@ -67,17 +71,19 @@ export type RedxWebhookPayload = {
 
 @Injectable()
 export class CourierProviderService {
-  normalizeRedxConfig(config: Record<string, unknown>): RedxConfig {
+  normalizeRedxConfig(
+    config: Record<string, unknown>,
+    mode: CourierConfigMode = CourierConfigMode.LIVE,
+  ): RedxConfig {
     const apiAccessToken = this.requiredString(
       config.apiAccessToken,
       "REDX API access token is required before activating or using REDX.",
     );
-    const baseUrl =
-      this.optionalString(config.baseUrl) ?? REDX_PRODUCTION_BASE_URL;
 
     return {
       apiAccessToken,
-      baseUrl: baseUrl.replace(/\/+$/, ""),
+      baseUrl: this.resolveRedxBaseUrl(mode),
+      mode,
       defaultParcelWeight: this.optionalNumber(config.defaultParcelWeight),
       defaultParcelValue: this.optionalNumber(config.defaultParcelValue),
       isClosedBox:
@@ -87,9 +93,21 @@ export class CourierProviderService {
   }
 
   redactRedxConfig(config: Record<string, unknown>) {
-    return {
-      ...config,
-    };
+    return this.sanitizeRedxConfigData(config);
+  }
+
+  sanitizeRedxConfigData(config: Record<string, unknown>) {
+    const sanitized = { ...config };
+    delete sanitized.baseUrl;
+    delete sanitized.mode;
+
+    return sanitized;
+  }
+
+  resolveRedxBaseUrl(mode: CourierConfigMode = CourierConfigMode.LIVE) {
+    return mode === CourierConfigMode.SANDBOX
+      ? REDX_SANDBOX_BASE_URL
+      : REDX_LIVE_BASE_URL;
   }
 
   async getAreas(config: RedxConfig, query: RedxAreaQuery = {}) {
@@ -212,6 +230,29 @@ export class CourierProviderService {
     });
   }
 
+  updatePickupStore(
+    config: RedxConfig,
+    storeId: string,
+    dto: RedxPickupStoreUpdateRequest,
+  ) {
+    return this.request(
+      config,
+      `/v1.0.0-beta/pickup/stores/${encodeURIComponent(storeId)}`,
+      {
+        method: "PATCH",
+        body: this.buildPickupStorePayload(dto),
+      },
+    );
+  }
+
+  deletePickupStore(config: RedxConfig, storeId: string) {
+    return this.request(
+      config,
+      `/v1.0.0-beta/pickup/stores/${encodeURIComponent(storeId)}`,
+      { method: "DELETE" },
+    );
+  }
+
   listPickupStores(config: RedxConfig) {
     return this.request(config, "/v1.0.0-beta/pickup/stores");
   }
@@ -219,8 +260,19 @@ export class CourierProviderService {
   getPickupStoreDetails(config: RedxConfig, storeId: string) {
     return this.request(
       config,
-      `/v1.0.0-beta/pickup/stores/${encodeURIComponent(storeId)}`,
+      `/v1.0.0-beta/pickup/store/info/${encodeURIComponent(storeId)}`,
     );
+  }
+
+  private buildPickupStorePayload(
+    dto: RedxPickupStoreUpdateRequest,
+  ): Record<string, unknown> {
+    return {
+      ...(dto.name !== undefined && { name: dto.name }),
+      ...(dto.phone !== undefined && { phone: dto.phone }),
+      ...(dto.address !== undefined && { address: dto.address }),
+      ...(dto.areaId !== undefined && { area_id: Number(dto.areaId) }),
+    };
   }
 
   mapWebhookStatus(status?: string | null) {
@@ -278,7 +330,7 @@ export class CourierProviderService {
     config: RedxConfig,
     endpoint: string,
     options: {
-      method?: "GET" | "POST" | "PATCH";
+      method?: "GET" | "POST" | "PATCH" | "DELETE";
       query?: Record<string, string>;
       body?: Record<string, unknown>;
     } = {},
@@ -297,6 +349,9 @@ export class CourierProviderService {
     });
 
     const payload = await this.parseResponse(response);
+
+    // TODO: see if the error message is consistent; if it is, then consider returning this redx specific error.
+    // console.log(payload);
 
     if (!response.ok) {
       throw new BadRequestException({

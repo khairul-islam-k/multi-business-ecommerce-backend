@@ -1,14 +1,19 @@
 import { Type } from "class-transformer";
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
   IsBoolean,
   IsEnum,
   IsNumber,
   IsObject,
   IsOptional,
+  IsPhoneNumber,
   IsString,
   IsUUID,
   MaxLength,
   Min,
+  ValidateNested,
 } from "class-validator";
 
 import {
@@ -71,6 +76,11 @@ export class BulkUpdateCourierConfigItem extends UpdateCourierConfigDto {
 
 export class BulkUpdateCourierConfigDto {
   @ApiProperty({ type: [BulkUpdateCourierConfigItem] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => BulkUpdateCourierConfigItem)
   configs!: BulkUpdateCourierConfigItem[];
 }
 
@@ -186,7 +196,7 @@ export class RedxCreatePickupStoreDto {
   name!: string;
 
   @ApiProperty({ example: "+8801700000000" })
-  @IsString()
+  @IsPhoneNumber()
   @MaxLength(30)
   phone!: string;
 
@@ -198,6 +208,31 @@ export class RedxCreatePickupStoreDto {
   @IsString()
   @MaxLength(80)
   areaId!: string;
+}
+
+export class RedxUpdatePickupStoreDto {
+  @ApiPropertyOptional({ example: "Default Warehouse" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  name?: string;
+
+  @ApiPropertyOptional({ example: "+8801700000000" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  phone?: string;
+
+  @ApiPropertyOptional({ example: "House 10, Road 2, Dhaka" })
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @ApiPropertyOptional({ example: "115" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  areaId?: string;
 }
 
 export class RedxWebhookDto {

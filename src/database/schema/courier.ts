@@ -37,10 +37,14 @@ export const courierStatusEnum = pgEnum("CourierStatus", [
 
 export const CourierConfigMode = {
   LIVE: "LIVE",
+  SANDBOX: "SANDBOX",
 } as const;
 export type CourierConfigMode =
   (typeof CourierConfigMode)[keyof typeof CourierConfigMode];
-export const courierConfigModeEnum = pgEnum("CourierConfigMode", ["LIVE"]);
+export const courierConfigModeEnum = pgEnum("CourierConfigMode", [
+  "LIVE",
+  "SANDBOX",
+]);
 
 export const CourierConfigStatus = {
   ACTIVE: "ACTIVE",

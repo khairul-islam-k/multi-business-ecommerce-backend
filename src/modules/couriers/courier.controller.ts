@@ -2,6 +2,7 @@ import { PermissionAction, RbacFeature } from "@/database/schema";
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -27,6 +28,7 @@ import {
   RedxAreaQueryDto,
   RedxChargeQuoteDto,
   RedxCreatePickupStoreDto,
+  RedxUpdatePickupStoreDto,
   UpdateCourierConfigDto,
 } from "./dto/courier.dto";
 
@@ -134,6 +136,34 @@ export class CourierController {
     @Param("storeId") storeId: string,
   ) {
     return this.couriers.getRedxPickupStore(businessId, configId, storeId);
+  }
+
+  @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.UPDATE)
+  @Patch("configs/:configId/redx/pickup-stores/:storeId")
+  @ApiOperation({ summary: "Update REDX pickup store" })
+  updateRedxPickupStore(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("configId", ParseUUIDPipe) configId: string,
+    @Param("storeId") storeId: string,
+    @Body() dto: RedxUpdatePickupStoreDto,
+  ) {
+    return this.couriers.updateRedxPickupStore(
+      businessId,
+      configId,
+      storeId,
+      dto,
+    );
+  }
+
+  @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.DELETE)
+  @Delete("configs/:configId/redx/pickup-stores/:storeId")
+  @ApiOperation({ summary: "Delete REDX pickup store" })
+  deleteRedxPickupStore(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("configId", ParseUUIDPipe) configId: string,
+    @Param("storeId") storeId: string,
+  ) {
+    return this.couriers.deleteRedxPickupStore(businessId, configId, storeId);
   }
 
   @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.UPDATE)

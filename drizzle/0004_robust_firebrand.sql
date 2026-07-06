@@ -1,0 +1,1 @@
+ALTER TYPE "public"."CourierConfigMode" ADD VALUE 'SANDBOX';
