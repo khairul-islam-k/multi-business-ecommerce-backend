@@ -2,7 +2,6 @@ import { PermissionAction, RbacFeature } from "@/database/schema";
 import {
   Body,
   Controller,
-  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -25,10 +24,10 @@ import {
   BulkUpdateCourierConfigDto,
   QueryCourierConfigDto,
   QueryCourierDto,
+  QueryCourierShipmentDto,
   RedxAreaQueryDto,
   RedxChargeQuoteDto,
   RedxCreatePickupStoreDto,
-  RedxUpdatePickupStoreDto,
   UpdateCourierConfigDto,
 } from "./dto/courier.dto";
 
@@ -176,6 +175,26 @@ export class CourierController {
     @Body() dto: AssignCourierToOrderDto,
   ) {
     return this.couriers.assignCourierToOrder(user, businessId, orderId, dto);
+  }
+
+  @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.READ)
+  @Get("shipments")
+  @ApiOperation({ summary: "Get courier shipments" })
+  findShipments(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Query() query: QueryCourierShipmentDto,
+  ) {
+    return this.couriers.findShipments(businessId, query);
+  }
+
+  @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.READ)
+  @Get("shipments/:shipmentId")
+  @ApiOperation({ summary: "Get courier shipment details" })
+  findShipment(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("shipmentId", ParseUUIDPipe) shipmentId: string,
+  ) {
+    return this.couriers.findShipment(businessId, shipmentId);
   }
 
   @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.READ)

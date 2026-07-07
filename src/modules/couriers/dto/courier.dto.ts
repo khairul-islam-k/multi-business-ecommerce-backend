@@ -20,6 +20,7 @@ import {
   CourierConfigMode,
   CourierConfigStatus,
   CourierProvider,
+  CourierShipmentStatus,
   CourierStatus,
 } from "@/database/schema";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
@@ -43,6 +44,33 @@ export class QueryCourierConfigDto extends SearchablePaginationQueryDto {
   @IsOptional()
   @IsEnum(CourierConfigStatus)
   status?: CourierConfigStatus;
+}
+
+export class QueryCourierShipmentDto extends SearchablePaginationQueryDto {
+  @ApiPropertyOptional({ enum: CourierShipmentStatus })
+  @IsOptional()
+  @IsEnum(CourierShipmentStatus)
+  status?: CourierShipmentStatus;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  orderId?: string;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  courierId?: string;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  courierConfigId?: string;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  pickupWarehouseId?: string;
 }
 
 export class UpdateCourierConfigDto {

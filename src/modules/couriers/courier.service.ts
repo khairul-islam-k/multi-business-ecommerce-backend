@@ -1,6 +1,17 @@
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import Decimal from "decimal.js";
-import { and, count, desc, eq, ilike, isNull, ne, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  ilike,
+  isNull,
+  ne,
+  or,
+} from "drizzle-orm";
 
 import {
   businessSetting,
@@ -67,6 +78,7 @@ import {
   BulkUpdateCourierConfigDto,
   QueryCourierConfigDto,
   QueryCourierDto,
+  QueryCourierShipmentDto,
   RedxAreaQueryDto,
   RedxChargeQuoteDto,
   RedxCreatePickupStoreDto,
@@ -195,6 +207,134 @@ export class CourierService {
       { page, limit, total, totalPages: Math.ceil(total / limit) },
       "Courier configurations were loaded successfully.",
     );
+  }
+
+  async findShipments(businessId: string, query: QueryCourierShipmentDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
+    const where = and(
+      eq(courierShipment.businessId, businessId),
+      isNull(courierShipment.deletedAt),
+      query.status ? eq(courierShipment.status, query.status) : undefined,
+      query.orderId ? eq(courierShipment.orderId, query.orderId) : undefined,
+      query.courierId
+        ? eq(courierShipment.courierId, query.courierId)
+        : undefined,
+      query.courierConfigId
+        ? eq(courierShipment.courierConfigId, query.courierConfigId)
+        : undefined,
+      query.pickupWarehouseId
+        ? eq(courierShipment.pickupWarehouseId, query.pickupWarehouseId)
+        : undefined,
+      search
+        ? or(
+            searchUuid ? eq(courierShipment.id, searchUuid) : undefined,
+            searchUuid ? eq(courierShipment.orderId, searchUuid) : undefined,
+            searchUuid ? eq(courierShipment.courierId, searchUuid) : undefined,
+            searchUuid
+              ? eq(courierShipment.courierConfigId, searchUuid)
+              : undefined,
+            searchUuid
+              ? eq(courierShipment.pickupWarehouseId, searchUuid)
+              : undefined,
+            ilike(courierShipment.shipmentNo, `%${search}%`),
+            ilike(courierShipment.consignmentId, `%${search}%`),
+            ilike(courierShipment.trackingCode, `%${search}%`),
+            ilike(courierShipment.providerStatus, `%${search}%`),
+            ilike(courierShipment.recipientName, `%${search}%`),
+            ilike(courierShipment.recipientPhone, `%${search}%`),
+            ilike(courierShipment.deliveryAreaId, `%${search}%`),
+            ilike(courierShipment.deliveryAreaName, `%${search}%`),
+            ilike(courierShipment.deliveryPostCode, `%${search}%`),
+            ilike(courierShipment.pickupAreaId, `%${search}%`),
+            ilike(courierShipment.pickupAreaName, `%${search}%`),
+            ilike(courierShipment.pickupStoreId, `%${search}%`),
+            exists(
+              this.db
+                .select({ id: order.id })
+                .from(order)
+                .where(
+                  and(
+                    eq(order.id, courierShipment.orderId),
+                    eq(order.businessId, businessId),
+                    isNull(order.deletedAt),
+                    or(
+                      ilike(order.orderNo, `%${search}%`),
+                      ilike(order.customerName, `%${search}%`),
+                      ilike(order.customerPhone, `%${search}%`),
+                      ilike(order.customerEmail, `%${search}%`),
+                    ),
+                  ),
+                ),
+            ),
+            exists(
+              this.db
+                .select({ id: product.id })
+                .from(courierShipmentItem)
+                .innerJoin(
+                  product,
+                  eq(product.id, courierShipmentItem.productId),
+                )
+                .leftJoin(
+                  productVariant,
+                  eq(productVariant.id, courierShipmentItem.variantId),
+                )
+                .where(
+                  and(
+                    eq(courierShipmentItem.shipmentId, courierShipment.id),
+                    eq(product.businessId, businessId),
+                    or(
+                      searchUuid
+                        ? eq(courierShipmentItem.id, searchUuid)
+                        : undefined,
+                      searchUuid ? eq(product.id, searchUuid) : undefined,
+                      searchUuid
+                        ? eq(productVariant.id, searchUuid)
+                        : undefined,
+                      ilike(product.name, `%${search}%`),
+                      ilike(product.slug, `%${search}%`),
+                      ilike(product.sku, `%${search}%`),
+                      ilike(product.barcode, `%${search}%`),
+                      ilike(productVariant.title, `%${search}%`),
+                      ilike(productVariant.sku, `%${search}%`),
+                      ilike(productVariant.barcode, `%${search}%`),
+                    ),
+                  ),
+                ),
+            ),
+          )
+        : undefined,
+    );
+
+    const [rows, total] = await Promise.all([
+      this.db
+        .select()
+        .from(courierShipment)
+        .where(where)
+        .orderBy(desc(courierShipment.createdAt))
+        .limit(limit)
+        .offset(skip),
+      this.db
+        .select({ value: count() })
+        .from(courierShipment)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
+    ]);
+
+    return paginatedResponse(
+      await Promise.all(rows.map((shipment) => this.hydrateShipment(shipment))),
+      { page, limit, total, totalPages: Math.ceil(total / limit) },
+      "Courier shipments were loaded successfully.",
+    );
+  }
+
+  async findShipment(businessId: string, shipmentId: string) {
+    const shipment = await this.getShipmentOrThrow(businessId, shipmentId);
+
+    return apiResponse(await this.hydrateShipment(shipment));
   }
 
   async updateConfig(
@@ -1425,6 +1565,100 @@ export class CourierService {
     }
 
     return { ...row.config, courier: row.courier };
+  }
+
+  private async hydrateShipment(shipment: CourierShipment) {
+    const [orderRow, courierRow, configRow, pickupWarehouse, items] =
+      await Promise.all([
+        this.db
+          .select()
+          .from(order)
+          .where(
+            and(
+              eq(order.id, shipment.orderId),
+              eq(order.businessId, shipment.businessId),
+            ),
+          )
+          .limit(1)
+          .then(([row]) => row ?? null),
+        shipment.courierId
+          ? this.db
+              .select()
+              .from(courier)
+              .where(eq(courier.id, shipment.courierId))
+              .limit(1)
+              .then(([row]) => row ?? null)
+          : Promise.resolve(null),
+        shipment.courierConfigId
+          ? this.db
+              .select({ config: courierConfig, courier })
+              .from(courierConfig)
+              .innerJoin(courier, eq(courier.id, courierConfig.courierId))
+              .where(
+                and(
+                  eq(courierConfig.id, shipment.courierConfigId),
+                  eq(courierConfig.businessId, shipment.businessId),
+                  isNull(courierConfig.deletedAt),
+                ),
+              )
+              .limit(1)
+              .then(([row]) =>
+                row
+                  ? this.serializeConfig({
+                      ...row.config,
+                      courier: row.courier,
+                    })
+                  : null,
+              )
+          : Promise.resolve(null),
+        shipment.pickupWarehouseId
+          ? this.db
+              .select()
+              .from(warehouse)
+              .where(
+                and(
+                  eq(warehouse.id, shipment.pickupWarehouseId),
+                  eq(warehouse.businessId, shipment.businessId),
+                  isNull(warehouse.deletedAt),
+                ),
+              )
+              .limit(1)
+              .then(([row]) => row ?? null)
+          : Promise.resolve(null),
+        this.db
+          .select({
+            shipmentItem: courierShipmentItem,
+            orderItem,
+            product,
+            variant: productVariant,
+          })
+          .from(courierShipmentItem)
+          .leftJoin(
+            orderItem,
+            eq(orderItem.id, courierShipmentItem.orderItemId),
+          )
+          .leftJoin(product, eq(product.id, courierShipmentItem.productId))
+          .leftJoin(
+            productVariant,
+            eq(productVariant.id, courierShipmentItem.variantId),
+          )
+          .where(eq(courierShipmentItem.shipmentId, shipment.id))
+          .orderBy(asc(courierShipmentItem.createdAt)),
+      ]);
+
+    return {
+      ...shipment,
+      order: orderRow,
+      courier: courierRow,
+      courierConfig: configRow,
+      pickupWarehouse,
+      items: items.map((row) => ({
+        ...row.shipmentItem,
+        orderItem: row.orderItem,
+        product: row.product,
+        variant: row.variant,
+      })),
+    };
   }
 
   private async getShipmentOrThrow(businessId: string, shipmentId: string) {

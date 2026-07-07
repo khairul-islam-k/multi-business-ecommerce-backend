@@ -506,13 +506,12 @@ export class ProductService {
     }
 
     await tx.insert(productImage).values(
-      params.images.map((image, index) => ({
+      params.images.map((image) => ({
         businessId: params.businessId,
         productId: params.productId,
         variantId: params.variantId ?? null,
         imageUrl: image.imageUrl.trim(),
         altText: this.lookup.normalizeNullableText(image.altText),
-        sortOrder: index,
         isThumbnail: image.isThumbnail ?? false,
         createdBy: params.userId,
         updatedBy: params.userId,
