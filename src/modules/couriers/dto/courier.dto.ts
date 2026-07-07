@@ -130,7 +130,7 @@ export class RedxChargeQuoteDto {
   @ApiProperty({ example: 1 })
   @Type(() => Number)
   @IsNumber()
-  @Min(0.001)
+  @Min(0)
   weight!: number;
 }
 

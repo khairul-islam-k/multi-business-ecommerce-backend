@@ -812,7 +812,7 @@ export class CourierService {
         : null;
     const weight = itemMetrics?.weight ?? orderWeight ?? requestWeight;
 
-    if (!weight || new Decimal(weight).lessThanOrEqualTo(0)) {
+    if (weight === null || new Decimal(weight).lessThan(0)) {
       throw new BadRequestException(
         "Courier weight could not be calculated from order items.",
       );
