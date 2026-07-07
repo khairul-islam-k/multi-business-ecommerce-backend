@@ -230,28 +230,28 @@ export class CourierProviderService {
     });
   }
 
-  updatePickupStore(
-    config: RedxConfig,
-    storeId: string,
-    dto: RedxPickupStoreUpdateRequest,
-  ) {
-    return this.request(
-      config,
-      `/v1.0.0-beta/pickup/stores/${encodeURIComponent(storeId)}`,
-      {
-        method: "PATCH",
-        body: this.buildPickupStorePayload(dto),
-      },
-    );
-  }
+  // updatePickupStore(
+  //   config: RedxConfig,
+  //   storeId: string,
+  //   dto: RedxPickupStoreUpdateRequest,
+  // ) {
+  //   return this.request(
+  //     config,
+  //     `/v1.0.0-beta/pickup/stores/${encodeURIComponent(storeId)}`,
+  //     {
+  //       method: "PATCH",
+  //       body: this.buildPickupStorePayload(dto),
+  //     },
+  //   );
+  // }
 
-  deletePickupStore(config: RedxConfig, storeId: string) {
-    return this.request(
-      config,
-      `/v1.0.0-beta/pickup/stores/${encodeURIComponent(storeId)}`,
-      { method: "DELETE" },
-    );
-  }
+  // deletePickupStore(config: RedxConfig, storeId: string) {
+  //   return this.request(
+  //     config,
+  //     `/v1.0.0-beta/pickup/stores/${encodeURIComponent(storeId)}`,
+  //     { method: "DELETE" },
+  //   );
+  // }
 
   listPickupStores(config: RedxConfig) {
     return this.request(config, "/v1.0.0-beta/pickup/stores");

@@ -23,14 +23,14 @@ import {
   FinanceTaxStatus,
   inventoryOrderAllocation,
   InventoryOrderAllocationStatus,
+  invoice,
+  InvoiceStatus,
   JsonValue,
   order,
   orderItem,
   OrderPaymentStatus,
   OrderStatus,
   orderStatusLog,
-  invoice,
-  InvoiceStatus,
   product,
   productVariant,
   ProductVariantStatus,
@@ -66,9 +66,9 @@ import {
   RedxAreaQueryDto,
   RedxChargeQuoteDto,
   RedxCreatePickupStoreDto,
-  RedxUpdatePickupStoreDto,
-  StorefrontCourierSelectionDto,
+  // RedxUpdatePickupStoreDto,
   StorefrontCourierQuoteDto,
+  StorefrontCourierSelectionDto,
   UpdateCourierConfigDto,
 } from "./dto/courier.dto";
 
@@ -310,47 +310,47 @@ export class CourierService {
     );
   }
 
-  async updateRedxPickupStore(
-    businessId: string,
-    configId: string,
-    storeId: string,
-    dto: RedxUpdatePickupStoreDto,
-  ) {
-    const name = dto.name?.trim();
-    const phone = dto.phone?.trim();
-    const address = dto.address?.trim();
-    const areaId = dto.areaId?.trim();
-    const payload = {
-      ...(name && { name }),
-      ...(phone && { phone }),
-      ...(address && { address }),
-      ...(areaId && { areaId }),
-    };
+  // async updateRedxPickupStore(
+  //   businessId: string,
+  //   configId: string,
+  //   storeId: string,
+  //   dto: RedxUpdatePickupStoreDto,
+  // ) {
+  //   const name = dto.name?.trim();
+  //   const phone = dto.phone?.trim();
+  //   const address = dto.address?.trim();
+  //   const areaId = dto.areaId?.trim();
+  //   const payload = {
+  //     ...(name && { name }),
+  //     ...(phone && { phone }),
+  //     ...(address && { address }),
+  //     ...(areaId && { areaId }),
+  //   };
 
-    if (Object.keys(payload).length === 0) {
-      throw new BadRequestException(
-        "At least one pickup store field is required for update.",
-      );
-    }
+  //   if (Object.keys(payload).length === 0) {
+  //     throw new BadRequestException(
+  //       "At least one pickup store field is required for update.",
+  //     );
+  //   }
 
-    const { runtime } = await this.getActiveRedxRuntime(businessId, configId);
-    return apiResponse(
-      await this.provider.updatePickupStore(runtime, storeId, payload),
-      "REDX pickup store updated successfully.",
-    );
-  }
+  //   const { runtime } = await this.getActiveRedxRuntime(businessId, configId);
+  //   return apiResponse(
+  //     await this.provider.updatePickupStore(runtime, storeId, payload),
+  //     "REDX pickup store updated successfully.",
+  //   );
+  // }
 
-  async deleteRedxPickupStore(
-    businessId: string,
-    configId: string,
-    storeId: string,
-  ) {
-    const { runtime } = await this.getActiveRedxRuntime(businessId, configId);
-    return apiResponse(
-      await this.provider.deletePickupStore(runtime, storeId),
-      "REDX pickup store deleted successfully.",
-    );
-  }
+  // async deleteRedxPickupStore(
+  //   businessId: string,
+  //   configId: string,
+  //   storeId: string,
+  // ) {
+  //   const { runtime } = await this.getActiveRedxRuntime(businessId, configId);
+  //   return apiResponse(
+  //     await this.provider.deletePickupStore(runtime, storeId),
+  //     "REDX pickup store deleted successfully.",
+  //   );
+  // }
 
   async findStorefrontCouriers(host?: string) {
     const storefront = await this.websites.findPublishedByHostOrThrow(host);

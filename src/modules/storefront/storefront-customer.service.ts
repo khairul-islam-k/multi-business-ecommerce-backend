@@ -553,9 +553,10 @@ export class StorefrontCustomerService {
         .update(orderCartItem)
         .set({ quantity: nextQuantity })
         .where(eq(orderCartItem.id, existingItem.id));
+      const updatedCart = await this.refreshCartWeight(cart.id);
 
       return apiResponse(
-        await this.hydrateCart(cart),
+        await this.hydrateCart(updatedCart),
         "Cart item quantity updated successfully",
       );
     }
@@ -566,9 +567,10 @@ export class StorefrontCustomerService {
       variantId: dto.variantId ?? null,
       quantity: new Decimal(dto.quantity),
     });
+    const updatedCart = await this.refreshCartWeight(cart.id);
 
     return apiResponse(
-      await this.hydrateCart(cart),
+      await this.hydrateCart(updatedCart),
       "Cart item added successfully",
     );
   }
@@ -595,9 +597,10 @@ export class StorefrontCustomerService {
       .update(orderCartItem)
       .set({ quantity: new Decimal(dto.quantity) })
       .where(eq(orderCartItem.id, row.item.id));
+    const updatedCart = await this.refreshCartWeight(row.cart.id);
 
     return apiResponse(
-      await this.hydrateCart(row.cart),
+      await this.hydrateCart(updatedCart),
       "Cart item updated successfully",
     );
   }
@@ -616,9 +619,10 @@ export class StorefrontCustomerService {
     await this.db
       .delete(orderCartItem)
       .where(eq(orderCartItem.id, row.item.id));
+    const updatedCart = await this.refreshCartWeight(row.cart.id);
 
     return apiResponse(
-      await this.hydrateCart(row.cart),
+      await this.hydrateCart(updatedCart),
       "Cart item removed successfully",
     );
   }
@@ -637,9 +641,10 @@ export class StorefrontCustomerService {
     await this.db
       .delete(orderCartItem)
       .where(eq(orderCartItem.cartId, cart.id));
+    const updatedCart = await this.refreshCartWeight(cart.id);
 
     return apiResponse(
-      await this.hydrateCart(cart),
+      await this.hydrateCart(updatedCart),
       "Cart cleared successfully",
     );
   }
@@ -1361,6 +1366,45 @@ export class StorefrontCustomerService {
       ...cart,
       items: Array.from(itemsById.values()),
     };
+  }
+
+  private async refreshCartWeight(cartId: string) {
+    const rows = await this.db
+      .select({
+        quantity: orderCartItem.quantity,
+        productWeight: product.weight,
+        variantWeight: productVariant.weight,
+      })
+      .from(orderCartItem)
+      .innerJoin(product, eq(product.id, orderCartItem.productId))
+      .leftJoin(
+        productVariant,
+        and(
+          eq(productVariant.id, orderCartItem.variantId),
+          eq(productVariant.productId, product.id),
+        ),
+      )
+      .where(eq(orderCartItem.cartId, cartId));
+
+    const weight = rows
+      .reduce((total, row) => {
+        const unitWeight = new Decimal(row.variantWeight ?? row.productWeight);
+
+        return total.plus(new Decimal(row.quantity).mul(unitWeight));
+      }, new Decimal(0))
+      .toDecimalPlaces(2);
+
+    const [updatedCart] = await this.db
+      .update(orderCart)
+      .set({ weight })
+      .where(eq(orderCart.id, cartId))
+      .returning();
+
+    if (!updatedCart) {
+      throw new NotFoundException("Cart not found");
+    }
+
+    return updatedCart;
   }
 
   private getCartItems(cartId: string) {

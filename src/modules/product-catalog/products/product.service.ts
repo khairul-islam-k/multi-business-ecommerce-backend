@@ -159,7 +159,7 @@ export class ProductService {
             sku,
             barcode,
             price: new Decimal(dto.price ?? 0),
-            weight: dto.weight === undefined ? null : new Decimal(dto.weight),
+            weight: new Decimal(dto.weight),
             status: dto.status ?? CatalogProductStatus.DRAFT,
             createdBy: currentUser.id,
             updatedBy: currentUser.id,
@@ -387,7 +387,7 @@ export class ProductService {
             }),
             ...(dto.price !== undefined && { price: new Decimal(dto.price) }),
             ...(dto.weight !== undefined && {
-              weight: dto.weight === null ? null : new Decimal(dto.weight),
+              weight: new Decimal(dto.weight),
             }),
             ...(dto.status !== undefined && { status: dto.status }),
             updatedBy: currentUser.id,

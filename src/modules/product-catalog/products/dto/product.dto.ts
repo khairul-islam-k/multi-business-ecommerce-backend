@@ -43,12 +43,11 @@ export class CreateProductDto extends ProductImagesDto {
   @Min(0)
   price?: number;
 
-  @ApiPropertyOptional({ example: 0.5 })
-  @IsOptional()
+  @ApiProperty({ example: 0.5 })
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
-  weight?: number;
+  @Min(0.001)
+  weight!: number;
 
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsUUID()

@@ -198,7 +198,6 @@ export const productTag = pgTable(
       .references((): AnyPgColumn => business.id, { onDelete: "cascade" }),
     name: varchar({ length: 100 }).notNull(),
     status: productSimpleStatusEnum().notNull(),
-    // TODO: make it notNull
     isFeatured: boolean("is_featured").notNull(),
     createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
       onDelete: "set null",
@@ -261,7 +260,7 @@ export const product = pgTable(
     sku: varchar({ length: 100 }).notNull(),
     barcode: varchar({ length: 100 }).notNull(),
     price: decimal({ precision: 12, scale: 2 }).notNull(),
-    weight: decimal({ precision: 10, scale: 2 }),
+    weight: decimal({ precision: 10, scale: 2 }).notNull(),
     status: catalogProductStatusEnum().notNull(),
     createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
       onDelete: "set null",

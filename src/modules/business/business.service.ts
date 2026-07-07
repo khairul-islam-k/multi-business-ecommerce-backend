@@ -827,8 +827,8 @@ export class BusinessService {
       couriers.map((row) => ({
         businessId,
         courierId: row.id,
-        configData: { baseUrl: "https://openapi.redx.com.bd" },
-        mode: CourierConfigMode.LIVE,
+        configData: {},
+        mode: CourierConfigMode.SANDBOX,
         status: CourierConfigStatus.INACTIVE,
         createdBy: userId,
         updatedBy: userId,
