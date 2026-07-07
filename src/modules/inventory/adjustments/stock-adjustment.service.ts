@@ -1,5 +1,15 @@
 import Decimal from "decimal.js";
-import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  ilike,
+  isNull,
+  or,
+} from "drizzle-orm";
 
 import {
   InventoryAdjustmentStatus,
@@ -21,6 +31,10 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
 import { DatabaseService } from "../../../database/database.service";
 import { InventoryLookupService } from "../common/inventory-lookup.service";
 import {
@@ -129,16 +143,37 @@ export class StockAdjustmentService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(inventoryStockAdjustment.businessId, businessId),
       isNull(inventoryStockAdjustment.deletedAt),
       query.warehouseId
         ? eq(inventoryStockAdjustment.warehouseId, query.warehouseId)
         : undefined,
-      query.search
+      search
         ? or(
-            ilike(inventoryStockAdjustment.adjustmentNo, `%${query.search}%`),
-            ilike(inventoryStockAdjustment.reason, `%${query.search}%`),
+            searchUuid
+              ? eq(inventoryStockAdjustment.id, searchUuid)
+              : undefined,
+            searchUuid
+              ? eq(inventoryStockAdjustment.warehouseId, searchUuid)
+              : undefined,
+            ilike(inventoryStockAdjustment.adjustmentNo, `%${search}%`),
+            ilike(inventoryStockAdjustment.reason, `%${search}%`),
+            exists(
+              this.db
+                .select({ id: warehouse.id })
+                .from(warehouse)
+                .where(
+                  and(
+                    eq(warehouse.id, inventoryStockAdjustment.warehouseId),
+                    eq(warehouse.businessId, businessId),
+                    ilike(warehouse.name, `%${search}%`),
+                    isNull(warehouse.deletedAt),
+                  ),
+                ),
+            ),
           )
         : undefined,
     );

@@ -132,13 +132,6 @@ export class RedxChargeQuoteDto {
   @IsNumber()
   @Min(0.001)
   weight!: number;
-
-  @ApiPropertyOptional({ example: 1000 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  cashCollectionAmount?: number;
 }
 
 export class StorefrontCourierQuoteDto extends RedxChargeQuoteDto {

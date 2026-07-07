@@ -12,6 +12,7 @@ import { ApiOperation, ApiTags } from "@nestjs/swagger";
 
 import {
   ResolveStorefrontVariantDto,
+  StorefrontCatalogSearchDto,
   StorefrontProductQueryDto,
 } from "./dto/storefront.dto";
 import { StorefrontService } from "./storefront.service";
@@ -35,9 +36,11 @@ export class StorefrontController {
   findCategories(
     @Headers("host") host?: string,
     @Headers("x-forwarded-host") forwardedHost?: string,
+    @Query() query?: StorefrontCatalogSearchDto,
   ) {
     return this.storefront.findCategories(
       this.getRequestHost(host, forwardedHost),
+      query,
     );
   }
 
@@ -46,8 +49,12 @@ export class StorefrontController {
   findBrands(
     @Headers("host") host?: string,
     @Headers("x-forwarded-host") forwardedHost?: string,
+    @Query() query?: StorefrontCatalogSearchDto,
   ) {
-    return this.storefront.findBrands(this.getRequestHost(host, forwardedHost));
+    return this.storefront.findBrands(
+      this.getRequestHost(host, forwardedHost),
+      query,
+    );
   }
 
   @Get("tags")
@@ -55,8 +62,12 @@ export class StorefrontController {
   findTags(
     @Headers("host") host?: string,
     @Headers("x-forwarded-host") forwardedHost?: string,
+    @Query() query?: StorefrontCatalogSearchDto,
   ) {
-    return this.storefront.findTags(this.getRequestHost(host, forwardedHost));
+    return this.storefront.findTags(
+      this.getRequestHost(host, forwardedHost),
+      query,
+    );
   }
 
   @Get("products")

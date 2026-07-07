@@ -1,4 +1,14 @@
-import { and, count, desc, eq, ilike, isNull, max, or } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  exists,
+  ilike,
+  isNull,
+  max,
+  or,
+} from "drizzle-orm";
 
 import { AppConfigService } from "@/common/config/app-config.service";
 import {
@@ -28,6 +38,10 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../common/http/search.util";
 import {
   generateRandomSlug,
   slugify,
@@ -146,15 +160,31 @@ export class WebsiteService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const search = query.search?.trim();
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(website.businessId, businessId),
       isNull(website.deletedAt),
       query.status ? eq(website.status, query.status) : undefined,
       search
         ? or(
+            searchUuid ? eq(website.id, searchUuid) : undefined,
             ilike(website.name, `%${search}%`),
             ilike(website.slug, `%${search}%`),
+            exists(
+              this.db
+                .select({ id: websiteDomain.id })
+                .from(websiteDomain)
+                .where(
+                  and(
+                    eq(websiteDomain.websiteId, website.id),
+                    or(
+                      ilike(websiteDomain.domain, `%${search}%`),
+                      ilike(websiteDomain.subdomain, `%${search}%`),
+                    ),
+                  ),
+                ),
+            ),
           )
         : undefined,
     );

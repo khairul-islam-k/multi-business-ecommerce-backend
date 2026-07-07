@@ -41,6 +41,10 @@ import {
 import { isUniqueConstraintError } from "../../common/database/db-error.util";
 import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../common/http/search.util";
+import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
@@ -184,6 +188,8 @@ export class EmployeeService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(systemUser.type, SystemUserType.EMPLOYEE),
       exists(
@@ -201,11 +207,12 @@ export class EmployeeService {
       ),
       !query.includeDeleted ? isNull(systemUser.deletedAt) : undefined,
       query.status ? eq(systemUser.status, query.status) : undefined,
-      query.search
+      search
         ? or(
-            ilike(systemUser.name, `%${query.search}%`),
-            ilike(systemUser.email, `%${query.search}%`),
-            ilike(systemUser.phone, `%${query.search}%`),
+            searchUuid ? eq(systemUser.id, searchUuid) : undefined,
+            ilike(systemUser.name, `%${search}%`),
+            ilike(systemUser.email, `%${search}%`),
+            ilike(systemUser.phone, `%${search}%`),
           )
         : undefined,
     );

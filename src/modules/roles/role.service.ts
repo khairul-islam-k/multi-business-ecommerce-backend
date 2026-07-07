@@ -41,6 +41,10 @@ import {
 import { isUniqueConstraintError } from "../../common/database/db-error.util";
 import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../common/http/search.util";
+import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
@@ -148,14 +152,17 @@ export class RoleService {
     const skip = (page - 1) * limit;
     const canIncludeDeleted =
       currentUser.type === SystemUserType.ADMIN && query.includeDeleted;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(rbacRole.businessId, businessId),
       !canIncludeDeleted ? isNull(rbacRole.deletedAt) : undefined,
       query.status ? eq(rbacRole.status, query.status) : undefined,
-      query.search
+      search
         ? or(
-            ilike(rbacRole.name, `%${query.search}%`),
-            ilike(rbacRole.description, `%${query.search}%`),
+            searchUuid ? eq(rbacRole.id, searchUuid) : undefined,
+            ilike(rbacRole.name, `%${search}%`),
+            ilike(rbacRole.description, `%${search}%`),
           )
         : undefined,
     );

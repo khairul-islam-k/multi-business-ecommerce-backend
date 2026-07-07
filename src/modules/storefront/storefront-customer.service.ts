@@ -1,5 +1,16 @@
 import Decimal from "decimal.js";
-import { and, asc, count, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  ilike,
+  inArray,
+  isNull,
+  or,
+} from "drizzle-orm";
 
 import {
   businessSetting,
@@ -35,6 +46,10 @@ import {
 
 import { isUniqueConstraintError } from "../../common/database/db-error.util";
 import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../common/http/search.util";
 import {
   normalizeOptionalText,
   normalizeRequiredText,
@@ -94,9 +109,20 @@ export class StorefrontCustomerService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(customerAddress.customerId, currentCustomer.customerId),
       isNull(customerAddress.deletedAt),
+      search
+        ? or(
+            searchUuid ? eq(customerAddress.id, searchUuid) : undefined,
+            ilike(customerAddress.name, `%${search}%`),
+            ilike(customerAddress.address, `%${search}%`),
+            ilike(customerAddress.city, `%${search}%`),
+            ilike(customerAddress.country, `%${search}%`),
+          )
+        : undefined,
     );
 
     const [addresses, total] = await Promise.all([
@@ -283,10 +309,47 @@ export class StorefrontCustomerService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(orderCart.businessId, currentCustomer.businessId),
       eq(orderCart.customerId, currentCustomer.customerId),
       query.status ? eq(orderCart.status, query.status) : undefined,
+      search
+        ? or(
+            searchUuid ? eq(orderCart.id, searchUuid) : undefined,
+            exists(
+              this.db
+                .select({ id: orderCartItem.id })
+                .from(orderCartItem)
+                .innerJoin(product, eq(product.id, orderCartItem.productId))
+                .leftJoin(
+                  productVariant,
+                  eq(productVariant.id, orderCartItem.variantId),
+                )
+                .where(
+                  and(
+                    eq(orderCartItem.cartId, orderCart.id),
+                    eq(product.businessId, currentCustomer.businessId),
+                    isNull(product.deletedAt),
+                    or(
+                      searchUuid ? eq(product.id, searchUuid) : undefined,
+                      searchUuid
+                        ? eq(productVariant.id, searchUuid)
+                        : undefined,
+                      ilike(product.name, `%${search}%`),
+                      ilike(product.slug, `%${search}%`),
+                      ilike(product.sku, `%${search}%`),
+                      ilike(product.barcode, `%${search}%`),
+                      ilike(productVariant.title, `%${search}%`),
+                      ilike(productVariant.sku, `%${search}%`),
+                      ilike(productVariant.barcode, `%${search}%`),
+                    ),
+                  ),
+                ),
+            ),
+          )
+        : undefined,
     );
 
     const [carts, total] = await Promise.all([
@@ -362,9 +425,43 @@ export class StorefrontCustomerService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(customerWishlist.businessId, currentCustomer.businessId),
       eq(customerWishlist.customerId, currentCustomer.customerId),
+      search
+        ? exists(
+            this.db
+              .select({ id: product.id })
+              .from(product)
+              .leftJoin(
+                productVariant,
+                eq(productVariant.id, customerWishlist.variantId),
+              )
+              .where(
+                and(
+                  eq(product.id, customerWishlist.productId),
+                  eq(product.businessId, currentCustomer.businessId),
+                  isNull(product.deletedAt),
+                  or(
+                    searchUuid
+                      ? eq(customerWishlist.id, searchUuid)
+                      : undefined,
+                    searchUuid ? eq(product.id, searchUuid) : undefined,
+                    searchUuid ? eq(productVariant.id, searchUuid) : undefined,
+                    ilike(product.name, `%${search}%`),
+                    ilike(product.slug, `%${search}%`),
+                    ilike(product.sku, `%${search}%`),
+                    ilike(product.barcode, `%${search}%`),
+                    ilike(productVariant.title, `%${search}%`),
+                    ilike(productVariant.sku, `%${search}%`),
+                    ilike(productVariant.barcode, `%${search}%`),
+                  ),
+                ),
+              ),
+          )
+        : undefined,
     );
 
     const [rows, total] = await Promise.all([
@@ -825,10 +922,11 @@ export class StorefrontCustomerService {
     query: StorefrontOrderQueryDto,
   ) {
     await this.assertStorefrontCustomer(currentCustomer, websiteId);
-    // TODO: add search here. orders should be searchable via product name, order id, variant name etc.
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(order.businessId, currentCustomer.businessId),
       eq(order.customerId, currentCustomer.customerId),
@@ -836,6 +934,45 @@ export class StorefrontCustomerService {
       query.status ? eq(order.status, query.status) : undefined,
       query.paymentStatus
         ? eq(order.paymentStatus, query.paymentStatus)
+        : undefined,
+      search
+        ? or(
+            searchUuid ? eq(order.id, searchUuid) : undefined,
+            searchUuid ? eq(order.warehouseId, searchUuid) : undefined,
+            ilike(order.orderNo, `%${search}%`),
+            ilike(order.note, `%${search}%`),
+            exists(
+              this.db
+                .select({ id: orderItem.id })
+                .from(orderItem)
+                .innerJoin(product, eq(product.id, orderItem.productId))
+                .leftJoin(
+                  productVariant,
+                  eq(productVariant.id, orderItem.variantId),
+                )
+                .where(
+                  and(
+                    eq(orderItem.orderId, order.id),
+                    eq(product.businessId, currentCustomer.businessId),
+                    isNull(product.deletedAt),
+                    or(
+                      searchUuid ? eq(orderItem.id, searchUuid) : undefined,
+                      searchUuid ? eq(product.id, searchUuid) : undefined,
+                      searchUuid
+                        ? eq(productVariant.id, searchUuid)
+                        : undefined,
+                      ilike(product.name, `%${search}%`),
+                      ilike(product.slug, `%${search}%`),
+                      ilike(product.sku, `%${search}%`),
+                      ilike(product.barcode, `%${search}%`),
+                      ilike(productVariant.title, `%${search}%`),
+                      ilike(productVariant.sku, `%${search}%`),
+                      ilike(productVariant.barcode, `%${search}%`),
+                    ),
+                  ),
+                ),
+            ),
+          )
         : undefined,
     );
 
@@ -1074,12 +1211,23 @@ export class StorefrontCustomerService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(orderReturn.businessId, currentCustomer.businessId),
       eq(order.customerId, currentCustomer.customerId),
       isNull(orderReturn.deletedAt),
       isNull(order.deletedAt),
       query.status ? eq(orderReturn.status, query.status) : undefined,
+      search
+        ? or(
+            searchUuid ? eq(orderReturn.id, searchUuid) : undefined,
+            searchUuid ? eq(orderReturn.orderId, searchUuid) : undefined,
+            ilike(orderReturn.returnNo, `%${search}%`),
+            ilike(orderReturn.reason, `%${search}%`),
+            ilike(order.orderNo, `%${search}%`),
+          )
+        : undefined,
     );
 
     const [rows, total] = await Promise.all([
@@ -1174,6 +1322,8 @@ export class StorefrontCustomerService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(productReview.businessId, currentCustomer.businessId),
       eq(productReview.customerId, currentCustomer.customerId),
@@ -1182,6 +1332,19 @@ export class StorefrontCustomerService {
         ? eq(productReview.productId, query.productId)
         : undefined,
       query.status ? eq(productReview.status, query.status) : undefined,
+      search
+        ? or(
+            searchUuid ? eq(productReview.id, searchUuid) : undefined,
+            searchUuid ? eq(productReview.productId, searchUuid) : undefined,
+            searchUuid ? eq(productReview.variantId, searchUuid) : undefined,
+            ilike(productReview.title, `%${search}%`),
+            ilike(productReview.comment, `%${search}%`),
+            ilike(product.name, `%${search}%`),
+            ilike(product.slug, `%${search}%`),
+            ilike(product.sku, `%${search}%`),
+            ilike(product.barcode, `%${search}%`),
+          )
+        : undefined,
     );
 
     const [items, total] = await Promise.all([
@@ -1196,6 +1359,7 @@ export class StorefrontCustomerService {
       this.db
         .select({ value: count() })
         .from(productReview)
+        .innerJoin(product, eq(product.id, productReview.productId))
         .where(where)
         .then(([row]) => row?.value ?? 0),
     ]);

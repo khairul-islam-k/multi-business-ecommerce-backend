@@ -1,5 +1,5 @@
 import Decimal from "decimal.js";
-import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+import { and, count, desc, eq, exists, ilike, isNull, or } from "drizzle-orm";
 
 import {
   financeAccount,
@@ -20,6 +20,10 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
 import { DatabaseService } from "../../../database/database.service";
 import { FinanceLedgerService } from "../common/finance-ledger.service";
 import {
@@ -230,6 +234,9 @@ export class ExpenseService {
   }
 
   private buildExpenseWhere(businessId: string, query: QueryExpenseDto) {
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
+
     return and(
       eq(financeExpense.businessId, businessId),
       isNull(financeExpense.deletedAt),
@@ -240,11 +247,49 @@ export class ExpenseService {
       query.expenseCategoryId
         ? eq(financeExpense.expenseCategoryId, query.expenseCategoryId)
         : undefined,
-      query.search
+      search
         ? or(
-            ilike(financeExpense.expenseNo, `%${query.search}%`),
-            ilike(financeExpense.title, `%${query.search}%`),
-            ilike(financeExpense.referenceNo, `%${query.search}%`),
+            searchUuid ? eq(financeExpense.id, searchUuid) : undefined,
+            searchUuid ? eq(financeExpense.accountId, searchUuid) : undefined,
+            searchUuid
+              ? eq(financeExpense.expenseCategoryId, searchUuid)
+              : undefined,
+            ilike(financeExpense.expenseNo, `%${search}%`),
+            ilike(financeExpense.title, `%${search}%`),
+            ilike(financeExpense.referenceNo, `%${search}%`),
+            ilike(financeExpense.note, `%${search}%`),
+            exists(
+              this.db
+                .select({ id: financeAccount.id })
+                .from(financeAccount)
+                .where(
+                  and(
+                    eq(financeAccount.id, financeExpense.accountId),
+                    eq(financeAccount.businessId, businessId),
+                    isNull(financeAccount.deletedAt),
+                    or(
+                      ilike(financeAccount.name, `%${search}%`),
+                      ilike(financeAccount.accountNumber, `%${search}%`),
+                    ),
+                  ),
+                ),
+            ),
+            exists(
+              this.db
+                .select({ id: financeExpenseCategory.id })
+                .from(financeExpenseCategory)
+                .where(
+                  and(
+                    eq(
+                      financeExpenseCategory.id,
+                      financeExpense.expenseCategoryId,
+                    ),
+                    eq(financeExpenseCategory.businessId, businessId),
+                    isNull(financeExpenseCategory.deletedAt),
+                    ilike(financeExpenseCategory.name, `%${search}%`),
+                  ),
+                ),
+            ),
           )
         : undefined,
     );

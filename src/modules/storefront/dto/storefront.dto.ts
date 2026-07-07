@@ -5,12 +5,20 @@ import {
   IsIn,
   IsOptional,
   IsUUID,
+  IsString,
   ValidateNested,
 } from "class-validator";
 
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 import { SortedPaginationQueryDto } from "../../../common/http/query.dto";
+
+export class StorefrontCatalogSearchDto {
+  @ApiPropertyOptional({ example: "search" })
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
 
 export const StorefrontProductSortBy = {
   NAME: "name",

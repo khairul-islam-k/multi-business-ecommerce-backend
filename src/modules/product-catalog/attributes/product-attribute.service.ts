@@ -30,6 +30,10 @@ import {
   SortOrder,
 } from "../../../common/http/sort.util";
 import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
+import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
@@ -111,13 +115,16 @@ export class ProductAttributeService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(productAttribute.businessId, businessId),
       isNull(productAttribute.deletedAt),
       query.status ? eq(productAttribute.status, query.status) : undefined,
-      query.search
+      search
         ? or(
-            ilike(productAttribute.name, `%${query.search}%`),
+            searchUuid ? eq(productAttribute.id, searchUuid) : undefined,
+            ilike(productAttribute.name, `%${search}%`),
             exists(
               this.db
                 .select({ id: productAttributeValue.id })
@@ -125,7 +132,12 @@ export class ProductAttributeService {
                 .where(
                   and(
                     eq(productAttributeValue.attributeId, productAttribute.id),
-                    ilike(productAttributeValue.value, `%${query.search}%`),
+                    or(
+                      searchUuid
+                        ? eq(productAttributeValue.id, searchUuid)
+                        : undefined,
+                      ilike(productAttributeValue.value, `%${search}%`),
+                    ),
                     isNull(productAttributeValue.deletedAt),
                   ),
                 ),

@@ -22,6 +22,10 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
 import { DatabaseService } from "../../../database/database.service";
 import {
   QueryOrderReturnDto,
@@ -46,7 +50,8 @@ export class OrderReturnService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const search = query.search?.trim();
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(orderReturn.businessId, businessId),
       isNull(orderReturn.deletedAt),
@@ -55,9 +60,15 @@ export class OrderReturnService {
       query.orderId ? eq(orderReturn.orderId, query.orderId) : undefined,
       search
         ? or(
+            searchUuid ? eq(orderReturn.id, searchUuid) : undefined,
+            searchUuid ? eq(orderReturn.orderId, searchUuid) : undefined,
+            searchUuid ? eq(order.customerId, searchUuid) : undefined,
             ilike(orderReturn.returnNo, `%${search}%`),
             ilike(orderReturn.reason, `%${search}%`),
             ilike(order.orderNo, `%${search}%`),
+            ilike(order.customerName, `%${search}%`),
+            ilike(order.customerPhone, `%${search}%`),
+            ilike(order.customerEmail, `%${search}%`),
           )
         : undefined,
     );
@@ -148,7 +159,7 @@ export class OrderReturnService {
               variantId: item.variantId,
               quantityDelta: item.quantity,
               // TODO: why so bang!!!
-              warehouseId: updatedReturn.order!.warehouseId!,
+              warehouseId: updatedReturn.order!.warehouseId,
               referenceId: updatedReturn.id,
               referenceType: InventoryReferenceType.ORDER_RETURN,
               createdBy: currentUser.id,

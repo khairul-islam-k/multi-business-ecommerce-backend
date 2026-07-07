@@ -35,6 +35,10 @@ import {
   paginatedResponse,
 } from "../../common/utils/api-response.util";
 import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../common/http/search.util";
+import {
   DatabaseService,
   DatabaseTransaction,
 } from "../../database/database.service";
@@ -121,11 +125,14 @@ export class PaymentGatewayService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const search = query.search?.trim();
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       query.status ? eq(paymentGateway.status, query.status) : undefined,
       search
         ? or(
+            searchUuid ? eq(paymentGateway.id, searchUuid) : undefined,
+            ilike(paymentGateway.code, `%${search}%`),
             ilike(paymentGateway.name, `%${search}%`),
             ilike(paymentGateway.description, `%${search}%`),
           )
@@ -162,7 +169,8 @@ export class PaymentGatewayService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const search = query.search?.trim();
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(paymentGatewayConfig.businessId, businessId),
       isNull(paymentGatewayConfig.deletedAt),
@@ -171,8 +179,18 @@ export class PaymentGatewayService {
       query.provider ? eq(paymentGateway.code, query.provider) : undefined,
       search
         ? or(
+            searchUuid ? eq(paymentGatewayConfig.id, searchUuid) : undefined,
+            searchUuid
+              ? eq(paymentGatewayConfig.gatewayId, searchUuid)
+              : undefined,
+            searchUuid
+              ? eq(paymentGatewayConfig.financeAccountId, searchUuid)
+              : undefined,
+            ilike(paymentGateway.code, `%${search}%`),
             ilike(paymentGateway.name, `%${search}%`),
             ilike(paymentGateway.description, `%${search}%`),
+            ilike(financeAccount.name, `%${search}%`),
+            ilike(financeAccount.accountNumber, `%${search}%`),
           )
         : undefined,
     );
@@ -202,6 +220,10 @@ export class PaymentGatewayService {
         .innerJoin(
           paymentGateway,
           eq(paymentGateway.id, paymentGatewayConfig.gatewayId),
+        )
+        .innerJoin(
+          financeAccount,
+          eq(financeAccount.id, paymentGatewayConfig.financeAccountId),
         )
         .where(where)
         .then(([row]) => row?.value ?? 0),

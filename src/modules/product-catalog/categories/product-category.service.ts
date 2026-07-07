@@ -1,4 +1,4 @@
-import { and, asc, count, eq, ilike, isNull, or } from "drizzle-orm";
+import { and, count, eq, ilike, isNull, or } from "drizzle-orm";
 
 import {
   product,
@@ -16,6 +16,10 @@ import {
   buildOrderBy,
   resolveSortColumn,
 } from "../../../common/http/sort.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
 import {
   apiResponse,
   paginatedResponse,
@@ -103,20 +107,24 @@ export class ProductCategoryService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(productCategory.businessId, businessId),
       isNull(productCategory.deletedAt),
       query.status ? eq(productCategory.status, query.status) : undefined,
-      query.search
+      search
         ? or(
-            ilike(productCategory.name, `%${query.search}%`),
-            ilike(productCategory.description, `%${query.search}%`),
+            searchUuid ? eq(productCategory.id, searchUuid) : undefined,
+            searchUuid ? eq(productCategory.parentId, searchUuid) : undefined,
+            ilike(productCategory.name, `%${search}%`),
+            ilike(productCategory.description, `%${search}%`),
           )
         : undefined,
     );
 
     const [rows, total] = await Promise.all([
-      await this.db
+      this.db
         .select()
         .from(productCategory)
         .where(where)
@@ -137,7 +145,7 @@ export class ProductCategoryService {
         .limit(limit)
         .offset(skip)
         .then((rows) => this.withCategoriesDetails(rows)),
-      await this.db
+      this.db
         .select({ value: count() })
         .from(productCategory)
         .where(where)
@@ -221,8 +229,8 @@ export class ProductCategoryService {
 
       await this.lookup.assertCategoryNameAvailable(
         businessId,
-        dto.name ?? existing!.name,
-        nextParentId !== undefined ? nextParentId : existing!.parentId,
+        dto.name ?? existing.name,
+        nextParentId !== undefined ? nextParentId : existing.parentId,
         categoryId,
       );
     }

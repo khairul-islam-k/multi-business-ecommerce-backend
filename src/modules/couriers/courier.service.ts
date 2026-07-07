@@ -48,6 +48,10 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../common/http/search.util";
 import { DatabaseService } from "../../database/database.service";
 import { FinanceCodeService } from "../finance/application/finance-code.service";
 import { InventoryLookupService } from "../inventory/common/inventory-lookup.service";
@@ -111,12 +115,14 @@ export class CourierService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const search = query.search?.trim();
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       query.provider ? eq(courier.code, query.provider) : undefined,
       query.status ? eq(courier.status, query.status) : undefined,
       search
         ? or(
+            searchUuid ? eq(courier.id, searchUuid) : undefined,
             ilike(courier.name, `%${search}%`),
             ilike(courier.code, `%${search}%`),
           )
@@ -149,10 +155,20 @@ export class CourierService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(courierConfig.businessId, businessId),
       isNull(courierConfig.deletedAt),
       query.status ? eq(courierConfig.status, query.status) : undefined,
+      search
+        ? or(
+            searchUuid ? eq(courierConfig.id, searchUuid) : undefined,
+            searchUuid ? eq(courierConfig.courierId, searchUuid) : undefined,
+            ilike(courier.name, `%${search}%`),
+            ilike(courier.code, `%${search}%`),
+          )
+        : undefined,
     );
 
     const [rows, total] = await Promise.all([
@@ -167,6 +183,7 @@ export class CourierService {
       this.db
         .select({ value: count() })
         .from(courierConfig)
+        .innerJoin(courier, eq(courier.id, courierConfig.courierId))
         .where(where)
         .then(([row]) => row?.value ?? 0),
     ]);

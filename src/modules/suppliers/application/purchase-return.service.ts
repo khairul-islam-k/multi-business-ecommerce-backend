@@ -1,5 +1,16 @@
 import Decimal from "decimal.js";
-import { and, asc, count, desc, eq, ilike, ne, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  ilike,
+  isNull,
+  ne,
+  or,
+} from "drizzle-orm";
 
 import {
   financeReceivable,
@@ -32,6 +43,10 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
 import { DatabaseService } from "../../../database/database.service";
 import { FinanceLedgerService } from "../../finance/common/finance-ledger.service";
 import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
@@ -171,6 +186,8 @@ export class PurchaseReturnService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(supplierPurchaseReturn.businessId, businessId),
       query.supplierId
@@ -182,10 +199,68 @@ export class PurchaseReturnService {
       query.status
         ? eq(supplierPurchaseReturn.status, query.status)
         : undefined,
-      query.search
+      search
         ? or(
-            ilike(supplierPurchaseReturn.returnNo, `%${query.search}%`),
-            ilike(supplierPurchaseReturn.reason, `%${query.search}%`),
+            searchUuid ? eq(supplierPurchaseReturn.id, searchUuid) : undefined,
+            searchUuid
+              ? eq(supplierPurchaseReturn.supplierId, searchUuid)
+              : undefined,
+            searchUuid
+              ? eq(supplierPurchaseReturn.purchaseOrderId, searchUuid)
+              : undefined,
+            searchUuid
+              ? eq(supplierPurchaseReturn.supplierInvoiceId, searchUuid)
+              : undefined,
+            ilike(supplierPurchaseReturn.returnNo, `%${search}%`),
+            ilike(supplierPurchaseReturn.reason, `%${search}%`),
+            exists(
+              this.db
+                .select({ id: supplier.id })
+                .from(supplier)
+                .where(
+                  and(
+                    eq(supplier.id, supplierPurchaseReturn.supplierId),
+                    eq(supplier.businessId, businessId),
+                    isNull(supplier.deletedAt),
+                    or(
+                      ilike(supplier.name, `%${search}%`),
+                      ilike(supplier.companyName, `%${search}%`),
+                      ilike(supplier.email, `%${search}%`),
+                      ilike(supplier.phone, `%${search}%`),
+                    ),
+                  ),
+                ),
+            ),
+            exists(
+              this.db
+                .select({ id: supplierPurchaseOrder.id })
+                .from(supplierPurchaseOrder)
+                .where(
+                  and(
+                    eq(
+                      supplierPurchaseOrder.id,
+                      supplierPurchaseReturn.purchaseOrderId,
+                    ),
+                    eq(supplierPurchaseOrder.businessId, businessId),
+                    ilike(supplierPurchaseOrder.purchaseOrderNo, `%${search}%`),
+                  ),
+                ),
+            ),
+            exists(
+              this.db
+                .select({ id: supplierInvoice.id })
+                .from(supplierInvoice)
+                .where(
+                  and(
+                    eq(
+                      supplierInvoice.id,
+                      supplierPurchaseReturn.supplierInvoiceId,
+                    ),
+                    eq(supplierInvoice.businessId, businessId),
+                    ilike(supplierInvoice.invoiceNo, `%${search}%`),
+                  ),
+                ),
+            ),
           )
         : undefined,
     );

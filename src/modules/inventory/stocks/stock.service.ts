@@ -30,6 +30,10 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
 import { DatabaseService } from "../../../database/database.service";
 import { InventoryLookupService } from "../common/inventory-lookup.service";
 import {
@@ -233,13 +237,18 @@ export class StockService {
       );
     }
 
-    if (query.search) {
-      const stockIds = await this.findStockIdsForSearch(
-        businessId,
-        query.search,
-      );
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
+
+    if (search) {
+      const stockIds = await this.findStockIdsForSearch(businessId, search);
       conditions.push(
-        stockIds.length > 0 ? inArray(inventoryStock.id, stockIds) : sql`false`,
+        or(
+          searchUuid ? eq(inventoryStock.id, searchUuid) : undefined,
+          stockIds.length > 0
+            ? inArray(inventoryStock.id, stockIds)
+            : undefined,
+        ) ?? sql`false`,
       );
     }
 
@@ -260,10 +269,14 @@ export class StockService {
         : undefined,
     ];
 
-    if (query.search) {
-      const ids = await this.findEntityIdsForSearch(businessId, query.search);
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
+
+    if (search) {
+      const ids = await this.findEntityIdsForSearch(businessId, search);
       conditions.push(
         or(
+          searchUuid ? eq(inventoryStockMovement.id, searchUuid) : undefined,
           ids.productIds.length > 0
             ? inArray(inventoryStockMovement.productId, ids.productIds)
             : undefined,
@@ -323,6 +336,7 @@ export class StockService {
   }
 
   private async findEntityIdsForSearch(businessId: string, search: string) {
+    const searchUuid = normalizeSearchUuid(search);
     const [productRows, variantRows, warehouseRows] = await Promise.all([
       this.db
         .select({ id: product.id })
@@ -331,7 +345,13 @@ export class StockService {
           and(
             eq(product.businessId, businessId),
             isNull(product.deletedAt),
-            ilike(product.name, `%${search}%`),
+            or(
+              searchUuid ? eq(product.id, searchUuid) : undefined,
+              ilike(product.name, `%${search}%`),
+              ilike(product.slug, `%${search}%`),
+              ilike(product.sku, `%${search}%`),
+              ilike(product.barcode, `%${search}%`),
+            ),
           ),
         ),
       this.db
@@ -341,7 +361,12 @@ export class StockService {
           and(
             eq(productVariant.businessId, businessId),
             isNull(productVariant.deletedAt),
-            ilike(productVariant.title, `%${search}%`),
+            or(
+              searchUuid ? eq(productVariant.id, searchUuid) : undefined,
+              ilike(productVariant.title, `%${search}%`),
+              ilike(productVariant.sku, `%${search}%`),
+              ilike(productVariant.barcode, `%${search}%`),
+            ),
           ),
         ),
       this.db
@@ -351,7 +376,12 @@ export class StockService {
           and(
             eq(warehouse.businessId, businessId),
             isNull(warehouse.deletedAt),
-            ilike(warehouse.name, `%${search}%`),
+            or(
+              searchUuid ? eq(warehouse.id, searchUuid) : undefined,
+              ilike(warehouse.name, `%${search}%`),
+              ilike(warehouse.phone, `%${search}%`),
+              ilike(warehouse.address, `%${search}%`),
+            ),
           ),
         ),
     ]);

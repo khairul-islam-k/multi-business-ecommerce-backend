@@ -20,6 +20,10 @@ import {
   resolveSortColumn,
 } from "../../../common/http/sort.util";
 import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
+import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
@@ -83,15 +87,22 @@ export class WarehouseService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(warehouse.businessId, businessId),
       isNull(warehouse.deletedAt),
       query.status ? eq(warehouse.status, query.status) : undefined,
-      query.search
+      search
         ? or(
-            ilike(warehouse.name, `%${query.search}%`),
-            ilike(warehouse.phone, `%${query.search}%`),
-            ilike(warehouse.address, `%${query.search}%`),
+            searchUuid ? eq(warehouse.id, searchUuid) : undefined,
+            ilike(warehouse.name, `%${search}%`),
+            ilike(warehouse.phone, `%${search}%`),
+            ilike(warehouse.address, `%${search}%`),
+            ilike(warehouse.redxAreaId, `%${search}%`),
+            ilike(warehouse.redxAreaName, `%${search}%`),
+            ilike(warehouse.redxPostCode, `%${search}%`),
+            ilike(warehouse.redxPickupStoreId, `%${search}%`),
           )
         : undefined,
     );

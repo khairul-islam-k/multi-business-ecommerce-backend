@@ -50,6 +50,10 @@ import {
 
 import { apiResponse } from "../../../common/utils/api-response.util";
 import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
+import {
   DatabaseService,
   DatabaseTransaction,
 } from "../../../database/database.service";
@@ -341,13 +345,15 @@ export class ProductVariantService {
   ) {
     await this.lookup.assertProductExists(businessId, productId);
 
-    const search = query.search?.trim();
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(productVariant.businessId, businessId),
       eq(productVariant.productId, productId),
       isNull(productVariant.deletedAt),
       search
         ? or(
+            searchUuid ? eq(productVariant.id, searchUuid) : undefined,
             ilike(productVariant.title, `%${search}%`),
             ilike(productVariant.sku, `%${search}%`),
             ilike(productVariant.barcode, `%${search}%`),

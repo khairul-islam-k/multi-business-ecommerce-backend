@@ -28,6 +28,8 @@ import {
   orderItem as orderItemTable,
   OrderPayment,
   orderPayment,
+  product,
+  productVariant,
 } from "@/database/schema";
 import { Injectable } from "@nestjs/common";
 
@@ -35,6 +37,10 @@ import {
   DatabaseService,
   DatabaseTransaction,
 } from "../../../database/database.service";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
 import { CustomerOrderSortBy, CustomerSortBy } from "../dto/customer.dto";
 
 type SortDirection = "asc" | "desc";
@@ -344,16 +350,20 @@ export class CustomerRepository {
   }
 
   private buildCustomerWhere(args: CustomerPageWhere) {
+    const search = normalizeSearch(args.search);
+    const searchUuid = normalizeSearchUuid(search);
+
     return and(
       eq(customer.businessId, args.businessId),
       isNull(customer.deletedAt),
       args.status ? eq(customer.status, args.status) : undefined,
-      args.search
+      search
         ? or(
-            ilike(customer.name, `%${args.search}%`),
-            ilike(customer.email, `%${args.search}%`),
-            ilike(customer.phone, `%${args.search}%`),
-            ilike(customer.note, `%${args.search}%`),
+            searchUuid ? eq(customer.id, searchUuid) : undefined,
+            ilike(customer.name, `%${search}%`),
+            ilike(customer.email, `%${search}%`),
+            ilike(customer.phone, `%${search}%`),
+            ilike(customer.note, `%${search}%`),
             exists(
               this.db
                 .select({ id: customerAddress.id })
@@ -363,9 +373,12 @@ export class CustomerRepository {
                     eq(customerAddress.customerId, customer.id),
                     isNull(customerAddress.deletedAt),
                     or(
-                      ilike(customerAddress.address, `%${args.search}%`),
-                      ilike(customerAddress.city, `%${args.search}%`),
-                      ilike(customerAddress.country, `%${args.search}%`),
+                      searchUuid
+                        ? eq(customerAddress.id, searchUuid)
+                        : undefined,
+                      ilike(customerAddress.address, `%${search}%`),
+                      ilike(customerAddress.city, `%${search}%`),
+                      ilike(customerAddress.country, `%${search}%`),
                     ),
                   ),
                 ),
@@ -376,6 +389,9 @@ export class CustomerRepository {
   }
 
   private buildCustomerOrderWhere(args: CustomerOrderPageWhere) {
+    const search = normalizeSearch(args.search);
+    const searchUuid = normalizeSearchUuid(search);
+
     return and(
       eq(orderTable.businessId, args.businessId),
       eq(orderTable.customerId, args.customerId),
@@ -384,10 +400,56 @@ export class CustomerRepository {
       args.paymentStatus
         ? eq(orderTable.paymentStatus, args.paymentStatus)
         : undefined,
-      args.search
+      search
         ? or(
-            ilike(orderTable.orderNo, `%${args.search}%`),
-            ilike(orderTable.note, `%${args.search}%`),
+            searchUuid ? eq(orderTable.id, searchUuid) : undefined,
+            ilike(orderTable.orderNo, `%${search}%`),
+            ilike(orderTable.note, `%${search}%`),
+            exists(
+              this.db
+                .select({ id: orderPayment.id })
+                .from(orderPayment)
+                .where(
+                  and(
+                    eq(orderPayment.orderId, orderTable.id),
+                    or(
+                      searchUuid ? eq(orderPayment.id, searchUuid) : undefined,
+                      ilike(orderPayment.paymentNo, `%${search}%`),
+                    ),
+                  ),
+                ),
+            ),
+            exists(
+              this.db
+                .select({ id: orderItemTable.id })
+                .from(orderItemTable)
+                .innerJoin(product, eq(product.id, orderItemTable.productId))
+                .leftJoin(
+                  productVariant,
+                  eq(productVariant.id, orderItemTable.variantId),
+                )
+                .where(
+                  and(
+                    eq(orderItemTable.orderId, orderTable.id),
+                    or(
+                      searchUuid
+                        ? eq(orderItemTable.id, searchUuid)
+                        : undefined,
+                      searchUuid ? eq(product.id, searchUuid) : undefined,
+                      searchUuid
+                        ? eq(productVariant.id, searchUuid)
+                        : undefined,
+                      ilike(product.name, `%${search}%`),
+                      ilike(product.slug, `%${search}%`),
+                      ilike(product.sku, `%${search}%`),
+                      ilike(product.barcode, `%${search}%`),
+                      ilike(productVariant.title, `%${search}%`),
+                      ilike(productVariant.sku, `%${search}%`),
+                      ilike(productVariant.barcode, `%${search}%`),
+                    ),
+                  ),
+                ),
+            ),
           )
         : undefined,
     );

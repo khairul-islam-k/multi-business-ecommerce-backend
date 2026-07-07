@@ -1,8 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { and, count, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, count, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import {
   business,
-  BusinessStatus,
   systemUser,
   systemUserProfile,
   SystemUserType,
@@ -12,6 +11,10 @@ import type { CurrentUserPayload } from "../auth/decorators/current-user.decorat
 import { QueryTenantDto, TenantSortBy } from "./dto/query-tenant.dto";
 import { UpdateTenantStatusDto } from "./dto/update-tenant-status.dto";
 import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../common/http/search.util";
 import { DatabaseService } from "../../database/database.service";
 import {
   apiResponse,
@@ -59,21 +62,30 @@ export class TenantService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
 
     const conditions = [
       eq(systemUser.type, SystemUserType.TENANT),
       isNull(systemUser.deletedAt),
       query.status ? eq(systemUser.status, query.status) : undefined,
-      query.search
+      search
         ? or(
-            ilike(systemUser.name, `%${query.search}%`),
-            ilike(systemUser.email, `%${query.search}%`),
-            ilike(systemUser.phone, `%${query.search}%`),
+            searchUuid ? eq(systemUser.id, searchUuid) : undefined,
+            ilike(systemUser.name, `%${search}%`),
+            ilike(systemUser.email, `%${search}%`),
+            ilike(systemUser.phone, `%${search}%`),
             sql`exists (
               select 1
               from ${business}
               where ${business.ownerUserId} = ${systemUser.id}
-                and ${business.name} ilike ${`%${query.search}%`}
+                and (
+                  ${business.name} ilike ${`%${search}%`}
+                  or ${business.slug} ilike ${`%${search}%`}
+                  or ${business.email} ilike ${`%${search}%`}
+                  or ${business.phone} ilike ${`%${search}%`}
+                  ${searchUuid ? sql`or ${business.id} = ${searchUuid}` : sql``}
+                )
             )`,
           )
         : undefined,

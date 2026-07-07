@@ -1,4 +1,14 @@
-import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  ilike,
+  isNull,
+  or,
+} from "drizzle-orm";
 
 import {
   customer,
@@ -15,6 +25,10 @@ import {
   buildOrderBy,
   resolveSortColumn,
 } from "../../../common/http/sort.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
 import {
   apiResponse,
   paginatedResponse,
@@ -40,7 +54,8 @@ export class InvoiceQueryService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const search = query.search?.trim();
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(invoice.businessId, businessId),
       isNull(invoice.deletedAt),
@@ -49,11 +64,27 @@ export class InvoiceQueryService {
       query.orderId ? eq(invoice.orderId, query.orderId) : undefined,
       search
         ? or(
+            searchUuid ? eq(invoice.id, searchUuid) : undefined,
+            searchUuid ? eq(invoice.orderId, searchUuid) : undefined,
+            searchUuid ? eq(invoice.customerId, searchUuid) : undefined,
             ilike(invoice.invoiceNo, `%${search}%`),
             ilike(invoice.customerName, `%${search}%`),
             ilike(invoice.customerPhone, `%${search}%`),
             ilike(invoice.customerEmail, `%${search}%`),
             ilike(invoice.note, `%${search}%`),
+            exists(
+              this.db
+                .select({ id: order.id })
+                .from(order)
+                .where(
+                  and(
+                    eq(order.id, invoice.orderId),
+                    eq(order.businessId, businessId),
+                    ilike(order.orderNo, `%${search}%`),
+                    isNull(order.deletedAt),
+                  ),
+                ),
+            ),
           )
         : undefined,
     );
@@ -98,7 +129,8 @@ export class InvoiceQueryService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const search = query.search?.trim();
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(invoice.businessId, currentCustomer.businessId),
       eq(invoice.customerId, currentCustomer.customerId),
@@ -106,8 +138,24 @@ export class InvoiceQueryService {
       query.status ? eq(invoice.status, query.status) : undefined,
       search
         ? or(
+            searchUuid ? eq(invoice.id, searchUuid) : undefined,
+            searchUuid ? eq(invoice.orderId, searchUuid) : undefined,
             ilike(invoice.invoiceNo, `%${search}%`),
             ilike(invoice.note, `%${search}%`),
+            exists(
+              this.db
+                .select({ id: order.id })
+                .from(order)
+                .where(
+                  and(
+                    eq(order.id, invoice.orderId),
+                    eq(order.businessId, currentCustomer.businessId),
+                    eq(order.customerId, currentCustomer.customerId),
+                    ilike(order.orderNo, `%${search}%`),
+                    isNull(order.deletedAt),
+                  ),
+                ),
+            ),
           )
         : undefined,
     );
