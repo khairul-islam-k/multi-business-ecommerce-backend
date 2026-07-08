@@ -350,12 +350,15 @@ export class CourierProviderService {
 
     const payload = await this.parseResponse(response);
 
-    // TODO: see if the error message is consistent; if it is, then consider returning this redx specific error.
-    // console.log(payload);
-
     if (!response.ok) {
+      const message =
+        typeof payload === "object"
+          ? (payload as { message: string }).message
+          : null;
       throw new BadRequestException({
-        message: "REDX request failed",
+        message: message
+          ? `REDX request failed: ${message}`
+          : "REDX request failed",
         statusCode: response.status,
         response: payload,
       });

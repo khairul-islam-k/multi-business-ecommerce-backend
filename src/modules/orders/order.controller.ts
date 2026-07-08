@@ -140,6 +140,36 @@ export class OrderController {
   }
 
   @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.UPDATE)
+  @Patch(":orderId/confirm")
+  @ApiOperation({
+    summary: "Confirm order",
+    description:
+      "Marks order as confirmed so staff can track that it has left the starting location.",
+  })
+  confirm(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("orderId", ParseUUIDPipe) orderId: string,
+  ) {
+    return this.orders.confirm(user, businessId, orderId);
+  }
+
+  @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.UPDATE)
+  @Patch(":orderId/process")
+  @ApiOperation({
+    summary: "Process order",
+    description:
+      "Marks order as processing so staff can track that it has left the starting location.",
+  })
+  process(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("orderId", ParseUUIDPipe) orderId: string,
+  ) {
+    return this.orders.process(user, businessId, orderId);
+  }
+
+  @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.UPDATE)
   @Patch(":orderId/ship")
   @ApiOperation({
     summary: "Ship order",

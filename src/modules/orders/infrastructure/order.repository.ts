@@ -1,6 +1,7 @@
 import { and, asc, count, eq, exists, ilike, isNull, or } from "drizzle-orm";
 
 import {
+  courierShipment,
   customer,
   invoice,
   Order,
@@ -8,6 +9,8 @@ import {
   orderItem,
   orderPayment,
   orderStatusLog,
+  product,
+  productVariant,
 } from "@/database/schema";
 import { Injectable, NotFoundException } from "@nestjs/common";
 
@@ -167,25 +170,35 @@ export class OrderRepository {
     order: Order,
     client: Database | DatabaseTransaction = this.db,
   ) {
-    const [existingCustomer, items, payments, statusLogs] = await Promise.all([
-      order.customerId
-        ? client
-            .select()
-            .from(customer)
-            .where(eq(customer.id, order.customerId))
-            .then(([row]) => row ?? null)
-        : Promise.resolve(null),
-      client.select().from(orderItem).where(eq(orderItem.orderId, order.id)),
-      client
-        .select()
-        .from(orderPayment)
-        .where(eq(orderPayment.orderId, order.id)),
-      client
-        .select()
-        .from(orderStatusLog)
-        .where(eq(orderStatusLog.orderId, order.id))
-        .orderBy(asc(orderStatusLog.createdAt)),
-    ]);
+    const [existingCustomer, items, payments, statusLogs, shipments] =
+      await Promise.all([
+        order.customerId
+          ? client
+              .select()
+              .from(customer)
+              .where(eq(customer.id, order.customerId))
+              .then(([row]) => row ?? null)
+          : Promise.resolve(null),
+        client
+          .select({ item: orderItem, product, variant: productVariant })
+          .from(orderItem)
+          .where(eq(orderItem.orderId, order.id))
+          .innerJoin(product, eq(product.id, orderItem.productId))
+          .leftJoin(productVariant, eq(productVariant.id, orderItem.variantId)),
+        client
+          .select()
+          .from(orderPayment)
+          .where(eq(orderPayment.orderId, order.id)),
+        client
+          .select()
+          .from(orderStatusLog)
+          .where(eq(orderStatusLog.orderId, order.id))
+          .orderBy(asc(orderStatusLog.createdAt)),
+        client
+          .select()
+          .from(courierShipment)
+          .where(eq(courierShipment.orderId, order.id)),
+      ]);
 
     return {
       ...order,
@@ -193,6 +206,7 @@ export class OrderRepository {
       items,
       payments,
       statusLogs,
+      shipments,
     };
   }
 }

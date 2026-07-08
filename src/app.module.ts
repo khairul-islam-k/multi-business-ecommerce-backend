@@ -15,6 +15,7 @@ import { BusinessModule } from "./modules/business/business.module";
 import { CourierModule } from "./modules/couriers/courier.module";
 import { CustomerAuthModule } from "./modules/customer-auth/customer-auth.module";
 import { CustomerModule } from "./modules/customers/customer.module";
+import { DashboardModule } from "./modules/dashboard/dashboard.module";
 import { EmployeeModule } from "./modules/employees/employee.module";
 import { FinanceModule } from "./modules/finance/finance.module";
 import { InventoryModule } from "./modules/inventory/inventory.module";
@@ -56,6 +57,7 @@ import { WebsiteModule } from "./modules/website/website.module";
     SupplierModule,
     CustomerModule,
     CustomerAuthModule,
+    DashboardModule,
     OrderModule,
     PaymentGatewayModule,
     PosModule,

@@ -1011,7 +1011,7 @@ export class PaymentGatewayService {
 
     return {
       ...config,
-      configData: decrypted,
+      configData: this.redactConfig(gateway.code, decrypted),
       gateway,
       account,
     };
@@ -1049,7 +1049,39 @@ export class PaymentGatewayService {
           this.stringValue(payload.sp_order_id) ??
           this.stringValue(payload.order_id)
         );
+      case PaymentGatewayProvider.BKASH:
+        return (
+          this.stringValue(payload.paymentID) ??
+          this.stringValue(payload.paymentId) ??
+          this.stringValue(payload.trxID)
+        );
     }
+  }
+
+  private redactConfig(
+    provider: PaymentGatewayProvider,
+    config: Record<string, unknown>,
+  ) {
+    const redacted = { ...config };
+    const sensitiveKeys: Record<PaymentGatewayProvider, string[]> = {
+      [PaymentGatewayProvider.SSLCOMMERZ]: ["storePassword"],
+      [PaymentGatewayProvider.AAMARPAY]: ["signatureKey"],
+      [PaymentGatewayProvider.SHURJOPAY]: ["password"],
+      [PaymentGatewayProvider.BKASH]: [
+        "appKey",
+        "appSecret",
+        "username",
+        "password",
+      ],
+    };
+
+    for (const key of sensitiveKeys[provider]) {
+      if (redacted[key]) {
+        redacted[key] = "********";
+      }
+    }
+
+    return redacted;
   }
 
   private stringValue(value: unknown) {

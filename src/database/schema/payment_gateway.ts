@@ -2,7 +2,6 @@ import { sql } from "drizzle-orm";
 import {
   AnyPgColumn,
   index,
-  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -23,6 +22,7 @@ export const PaymentGatewayProvider = {
   SSLCOMMERZ: "SSLCOMMERZ",
   AAMARPAY: "AAMARPAY",
   SHURJOPAY: "SHURJOPAY",
+  BKASH: "BKASH",
 } as const;
 export type PaymentGatewayProvider =
   (typeof PaymentGatewayProvider)[keyof typeof PaymentGatewayProvider];
@@ -30,6 +30,7 @@ export const paymentGatewayProviderEnum = pgEnum("PaymentGatewayProvider", [
   "SSLCOMMERZ",
   "AAMARPAY",
   "SHURJOPAY",
+  "BKASH",
 ]);
 
 export const PaymentGatewayStatus = {

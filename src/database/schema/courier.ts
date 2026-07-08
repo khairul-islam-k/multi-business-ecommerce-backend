@@ -223,11 +223,12 @@ export const courierShipment = pgTable(
     uniqueIndex("courier_shipments_business_id_shipment_no_active_unique")
       .on(table.businessId, table.shipmentNo)
       .where(sql`${table.deletedAt} IS NULL`),
-    uniqueIndex("courier_shipments_consignment_id_active_unique")
-      .on(table.consignmentId)
-      .where(
-        sql`${table.consignmentId} IS NOT NULL AND ${table.deletedAt} IS NULL`,
-      ),
+    // TODO: re-think this
+    // uniqueIndex("courier_shipments_consignment_id_active_unique")
+    //   .on(table.consignmentId)
+    //   .where(
+    //     sql`${table.consignmentId} IS NOT NULL AND ${table.deletedAt} IS NULL`,
+    //   ),
     index("courier_shipments_business_id_idx").on(table.businessId),
     index("courier_shipments_order_id_idx").on(table.orderId),
     index("courier_shipments_courier_id_idx").on(table.courierId),

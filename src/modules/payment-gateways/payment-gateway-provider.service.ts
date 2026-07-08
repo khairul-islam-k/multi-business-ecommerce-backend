@@ -72,6 +72,8 @@ export class PaymentGatewayProviderService {
         return this.initiateAamarpay(params);
       case PaymentGatewayProvider.SHURJOPAY:
         return this.initiateSurjopay(params);
+      case PaymentGatewayProvider.BKASH:
+        return this.initiateBkash(params);
     }
   }
 
@@ -85,6 +87,8 @@ export class PaymentGatewayProviderService {
         return this.verifyAamarpay(params);
       case PaymentGatewayProvider.SHURJOPAY:
         return this.verifySurjopay(params);
+      case PaymentGatewayProvider.BKASH:
+        return this.verifyBkash(params);
     }
   }
 
@@ -108,6 +112,17 @@ export class PaymentGatewayProviderService {
           username: this.requiredString(rawConfig, "username"),
           password: this.requiredString(rawConfig, "password"),
           prefix: this.requiredString(rawConfig, "prefix"),
+        };
+      case PaymentGatewayProvider.BKASH:
+        return {
+          baseUrl: this.requiredString(rawConfig, "baseUrl").replace(
+            /\/+$/,
+            "",
+          ),
+          appKey: this.requiredString(rawConfig, "appKey"),
+          appSecret: this.requiredString(rawConfig, "appSecret"),
+          username: this.requiredString(rawConfig, "username"),
+          password: this.requiredString(rawConfig, "password"),
         };
     }
   }
@@ -239,6 +254,36 @@ export class PaymentGatewayProviderService {
     };
   }
 
+  private async initiateBkash(params: InitiateGatewayPaymentParams) {
+    const token = await this.getBkashToken(params.config);
+    const response = await this.postJson(
+      `${this.bkashBaseUrl(params.config)}/tokenized/checkout/create`,
+      {
+        mode: "0011",
+        payerReference:
+          params.customer.phone || params.customer.email || params.paymentNo,
+        callbackURL: params.callbackUrls.ipnUrl.replace(/\/ipn$/, "/bkash"),
+        amount: this.formatAmount(params.amount),
+        currency: params.currency,
+        intent: "sale",
+        merchantInvoiceNumber: params.paymentNo,
+      },
+      this.bkashAuthHeaders(params.config, token),
+    );
+    const redirectUrl = this.stringValue(response.bkashURL);
+    const paymentId = this.stringValue(response.paymentID);
+
+    if (!redirectUrl || !paymentId) {
+      throw new BadGatewayException("bKash payment initiation failed");
+    }
+
+    return {
+      redirectUrl,
+      sessionId: paymentId,
+      rawResponse: response as JsonValue,
+    };
+  }
+
   private async verifySslcommerz(
     params: VerifyGatewayPaymentParams,
   ): Promise<GatewayVerificationResult> {
@@ -356,6 +401,75 @@ export class PaymentGatewayProviderService {
     };
   }
 
+  private async verifyBkash(
+    params: VerifyGatewayPaymentParams,
+  ): Promise<GatewayVerificationResult> {
+    const paymentId =
+      this.stringValue(params.payload.paymentID) ||
+      this.stringValue(params.payload.paymentId);
+    const callbackStatus = this.stringValue(params.payload.status);
+
+    if (!paymentId) {
+      return {
+        status: "FAILED",
+        rawResponse: params.payload as JsonValue,
+      };
+    }
+
+    if (callbackStatus && callbackStatus.toLowerCase() !== "success") {
+      return {
+        status: "FAILED",
+        eventId: paymentId,
+        rawResponse: params.payload as JsonValue,
+      };
+    }
+
+    const token = await this.getBkashToken(params.config);
+    const executeResponse = await this.postJson(
+      `${this.bkashBaseUrl(params.config)}/tokenized/checkout/execute`,
+      { paymentID: paymentId },
+      this.bkashAuthHeaders(params.config, token),
+    );
+    const executable = this.isBkashPaymentCompleted(
+      executeResponse,
+      params.paymentNo,
+      params.amount,
+    );
+
+    if (executable) {
+      return {
+        status: "PAID",
+        transactionId: this.stringValue(executeResponse.trxID),
+        eventId: paymentId,
+        rawResponse: executeResponse as JsonValue,
+      };
+    }
+
+    const queryResponse = await this.postJson(
+      `${this.bkashBaseUrl(params.config)}/tokenized/checkout/payment/status`,
+      { paymentID: paymentId },
+      this.bkashAuthHeaders(params.config, token),
+    );
+    const paid = this.isBkashPaymentCompleted(
+      queryResponse,
+      params.paymentNo,
+      params.amount,
+    );
+    const pending = ["Initiated", "Pending"].includes(
+      this.stringValue(queryResponse.transactionStatus) ?? "",
+    );
+
+    return {
+      status: paid ? "PAID" : pending ? "PENDING" : "FAILED",
+      transactionId: this.stringValue(queryResponse.trxID),
+      eventId: paymentId,
+      rawResponse: {
+        execute: executeResponse,
+        query: queryResponse,
+      } as JsonValue,
+    };
+  }
+
   private sslcommerzBaseUrl(mode: PaymentGatewayMode) {
     return mode === PaymentGatewayMode.SANDBOX
       ? "https://sandbox.sslcommerz.com"
@@ -378,6 +492,53 @@ export class PaymentGatewayProviderService {
     return mode === PaymentGatewayMode.SANDBOX
       ? "https://sandbox.shurjopayment.com"
       : "https://engine.shurjopayment.com";
+  }
+
+  private async getBkashToken(config: Record<string, unknown>) {
+    const response = await this.postJson(
+      `${this.bkashBaseUrl(config)}/tokenized/checkout/token/grant`,
+      {
+        app_key: this.requiredString(config, "appKey"),
+        app_secret: this.requiredString(config, "appSecret"),
+      },
+      {
+        username: this.requiredString(config, "username"),
+        password: this.requiredString(config, "password"),
+      },
+    );
+    const token = this.stringValue(response.id_token);
+
+    if (!token) {
+      throw new BadGatewayException("bKash token request failed");
+    }
+
+    return token;
+  }
+
+  private bkashBaseUrl(config: Record<string, unknown>) {
+    return this.requiredString(config, "baseUrl").replace(/\/+$/, "");
+  }
+
+  private bkashAuthHeaders(config: Record<string, unknown>, token: string) {
+    return {
+      Authorization: token,
+      "X-APP-Key": this.requiredString(config, "appKey"),
+    };
+  }
+
+  private isBkashPaymentCompleted(
+    response: Record<string, unknown>,
+    paymentNo: string,
+    amount: Decimal.Value,
+  ) {
+    const status = this.stringValue(response.transactionStatus);
+    const invoiceNo = this.stringValue(response.merchantInvoiceNumber);
+
+    return (
+      status === "Completed" &&
+      invoiceNo === paymentNo &&
+      this.amountMatches(response.amount, amount)
+    );
   }
 
   private async postForm(url: string, body: URLSearchParams) {
