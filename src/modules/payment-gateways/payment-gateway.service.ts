@@ -566,16 +566,11 @@ export class PaymentGatewayService {
     assertOrderCanAcceptPayment(row.status);
     assertOrderIsNotCod(row.isCod);
 
-    const pendingPayment = await this.findPendingGatewayPayment(
-      currentCustomer.businessId,
-      row.id,
-    );
-
-    if (pendingPayment) {
-      throw new BadRequestException(
-        "A gateway payment is already pending for this order. Complete or fail the existing payment before starting another one.",
-      );
-    }
+    // if (pendingPayment) {
+    //   throw new BadRequestException(
+    //     "A gateway payment is already pending for this order. Complete or fail the existing payment before starting another one.",
+    //   );
+    // }
 
     const amount = new Decimal(row.totalAmount).minus(row.paidAmount);
 
@@ -591,28 +586,43 @@ export class PaymentGatewayService {
       currentCustomer.businessId,
     );
 
-    const [createdPayment] = await this.db
-      .insert(orderPayment)
-      .values({
-        businessId: currentCustomer.businessId,
-        orderId: row.id,
-        financeAccountId: config.config.financeAccountId,
-        gatewayId: config.gateway.id,
-        gatewayConfigId: config.config.id,
-        paymentNo,
-        amount,
-        paymentMethod: OrderPaymentMethod.OTHER,
-        paymentStatus: OrderPaymentStatus.PENDING,
-        transactionReference: paymentNo,
-        gatewayPayload: {
-          requestedRedirects: {
-            successRedirectUrl: dto.successRedirectUrl,
-            failRedirectUrl: dto.failRedirectUrl,
-            cancelRedirectUrl: dto.cancelRedirectUrl,
-          },
-        } as JsonValue,
-      })
-      .returning();
+    const createdPayment = await this.db.transaction(async (tx) => {
+      const pendingPayment = await this.findPendingGatewayPayment(
+        currentCustomer.businessId,
+        row.id,
+      );
+      if (pendingPayment) {
+        await tx
+          .update(orderPayment)
+          .set({ paymentStatus: OrderPaymentStatus.FAILED })
+          .where(eq(orderPayment.id, pendingPayment.id));
+      }
+
+      const [createdPayment] = await tx
+        .insert(orderPayment)
+        .values({
+          businessId: currentCustomer.businessId,
+          orderId: row.id,
+          financeAccountId: config.config.financeAccountId,
+          gatewayId: config.gateway.id,
+          gatewayConfigId: config.config.id,
+          paymentNo,
+          amount,
+          paymentMethod: OrderPaymentMethod.OTHER,
+          paymentStatus: OrderPaymentStatus.PENDING,
+          transactionReference: paymentNo,
+          gatewayPayload: {
+            requestedRedirects: {
+              successRedirectUrl: dto.successRedirectUrl,
+              failRedirectUrl: dto.failRedirectUrl,
+              cancelRedirectUrl: dto.cancelRedirectUrl,
+            },
+          } as JsonValue,
+        })
+        .returning();
+
+      return createdPayment;
+    });
 
     let initiated: Awaited<
       ReturnType<PaymentGatewayProviderService["initiate"]>
