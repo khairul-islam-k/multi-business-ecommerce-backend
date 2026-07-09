@@ -1,35 +1,44 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
 import { and, count, eq, ilike, isNull, or, sql } from "drizzle-orm";
+
 import {
   business,
   systemUser,
   systemUserProfile,
   SystemUserType,
 } from "@/database/schema";
+import { Injectable, NotFoundException } from "@nestjs/common";
 
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
-import { QueryTenantDto, TenantSortBy } from "./dto/query-tenant.dto";
-import { UpdateTenantStatusDto } from "./dto/update-tenant-status.dto";
-import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 import {
   normalizeSearch,
   normalizeSearchUuid,
 } from "../../common/http/search.util";
-import { DatabaseService } from "../../database/database.service";
+import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
+import { DatabaseService } from "../../database/database.service";
+import { QueryTenantDto, TenantSortBy } from "./dto/query-tenant.dto";
+import { UpdateTenantStatusDto } from "./dto/update-tenant-status.dto";
+
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class TenantService {
   constructor(private readonly database: DatabaseService) {}
 
-  async fineOne(id: string) {
+  async findOne(id: string) {
     const [tenant] = await this.database.db
       .select()
       .from(systemUser)
-      .where(eq(systemUser.id, id))
+      .where(
+        and(
+          eq(systemUser.id, id),
+
+          eq(systemUser.type, SystemUserType.TENANT),
+          isNull(systemUser.deletedAt),
+        ),
+      )
       .limit(1);
 
     if (!tenant) {
@@ -50,9 +59,10 @@ export class TenantService {
         .from(business)
         .where(eq(business.ownerUserId, tenant.id)),
     ]);
+    const { passwordHash, ...safeTenant } = tenant;
 
     return apiResponse({
-      ...tenant,
+      ...safeTenant,
       profile,
       ownedBusinesses,
     });

@@ -1011,7 +1011,7 @@ export class PaymentGatewayService {
 
     return {
       ...config,
-      configData: this.redactConfig(gateway.code, decrypted),
+      configData: decrypted,
       gateway,
       account,
     };
@@ -1058,31 +1058,31 @@ export class PaymentGatewayService {
     }
   }
 
-  private redactConfig(
-    provider: PaymentGatewayProvider,
-    config: Record<string, unknown>,
-  ) {
-    const redacted = { ...config };
-    const sensitiveKeys: Record<PaymentGatewayProvider, string[]> = {
-      [PaymentGatewayProvider.SSLCOMMERZ]: ["storePassword"],
-      [PaymentGatewayProvider.AAMARPAY]: ["signatureKey"],
-      [PaymentGatewayProvider.SHURJOPAY]: ["password"],
-      [PaymentGatewayProvider.BKASH]: [
-        "appKey",
-        "appSecret",
-        "username",
-        "password",
-      ],
-    };
+  // private redactConfig(
+  //   provider: PaymentGatewayProvider,
+  //   config: Record<string, unknown>,
+  // ) {
+  //   const redacted = { ...config };
+  //   const sensitiveKeys: Record<PaymentGatewayProvider, string[]> = {
+  //     [PaymentGatewayProvider.SSLCOMMERZ]: ["storePassword"],
+  //     [PaymentGatewayProvider.AAMARPAY]: ["signatureKey"],
+  //     [PaymentGatewayProvider.SHURJOPAY]: ["password"],
+  //     [PaymentGatewayProvider.BKASH]: [
+  //       "appKey",
+  //       "appSecret",
+  //       "username",
+  //       "password",
+  //     ],
+  //   };
 
-    for (const key of sensitiveKeys[provider]) {
-      if (redacted[key]) {
-        redacted[key] = "********";
-      }
-    }
+  //   for (const key of sensitiveKeys[provider]) {
+  //     if (redacted[key]) {
+  //       redacted[key] = "********";
+  //     }
+  //   }
 
-    return redacted;
-  }
+  //   return redacted;
+  // }
 
   private stringValue(value: unknown) {
     if (typeof value === "string") {

@@ -1,6 +1,7 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
-import { SystemUserStatus } from "@/database/schema";
 import { IsEnum, IsIn, IsOptional } from "class-validator";
+
+import { SystemUserStatus } from "@/database/schema";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 
 import { SortedPaginationQueryDto } from "../../../common/http/query.dto";
 
