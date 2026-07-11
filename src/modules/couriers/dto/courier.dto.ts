@@ -1,20 +1,26 @@
 import { Type } from "class-transformer";
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
   IsBoolean,
   IsEnum,
   IsNumber,
   IsObject,
   IsOptional,
+  IsPhoneNumber,
   IsString,
   IsUUID,
   MaxLength,
   Min,
+  ValidateNested,
 } from "class-validator";
 
 import {
   CourierConfigMode,
   CourierConfigStatus,
   CourierProvider,
+  CourierShipmentStatus,
   CourierStatus,
 } from "@/database/schema";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
@@ -38,6 +44,33 @@ export class QueryCourierConfigDto extends SearchablePaginationQueryDto {
   @IsOptional()
   @IsEnum(CourierConfigStatus)
   status?: CourierConfigStatus;
+}
+
+export class QueryCourierShipmentDto extends SearchablePaginationQueryDto {
+  @ApiPropertyOptional({ enum: CourierShipmentStatus })
+  @IsOptional()
+  @IsEnum(CourierShipmentStatus)
+  status?: CourierShipmentStatus;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  orderId?: string;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  courierId?: string;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  courierConfigId?: string;
+
+  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @IsOptional()
+  @IsUUID()
+  pickupWarehouseId?: string;
 }
 
 export class UpdateCourierConfigDto {
@@ -71,6 +104,11 @@ export class BulkUpdateCourierConfigItem extends UpdateCourierConfigDto {
 
 export class BulkUpdateCourierConfigDto {
   @ApiProperty({ type: [BulkUpdateCourierConfigItem] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => BulkUpdateCourierConfigItem)
   configs!: BulkUpdateCourierConfigItem[];
 }
 
@@ -120,15 +158,8 @@ export class RedxChargeQuoteDto {
   @ApiProperty({ example: 1 })
   @Type(() => Number)
   @IsNumber()
-  @Min(0.001)
-  weight!: number;
-
-  @ApiPropertyOptional({ example: 1000 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
   @Min(0)
-  cashCollectionAmount?: number;
+  weight!: number;
 }
 
 export class StorefrontCourierQuoteDto extends RedxChargeQuoteDto {
@@ -186,7 +217,7 @@ export class RedxCreatePickupStoreDto {
   name!: string;
 
   @ApiProperty({ example: "+8801700000000" })
-  @IsString()
+  @IsPhoneNumber()
   @MaxLength(30)
   phone!: string;
 
@@ -198,6 +229,31 @@ export class RedxCreatePickupStoreDto {
   @IsString()
   @MaxLength(80)
   areaId!: string;
+}
+
+export class RedxUpdatePickupStoreDto {
+  @ApiPropertyOptional({ example: "Default Warehouse" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  name?: string;
+
+  @ApiPropertyOptional({ example: "+8801700000000" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  phone?: string;
+
+  @ApiPropertyOptional({ example: "House 10, Road 2, Dhaka" })
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @ApiPropertyOptional({ example: "115" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  areaId?: string;
 }
 
 export class RedxWebhookDto {

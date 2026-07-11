@@ -29,6 +29,11 @@ const gateways = [
     name: "shurjoPay",
     description: "Hosted payment gateway by shurjoMukhi Limited.",
   },
+  {
+    code: PaymentGatewayProvider.BKASH,
+    name: "bKash",
+    description: "Hosted checkout payment gateway by bKash.",
+  },
 ] as const;
 
 const main = async () => {

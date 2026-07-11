@@ -1,4 +1,4 @@
-import { and, asc, count, eq, ilike, isNull, or } from "drizzle-orm";
+import { and, count, eq, ilike, isNull, or } from "drizzle-orm";
 
 import {
   product,
@@ -16,6 +16,10 @@ import {
   buildOrderBy,
   resolveSortColumn,
 } from "../../../common/http/sort.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
 import {
   apiResponse,
   paginatedResponse,
@@ -80,14 +84,17 @@ export class ProductBrandService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(productBrand.businessId, businessId),
       isNull(productBrand.deletedAt),
       query.status ? eq(productBrand.status, query.status) : undefined,
-      query.search
+      search
         ? or(
-            ilike(productBrand.name, `%${query.search}%`),
-            ilike(productBrand.description, `%${query.search}%`),
+            searchUuid ? eq(productBrand.id, searchUuid) : undefined,
+            ilike(productBrand.name, `%${search}%`),
+            ilike(productBrand.description, `%${search}%`),
           )
         : undefined,
     );

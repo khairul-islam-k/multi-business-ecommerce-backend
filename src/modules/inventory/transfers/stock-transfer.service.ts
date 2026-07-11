@@ -1,5 +1,15 @@
 import Decimal from "decimal.js";
-import { and, asc, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  ilike,
+  isNull,
+  or,
+} from "drizzle-orm";
 
 import {
   InventoryMovementType,
@@ -20,6 +30,10 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
 import { DatabaseService } from "../../../database/database.service";
 import { InventoryLookupService } from "../common/inventory-lookup.service";
 import {
@@ -59,7 +73,7 @@ export class StockTransferService {
     }
 
     const [fromWarehouse] = await Promise.all([
-      await this.inventoryLookupService.assertWarehouseExists(
+      this.inventoryLookupService.assertWarehouseExists(
         businessId,
         dto.fromWarehouseId,
       ),
@@ -146,6 +160,8 @@ export class StockTransferService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(inventoryStockTransfer.businessId, businessId),
       isNull(inventoryStockTransfer.deletedAt),
@@ -155,8 +171,34 @@ export class StockTransferService {
             eq(inventoryStockTransfer.toWarehouseId, query.warehouseId),
           )
         : undefined,
-      query.search
-        ? ilike(inventoryStockTransfer.transferNo, `%${query.search}%`)
+      search
+        ? or(
+            searchUuid ? eq(inventoryStockTransfer.id, searchUuid) : undefined,
+            searchUuid
+              ? eq(inventoryStockTransfer.fromWarehouseId, searchUuid)
+              : undefined,
+            searchUuid
+              ? eq(inventoryStockTransfer.toWarehouseId, searchUuid)
+              : undefined,
+            ilike(inventoryStockTransfer.transferNo, `%${search}%`),
+            ilike(inventoryStockTransfer.note, `%${search}%`),
+            exists(
+              this.db
+                .select({ id: warehouse.id })
+                .from(warehouse)
+                .where(
+                  and(
+                    eq(warehouse.businessId, businessId),
+                    isNull(warehouse.deletedAt),
+                    ilike(warehouse.name, `%${search}%`),
+                    or(
+                      eq(warehouse.id, inventoryStockTransfer.fromWarehouseId),
+                      eq(warehouse.id, inventoryStockTransfer.toWarehouseId),
+                    ),
+                  ),
+                ),
+            ),
+          )
         : undefined,
     );
 

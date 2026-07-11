@@ -8,6 +8,10 @@ import {
   resolveSortColumn,
 } from "../../../common/http/sort.util";
 import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
+import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
@@ -70,16 +74,23 @@ export class SupplierCrudService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(supplier.businessId, businessId),
       isNull(supplier.deletedAt),
       query.status ? eq(supplier.status, query.status) : undefined,
-      query.search
+      search
         ? or(
-            ilike(supplier.name, `%${query.search}%`),
-            ilike(supplier.companyName, `%${query.search}%`),
-            ilike(supplier.email, `%${query.search}%`),
-            ilike(supplier.phone, `%${query.search}%`),
+            searchUuid ? eq(supplier.id, searchUuid) : undefined,
+            ilike(supplier.name, `%${search}%`),
+            ilike(supplier.companyName, `%${search}%`),
+            ilike(supplier.email, `%${search}%`),
+            ilike(supplier.phone, `%${search}%`),
+            ilike(supplier.address, `%${search}%`),
+            ilike(supplier.city, `%${search}%`),
+            ilike(supplier.country, `%${search}%`),
+            ilike(supplier.note, `%${search}%`),
           )
         : undefined,
     );

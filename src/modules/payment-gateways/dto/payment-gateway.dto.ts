@@ -147,6 +147,21 @@ export class PaymentCallbackQueryDto {
   @IsOptional()
   @IsString()
   order_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  paymentID?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  signature?: string;
 }
 
 export class SeedPaymentGatewayDto {

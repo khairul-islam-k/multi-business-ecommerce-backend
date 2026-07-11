@@ -37,6 +37,10 @@ import {
 
 import { throwConflictOnUnique } from "../../common/database/db-error.util";
 import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../common/http/search.util";
 import { BusinessAccessContext } from "../../common/request-context/request-context.types";
 import {
   apiResponse,
@@ -217,18 +221,22 @@ export class BusinessService {
 
     const canIncludeDeleted =
       currentUser.type === SystemUserType.ADMIN && query.includeDeleted;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
 
     const conditions = [
       !canIncludeDeleted ? isNull(business.deletedAt) : undefined,
       this.getBusinessAccessCondition(currentUser),
       this.getStatusCondition(currentUser, query.status),
-      query.search
+      search
         ? or(
-            ilike(business.name, `%${query.search}%`),
-            ilike(business.slug, `%${query.search}%`),
-            ilike(business.email, `%${query.search}%`),
-            ilike(business.phone, `%${query.search}%`),
-            ilike(business.country, `%${query.search}%`),
+            searchUuid ? eq(business.id, searchUuid) : undefined,
+            searchUuid ? eq(business.ownerUserId, searchUuid) : undefined,
+            ilike(business.name, `%${search}%`),
+            ilike(business.slug, `%${search}%`),
+            ilike(business.email, `%${search}%`),
+            ilike(business.phone, `%${search}%`),
+            ilike(business.country, `%${search}%`),
           )
         : undefined,
       query.country ? ilike(business.country, query.country) : undefined,
@@ -827,8 +835,8 @@ export class BusinessService {
       couriers.map((row) => ({
         businessId,
         courierId: row.id,
-        configData: { baseUrl: "https://openapi.redx.com.bd" },
-        mode: CourierConfigMode.LIVE,
+        configData: {},
+        mode: CourierConfigMode.SANDBOX,
         status: CourierConfigStatus.INACTIVE,
         createdBy: userId,
         updatedBy: userId,

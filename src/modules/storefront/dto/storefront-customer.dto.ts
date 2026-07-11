@@ -26,7 +26,7 @@ import {
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 import {
-  PaginationQueryDto,
+  SearchablePaginationQueryDto,
   SortedPaginationQueryDto,
 } from "../../../common/http/query.dto";
 import { StorefrontCourierSelectionDto } from "../../couriers/dto/courier.dto";
@@ -39,9 +39,9 @@ export const StorefrontCheckoutPaymentMethod = {
 export type StorefrontCheckoutPaymentMethod =
   (typeof StorefrontCheckoutPaymentMethod)[keyof typeof StorefrontCheckoutPaymentMethod];
 
-export class StorefrontAddressQueryDto extends PaginationQueryDto {}
+export class StorefrontAddressQueryDto extends SearchablePaginationQueryDto {}
 
-export class StorefrontCartQueryDto extends PaginationQueryDto {
+export class StorefrontCartQueryDto extends SearchablePaginationQueryDto {
   @ApiPropertyOptional({ enum: OrderCartStatus })
   @IsOptional()
   @IsEnum(OrderCartStatus)
@@ -144,6 +144,11 @@ export class StorefrontReviewQueryDto {
   @Min(1)
   @Max(100)
   limit?: number = 10;
+
+  @ApiPropertyOptional({ example: "keyboard" })
+  @IsOptional()
+  @IsString()
+  search?: string;
 
   @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsOptional()

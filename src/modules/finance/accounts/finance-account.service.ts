@@ -24,6 +24,10 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
 import { DatabaseService } from "../../../database/database.service";
 import { FinanceLedgerService } from "../common/finance-ledger.service";
 import {
@@ -106,6 +110,8 @@ export class FinanceAccountService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(financeAccount.businessId, businessId),
       isNull(financeAccount.deletedAt),
@@ -113,10 +119,11 @@ export class FinanceAccountService {
         ? eq(financeAccount.accountType, query.accountType)
         : undefined,
       query.status ? eq(financeAccount.status, query.status) : undefined,
-      query.search
+      search
         ? or(
-            ilike(financeAccount.name, `%${query.search}%`),
-            ilike(financeAccount.accountNumber, `%${query.search}%`),
+            searchUuid ? eq(financeAccount.id, searchUuid) : undefined,
+            ilike(financeAccount.name, `%${search}%`),
+            ilike(financeAccount.accountNumber, `%${search}%`),
           )
         : undefined,
     );
@@ -269,9 +276,24 @@ export class FinanceAccountService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(financeAccountTransaction.businessId, businessId),
       eq(financeAccountTransaction.accountId, accountId),
+      search
+        ? or(
+            searchUuid
+              ? eq(financeAccountTransaction.id, searchUuid)
+              : undefined,
+            searchUuid
+              ? eq(financeAccountTransaction.referenceId, searchUuid)
+              : undefined,
+            ilike(financeAccountTransaction.transactionNo, `%${search}%`),
+            ilike(financeAccountTransaction.referenceType, `%${search}%`),
+            ilike(financeAccountTransaction.note, `%${search}%`),
+          )
+        : undefined,
     );
 
     const [items, total] = await Promise.all([

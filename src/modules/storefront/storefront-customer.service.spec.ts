@@ -103,7 +103,8 @@ describe("StorefrontCustomerService", () => {
       businessId: "business-1",
       customerId: "customer-1",
     };
-    const hydratedCart = { ...cart, items: [] };
+    const updatedCart = { ...cart, weight: new Decimal("2.50") };
+    const hydratedCart = { ...updatedCart, items: [] };
 
     jest
       .spyOn(service as any, "assertStorefrontCustomer")
@@ -118,6 +119,9 @@ describe("StorefrontCustomerService", () => {
       id: "item-1",
       quantity: new Decimal(2),
     });
+    const refreshCartWeight = jest
+      .spyOn(service as any, "refreshCartWeight")
+      .mockResolvedValue(updatedCart);
     jest.spyOn(service as any, "hydrateCart").mockResolvedValue(hydratedCart);
 
     const result = await service.addCartItem(currentCustomer, "website-1", {
@@ -126,6 +130,7 @@ describe("StorefrontCustomerService", () => {
     });
 
     expect(result.data).toBe(hydratedCart);
+    expect(refreshCartWeight).toHaveBeenCalledWith("cart-1");
     expect(updates).toContainEqual({
       table: orderCartItem,
       values: expect.objectContaining({

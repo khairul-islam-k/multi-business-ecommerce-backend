@@ -4,6 +4,7 @@ import {
   asc,
   count,
   eq,
+  exists,
   getTableColumns,
   ilike,
   inArray,
@@ -36,6 +37,10 @@ import {
 
 import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../common/http/search.util";
+import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
@@ -44,6 +49,7 @@ import { ProductReviewService } from "../product-catalog/reviews/product-review.
 import { WebsiteService } from "../website/website.service";
 import {
   ResolveStorefrontVariantDto,
+  StorefrontCatalogSearchDto,
   StorefrontProductQueryDto,
   StorefrontProductSortBy,
 } from "./dto/storefront.dto";
@@ -80,8 +86,10 @@ export class StorefrontService {
     return apiResponse(await this.getPublishedWebsite(host));
   }
 
-  async findCategories(host?: string) {
+  async findCategories(host?: string, query: StorefrontCatalogSearchDto = {}) {
     const website = await this.getPublishedWebsite(host);
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const rows = await this.db
       .select()
       .from(productCategory)
@@ -90,6 +98,16 @@ export class StorefrontService {
           eq(productCategory.businessId, website.businessId),
           eq(productCategory.status, ProductSimpleStatus.ACTIVE),
           isNull(productCategory.deletedAt),
+          search
+            ? or(
+                ilike(productCategory.name, `%${search}%`),
+                ilike(productCategory.description, `%${search}%`),
+                searchUuid ? eq(productCategory.id, searchUuid) : undefined,
+                searchUuid
+                  ? eq(productCategory.parentId, searchUuid)
+                  : undefined,
+              )
+            : undefined,
         ),
       )
       .orderBy(asc(productCategory.name))
@@ -126,8 +144,10 @@ export class StorefrontService {
     return apiResponse(categories);
   }
 
-  async findBrands(host?: string) {
+  async findBrands(host?: string, query: StorefrontCatalogSearchDto = {}) {
     const website = await this.getPublishedWebsite(host);
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const brands = await this.db
       .select()
       .from(productBrand)
@@ -136,14 +156,23 @@ export class StorefrontService {
           eq(productBrand.businessId, website.businessId),
           eq(productBrand.status, ProductSimpleStatus.ACTIVE),
           isNull(productBrand.deletedAt),
+          search
+            ? or(
+                ilike(productBrand.name, `%${search}%`),
+                ilike(productBrand.description, `%${search}%`),
+                searchUuid ? eq(productBrand.id, searchUuid) : undefined,
+              )
+            : undefined,
         ),
       );
 
     return apiResponse(brands);
   }
 
-  async findTags(host?: string) {
+  async findTags(host?: string, query: StorefrontCatalogSearchDto = {}) {
     const website = await this.getPublishedWebsite(host);
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const tags = await this.db
       .select()
       .from(productTag)
@@ -153,6 +182,12 @@ export class StorefrontService {
           eq(productTag.status, ProductSimpleStatus.ACTIVE),
           eq(productTag.isFeatured, true),
           isNull(productTag.deletedAt),
+          search
+            ? or(
+                ilike(productTag.name, `%${search}%`),
+                searchUuid ? eq(productTag.id, searchUuid) : undefined,
+              )
+            : undefined,
         ),
       );
 
@@ -164,7 +199,8 @@ export class StorefrontService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 12;
     const skip = (page - 1) * limit;
-    const search = query.search?.trim();
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(product.businessId, website.businessId),
       eq(product.status, CatalogProductStatus.ACTIVE),
@@ -184,10 +220,32 @@ export class StorefrontService {
         : undefined,
       search
         ? or(
+            searchUuid ? eq(product.id, searchUuid) : undefined,
             ilike(product.name, `%${search}%`),
+            ilike(product.slug, `%${search}%`),
             ilike(product.description, `%${search}%`),
             ilike(product.sku, `%${search}%`),
             ilike(product.barcode, `%${search}%`),
+            exists(
+              this.db
+                .select({ id: productVariant.id })
+                .from(productVariant)
+                .where(
+                  and(
+                    eq(productVariant.businessId, website.businessId),
+                    eq(productVariant.productId, product.id),
+                    isNull(productVariant.deletedAt),
+                    or(
+                      searchUuid
+                        ? eq(productVariant.id, searchUuid)
+                        : undefined,
+                      ilike(productVariant.title, `%${search}%`),
+                      ilike(productVariant.sku, `%${search}%`),
+                      ilike(productVariant.barcode, `%${search}%`),
+                    ),
+                  ),
+                ),
+            ),
           )
         : undefined,
     );

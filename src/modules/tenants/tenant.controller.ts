@@ -16,12 +16,13 @@ import {
 } from "@nestjs/swagger";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
-import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import { AdminGuard } from "../auth/guards/admin.guard";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { QueryTenantDto } from "./dto/query-tenant.dto";
 import { UpdateTenantStatusDto } from "./dto/update-tenant-status.dto";
 import { TenantService } from "./tenant.service";
+
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 @ApiTags("Tenants")
 @ApiBearerAuth()
@@ -41,7 +42,7 @@ export class TenantController {
     example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913",
   })
   findOne(@Param("tenantId", ParseUUIDPipe) tenantId: string) {
-    return this.tenantService.fineOne(tenantId);
+    return this.tenantService.findOne(tenantId);
   }
 
   @Get()

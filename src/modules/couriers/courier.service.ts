@@ -1,12 +1,24 @@
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import Decimal from "decimal.js";
-import { and, count, desc, eq, ilike, isNull, ne, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  ilike,
+  isNull,
+  ne,
+  or,
+} from "drizzle-orm";
 
 import {
   businessSetting,
   CatalogProductStatus,
   courier,
   courierConfig,
+  CourierConfigMode,
   CourierConfigStatus,
   CourierProvider,
   CourierShipment,
@@ -22,14 +34,14 @@ import {
   FinanceTaxStatus,
   inventoryOrderAllocation,
   InventoryOrderAllocationStatus,
+  invoice,
+  InvoiceStatus,
   JsonValue,
   order,
   orderItem,
   OrderPaymentStatus,
   OrderStatus,
   orderStatusLog,
-  invoice,
-  InvoiceStatus,
   product,
   productVariant,
   ProductVariantStatus,
@@ -47,6 +59,10 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../common/utils/api-response.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../common/http/search.util";
 import { DatabaseService } from "../../database/database.service";
 import { FinanceCodeService } from "../finance/application/finance-code.service";
 import { InventoryLookupService } from "../inventory/common/inventory-lookup.service";
@@ -55,7 +71,6 @@ import { WebsiteService } from "../website/website.service";
 import { CourierConfigEncryptionService } from "./courier-config-encryption.service";
 import {
   CourierProviderService,
-  REDX_PRODUCTION_BASE_URL,
   RedxWebhookPayload,
 } from "./courier-provider.service";
 import {
@@ -63,11 +78,13 @@ import {
   BulkUpdateCourierConfigDto,
   QueryCourierConfigDto,
   QueryCourierDto,
+  QueryCourierShipmentDto,
   RedxAreaQueryDto,
   RedxChargeQuoteDto,
   RedxCreatePickupStoreDto,
-  StorefrontCourierSelectionDto,
+  // RedxUpdatePickupStoreDto,
   StorefrontCourierQuoteDto,
+  StorefrontCourierSelectionDto,
   UpdateCourierConfigDto,
 } from "./dto/courier.dto";
 
@@ -110,12 +127,14 @@ export class CourierService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const search = query.search?.trim();
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       query.provider ? eq(courier.code, query.provider) : undefined,
       query.status ? eq(courier.status, query.status) : undefined,
       search
         ? or(
+            searchUuid ? eq(courier.id, searchUuid) : undefined,
             ilike(courier.name, `%${search}%`),
             ilike(courier.code, `%${search}%`),
           )
@@ -148,10 +167,20 @@ export class CourierService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(courierConfig.businessId, businessId),
       isNull(courierConfig.deletedAt),
       query.status ? eq(courierConfig.status, query.status) : undefined,
+      search
+        ? or(
+            searchUuid ? eq(courierConfig.id, searchUuid) : undefined,
+            searchUuid ? eq(courierConfig.courierId, searchUuid) : undefined,
+            ilike(courier.name, `%${search}%`),
+            ilike(courier.code, `%${search}%`),
+          )
+        : undefined,
     );
 
     const [rows, total] = await Promise.all([
@@ -166,6 +195,7 @@ export class CourierService {
       this.db
         .select({ value: count() })
         .from(courierConfig)
+        .innerJoin(courier, eq(courier.id, courierConfig.courierId))
         .where(where)
         .then(([row]) => row?.value ?? 0),
     ]);
@@ -179,6 +209,134 @@ export class CourierService {
     );
   }
 
+  async findShipments(businessId: string, query: QueryCourierShipmentDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
+    const where = and(
+      eq(courierShipment.businessId, businessId),
+      isNull(courierShipment.deletedAt),
+      query.status ? eq(courierShipment.status, query.status) : undefined,
+      query.orderId ? eq(courierShipment.orderId, query.orderId) : undefined,
+      query.courierId
+        ? eq(courierShipment.courierId, query.courierId)
+        : undefined,
+      query.courierConfigId
+        ? eq(courierShipment.courierConfigId, query.courierConfigId)
+        : undefined,
+      query.pickupWarehouseId
+        ? eq(courierShipment.pickupWarehouseId, query.pickupWarehouseId)
+        : undefined,
+      search
+        ? or(
+            searchUuid ? eq(courierShipment.id, searchUuid) : undefined,
+            searchUuid ? eq(courierShipment.orderId, searchUuid) : undefined,
+            searchUuid ? eq(courierShipment.courierId, searchUuid) : undefined,
+            searchUuid
+              ? eq(courierShipment.courierConfigId, searchUuid)
+              : undefined,
+            searchUuid
+              ? eq(courierShipment.pickupWarehouseId, searchUuid)
+              : undefined,
+            ilike(courierShipment.shipmentNo, `%${search}%`),
+            ilike(courierShipment.consignmentId, `%${search}%`),
+            ilike(courierShipment.trackingCode, `%${search}%`),
+            ilike(courierShipment.providerStatus, `%${search}%`),
+            ilike(courierShipment.recipientName, `%${search}%`),
+            ilike(courierShipment.recipientPhone, `%${search}%`),
+            ilike(courierShipment.deliveryAreaId, `%${search}%`),
+            ilike(courierShipment.deliveryAreaName, `%${search}%`),
+            ilike(courierShipment.deliveryPostCode, `%${search}%`),
+            ilike(courierShipment.pickupAreaId, `%${search}%`),
+            ilike(courierShipment.pickupAreaName, `%${search}%`),
+            ilike(courierShipment.pickupStoreId, `%${search}%`),
+            exists(
+              this.db
+                .select({ id: order.id })
+                .from(order)
+                .where(
+                  and(
+                    eq(order.id, courierShipment.orderId),
+                    eq(order.businessId, businessId),
+                    isNull(order.deletedAt),
+                    or(
+                      ilike(order.orderNo, `%${search}%`),
+                      ilike(order.customerName, `%${search}%`),
+                      ilike(order.customerPhone, `%${search}%`),
+                      ilike(order.customerEmail, `%${search}%`),
+                    ),
+                  ),
+                ),
+            ),
+            exists(
+              this.db
+                .select({ id: product.id })
+                .from(courierShipmentItem)
+                .innerJoin(
+                  product,
+                  eq(product.id, courierShipmentItem.productId),
+                )
+                .leftJoin(
+                  productVariant,
+                  eq(productVariant.id, courierShipmentItem.variantId),
+                )
+                .where(
+                  and(
+                    eq(courierShipmentItem.shipmentId, courierShipment.id),
+                    eq(product.businessId, businessId),
+                    or(
+                      searchUuid
+                        ? eq(courierShipmentItem.id, searchUuid)
+                        : undefined,
+                      searchUuid ? eq(product.id, searchUuid) : undefined,
+                      searchUuid
+                        ? eq(productVariant.id, searchUuid)
+                        : undefined,
+                      ilike(product.name, `%${search}%`),
+                      ilike(product.slug, `%${search}%`),
+                      ilike(product.sku, `%${search}%`),
+                      ilike(product.barcode, `%${search}%`),
+                      ilike(productVariant.title, `%${search}%`),
+                      ilike(productVariant.sku, `%${search}%`),
+                      ilike(productVariant.barcode, `%${search}%`),
+                    ),
+                  ),
+                ),
+            ),
+          )
+        : undefined,
+    );
+
+    const [rows, total] = await Promise.all([
+      this.db
+        .select()
+        .from(courierShipment)
+        .where(where)
+        .orderBy(desc(courierShipment.createdAt))
+        .limit(limit)
+        .offset(skip),
+      this.db
+        .select({ value: count() })
+        .from(courierShipment)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
+    ]);
+
+    return paginatedResponse(
+      await Promise.all(rows.map((shipment) => this.hydrateShipment(shipment))),
+      { page, limit, total, totalPages: Math.ceil(total / limit) },
+      "Courier shipments were loaded successfully.",
+    );
+  }
+
+  async findShipment(businessId: string, shipmentId: string) {
+    const shipment = await this.getShipmentOrThrow(businessId, shipmentId);
+
+    return apiResponse(await this.hydrateShipment(shipment));
+  }
+
   async updateConfig(
     currentUser: CurrentUserPayload,
     businessId: string,
@@ -187,18 +345,15 @@ export class CourierService {
   ) {
     const row = await this.getConfigRowOrThrow(businessId, configId);
     const decrypted = this.configEncryption.decrypt(row.configData);
-    const nextConfigData = {
+    const nextMode = dto.mode ?? row.mode;
+    const nextConfigData = this.provider.sanitizeRedxConfigData({
       ...decrypted,
       ...(dto.configData ?? {}),
-      baseUrl:
-        (dto.configData?.baseUrl as string | undefined) ??
-        (decrypted.baseUrl as string | undefined) ??
-        REDX_PRODUCTION_BASE_URL,
-    };
+    });
     const nextStatus = dto.status ?? row.status;
 
     if (nextStatus === CourierConfigStatus.ACTIVE) {
-      this.assertRedxConfigUsable(nextConfigData);
+      this.assertRedxConfigUsable(nextConfigData, nextMode);
     }
 
     const nextWebhookToken = dto.rotateWebhookToken
@@ -208,7 +363,7 @@ export class CourierService {
     const [updated] = await this.db
       .update(courierConfig)
       .set({
-        ...(dto.configData !== undefined && {
+        ...((dto.configData !== undefined || "baseUrl" in decrypted) && {
           configData: this.configEncryption.encrypt(nextConfigData),
         }),
         ...(dto.mode !== undefined && { mode: dto.mode }),
@@ -311,6 +466,48 @@ export class CourierService {
       await this.provider.getPickupStoreDetails(runtime, storeId),
     );
   }
+
+  // async updateRedxPickupStore(
+  //   businessId: string,
+  //   configId: string,
+  //   storeId: string,
+  //   dto: RedxUpdatePickupStoreDto,
+  // ) {
+  //   const name = dto.name?.trim();
+  //   const phone = dto.phone?.trim();
+  //   const address = dto.address?.trim();
+  //   const areaId = dto.areaId?.trim();
+  //   const payload = {
+  //     ...(name && { name }),
+  //     ...(phone && { phone }),
+  //     ...(address && { address }),
+  //     ...(areaId && { areaId }),
+  //   };
+
+  //   if (Object.keys(payload).length === 0) {
+  //     throw new BadRequestException(
+  //       "At least one pickup store field is required for update.",
+  //     );
+  //   }
+
+  //   const { runtime } = await this.getActiveRedxRuntime(businessId, configId);
+  //   return apiResponse(
+  //     await this.provider.updatePickupStore(runtime, storeId, payload),
+  //     "REDX pickup store updated successfully.",
+  //   );
+  // }
+
+  // async deleteRedxPickupStore(
+  //   businessId: string,
+  //   configId: string,
+  //   storeId: string,
+  // ) {
+  //   const { runtime } = await this.getActiveRedxRuntime(businessId, configId);
+  //   return apiResponse(
+  //     await this.provider.deletePickupStore(runtime, storeId),
+  //     "REDX pickup store deleted successfully.",
+  //   );
+  // }
 
   async findStorefrontCouriers(host?: string) {
     const storefront = await this.websites.findPublishedByHostOrThrow(host);
@@ -755,7 +952,7 @@ export class CourierService {
         : null;
     const weight = itemMetrics?.weight ?? orderWeight ?? requestWeight;
 
-    if (!weight || new Decimal(weight).lessThanOrEqualTo(0)) {
+    if (weight === null || new Decimal(weight).lessThan(0)) {
       throw new BadRequestException(
         "Courier weight could not be calculated from order items.",
       );
@@ -1344,6 +1541,7 @@ export class CourierService {
       row,
       runtime: this.provider.normalizeRedxConfig(
         this.configEncryption.decrypt(row.configData),
+        row.mode,
       ),
     };
   }
@@ -1367,6 +1565,100 @@ export class CourierService {
     }
 
     return { ...row.config, courier: row.courier };
+  }
+
+  private async hydrateShipment(shipment: CourierShipment) {
+    const [orderRow, courierRow, configRow, pickupWarehouse, items] =
+      await Promise.all([
+        this.db
+          .select()
+          .from(order)
+          .where(
+            and(
+              eq(order.id, shipment.orderId),
+              eq(order.businessId, shipment.businessId),
+            ),
+          )
+          .limit(1)
+          .then(([row]) => row ?? null),
+        shipment.courierId
+          ? this.db
+              .select()
+              .from(courier)
+              .where(eq(courier.id, shipment.courierId))
+              .limit(1)
+              .then(([row]) => row ?? null)
+          : Promise.resolve(null),
+        shipment.courierConfigId
+          ? this.db
+              .select({ config: courierConfig, courier })
+              .from(courierConfig)
+              .innerJoin(courier, eq(courier.id, courierConfig.courierId))
+              .where(
+                and(
+                  eq(courierConfig.id, shipment.courierConfigId),
+                  eq(courierConfig.businessId, shipment.businessId),
+                  isNull(courierConfig.deletedAt),
+                ),
+              )
+              .limit(1)
+              .then(([row]) =>
+                row
+                  ? this.serializeConfig({
+                      ...row.config,
+                      courier: row.courier,
+                    })
+                  : null,
+              )
+          : Promise.resolve(null),
+        shipment.pickupWarehouseId
+          ? this.db
+              .select()
+              .from(warehouse)
+              .where(
+                and(
+                  eq(warehouse.id, shipment.pickupWarehouseId),
+                  eq(warehouse.businessId, shipment.businessId),
+                  isNull(warehouse.deletedAt),
+                ),
+              )
+              .limit(1)
+              .then(([row]) => row ?? null)
+          : Promise.resolve(null),
+        this.db
+          .select({
+            shipmentItem: courierShipmentItem,
+            orderItem,
+            product,
+            variant: productVariant,
+          })
+          .from(courierShipmentItem)
+          .leftJoin(
+            orderItem,
+            eq(orderItem.id, courierShipmentItem.orderItemId),
+          )
+          .leftJoin(product, eq(product.id, courierShipmentItem.productId))
+          .leftJoin(
+            productVariant,
+            eq(productVariant.id, courierShipmentItem.variantId),
+          )
+          .where(eq(courierShipmentItem.shipmentId, shipment.id))
+          .orderBy(asc(courierShipmentItem.createdAt)),
+      ]);
+
+    return {
+      ...shipment,
+      order: orderRow,
+      courier: courierRow,
+      courierConfig: configRow,
+      pickupWarehouse,
+      items: items.map((row) => ({
+        ...row.shipmentItem,
+        orderItem: row.orderItem,
+        product: row.product,
+        variant: row.variant,
+      })),
+    };
   }
 
   private async getShipmentOrThrow(businessId: string, shipmentId: string) {
@@ -1475,14 +1767,18 @@ export class CourierService {
     return {
       ...row,
       configData: this.provider.redactRedxConfig(decrypted),
+      baseUrl: this.provider.resolveRedxBaseUrl(row.mode),
       webhookTokenHash: undefined,
       webhookConfigured: Boolean(row.webhookTokenHash),
       webhookUrlHint: `${this.appConfig.publicApiUrl}/couriers/webhooks/redx?token=<token>`,
     };
   }
 
-  private assertRedxConfigUsable(config: Record<string, unknown>) {
-    this.provider.normalizeRedxConfig(config);
+  private assertRedxConfigUsable(
+    config: Record<string, unknown>,
+    mode: CourierConfigMode,
+  ) {
+    this.provider.normalizeRedxConfig(config, mode);
   }
 
   private buildWebhookUrl(token: string) {

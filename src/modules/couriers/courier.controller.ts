@@ -24,6 +24,7 @@ import {
   BulkUpdateCourierConfigDto,
   QueryCourierConfigDto,
   QueryCourierDto,
+  QueryCourierShipmentDto,
   RedxAreaQueryDto,
   RedxChargeQuoteDto,
   RedxCreatePickupStoreDto,
@@ -136,6 +137,34 @@ export class CourierController {
     return this.couriers.getRedxPickupStore(businessId, configId, storeId);
   }
 
+  // @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.UPDATE)
+  // @Patch("configs/:configId/redx/pickup-stores/:storeId")
+  // @ApiOperation({ summary: "Update REDX pickup store" })
+  // updateRedxPickupStore(
+  //   @Param("businessId", ParseUUIDPipe) businessId: string,
+  //   @Param("configId", ParseUUIDPipe) configId: string,
+  //   @Param("storeId") storeId: string,
+  //   @Body() dto: RedxUpdatePickupStoreDto,
+  // ) {
+  //   return this.couriers.updateRedxPickupStore(
+  //     businessId,
+  //     configId,
+  //     storeId,
+  //     dto,
+  //   );
+  // }
+
+  // @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.DELETE)
+  // @Delete("configs/:configId/redx/pickup-stores/:storeId")
+  // @ApiOperation({ summary: "Delete REDX pickup store" })
+  // deleteRedxPickupStore(
+  //   @Param("businessId", ParseUUIDPipe) businessId: string,
+  //   @Param("configId", ParseUUIDPipe) configId: string,
+  //   @Param("storeId") storeId: string,
+  // ) {
+  //   return this.couriers.deleteRedxPickupStore(businessId, configId, storeId);
+  // }
+
   @RequirePermission(RbacFeature.ORDER_MANAGEMENT, PermissionAction.UPDATE)
   @Post("orders/:orderId/assign")
   @ApiOperation({ summary: "Assign REDX courier to an existing order" })
@@ -146,6 +175,26 @@ export class CourierController {
     @Body() dto: AssignCourierToOrderDto,
   ) {
     return this.couriers.assignCourierToOrder(user, businessId, orderId, dto);
+  }
+
+  @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.READ)
+  @Get("shipments")
+  @ApiOperation({ summary: "Get courier shipments" })
+  findShipments(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Query() query: QueryCourierShipmentDto,
+  ) {
+    return this.couriers.findShipments(businessId, query);
+  }
+
+  @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.READ)
+  @Get("shipments/:shipmentId")
+  @ApiOperation({ summary: "Get courier shipment details" })
+  findShipment(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("shipmentId", ParseUUIDPipe) shipmentId: string,
+  ) {
+    return this.couriers.findShipment(businessId, shipmentId);
   }
 
   @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.READ)

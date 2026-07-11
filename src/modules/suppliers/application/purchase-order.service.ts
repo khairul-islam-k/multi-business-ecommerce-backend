@@ -1,11 +1,13 @@
 import Decimal from "decimal.js";
-import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+import { and, count, desc, eq, exists, ilike, isNull, or } from "drizzle-orm";
 
 import {
   product,
+  supplier,
   supplierPurchaseOrder,
   supplierPurchaseOrderItem,
   SupplierPurchaseOrderStatus,
+  warehouse,
 } from "@/database/schema";
 import { BadRequestException, Injectable } from "@nestjs/common";
 
@@ -14,6 +16,10 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
 import { DatabaseService } from "../../../database/database.service";
 import { FinanceLedgerService } from "../../finance/common/finance-ledger.service";
 import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
@@ -142,6 +148,8 @@ export class PurchaseOrderService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(supplierPurchaseOrder.businessId, businessId),
       isNull(supplierPurchaseOrder.deletedAt),
@@ -152,10 +160,48 @@ export class PurchaseOrderService {
         ? eq(supplierPurchaseOrder.warehouseId, query.warehouseId)
         : undefined,
       query.status ? eq(supplierPurchaseOrder.status, query.status) : undefined,
-      query.search
+      search
         ? or(
-            ilike(supplierPurchaseOrder.purchaseOrderNo, `%${query.search}%`),
-            ilike(supplierPurchaseOrder.note, `%${query.search}%`),
+            searchUuid ? eq(supplierPurchaseOrder.id, searchUuid) : undefined,
+            searchUuid
+              ? eq(supplierPurchaseOrder.supplierId, searchUuid)
+              : undefined,
+            searchUuid
+              ? eq(supplierPurchaseOrder.warehouseId, searchUuid)
+              : undefined,
+            ilike(supplierPurchaseOrder.purchaseOrderNo, `%${search}%`),
+            ilike(supplierPurchaseOrder.note, `%${search}%`),
+            exists(
+              this.db
+                .select({ id: supplier.id })
+                .from(supplier)
+                .where(
+                  and(
+                    eq(supplier.id, supplierPurchaseOrder.supplierId),
+                    eq(supplier.businessId, businessId),
+                    isNull(supplier.deletedAt),
+                    or(
+                      ilike(supplier.name, `%${search}%`),
+                      ilike(supplier.companyName, `%${search}%`),
+                      ilike(supplier.email, `%${search}%`),
+                      ilike(supplier.phone, `%${search}%`),
+                    ),
+                  ),
+                ),
+            ),
+            exists(
+              this.db
+                .select({ id: warehouse.id })
+                .from(warehouse)
+                .where(
+                  and(
+                    eq(warehouse.id, supplierPurchaseOrder.warehouseId),
+                    eq(warehouse.businessId, businessId),
+                    isNull(warehouse.deletedAt),
+                    ilike(warehouse.name, `%${search}%`),
+                  ),
+                ),
+            ),
           )
         : undefined,
     );

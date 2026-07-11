@@ -19,6 +19,10 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
 import { DatabaseService } from "../../../database/database.service";
 import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
 import { normalizeNullableText } from "../domain/supplier-contact.policy";
@@ -155,7 +159,8 @@ export class SupplierProductService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const search = query.search?.trim();
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(supplierProductMap.businessId, businessId),
       eq(supplier.businessId, businessId),
@@ -166,12 +171,23 @@ export class SupplierProductService {
       query.status ? eq(supplierProductMap.status, query.status) : undefined,
       search
         ? or(
+            searchUuid ? eq(supplierProductMap.id, searchUuid) : undefined,
+            searchUuid
+              ? eq(supplierProductMap.supplierId, searchUuid)
+              : undefined,
+            searchUuid
+              ? eq(supplierProductMap.productId, searchUuid)
+              : undefined,
+            searchUuid
+              ? eq(supplierProductMap.variantId, searchUuid)
+              : undefined,
             ilike(supplier.name, `%${search}%`),
             ilike(supplier.companyName, `%${search}%`),
             ilike(supplier.email, `%${search}%`),
             ilike(supplier.phone, `%${search}%`),
             ilike(supplierProductMap.supplierSku, `%${search}%`),
             ilike(product.name, `%${search}%`),
+            ilike(product.slug, `%${search}%`),
             ilike(product.sku, `%${search}%`),
             ilike(product.barcode, `%${search}%`),
             ilike(productVariant.title, `%${search}%`),

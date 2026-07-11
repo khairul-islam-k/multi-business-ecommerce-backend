@@ -65,6 +65,10 @@ import {
   resolveSortColumn,
 } from "../../../common/http/sort.util";
 import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
+import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
@@ -159,7 +163,7 @@ export class ProductService {
             sku,
             barcode,
             price: new Decimal(dto.price ?? 0),
-            weight: dto.weight === undefined ? null : new Decimal(dto.weight),
+            weight: new Decimal(dto.weight),
             status: dto.status ?? CatalogProductStatus.DRAFT,
             createdBy: currentUser.id,
             updatedBy: currentUser.id,
@@ -205,7 +209,8 @@ export class ProductService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const search = query.search?.trim();
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(product.businessId, businessId),
       isNull(product.deletedAt),
@@ -241,6 +246,7 @@ export class ProductService {
         : undefined,
       search
         ? or(
+            searchUuid ? eq(product.id, searchUuid) : undefined,
             ilike(product.name, `%${search}%`),
             ilike(product.slug, `%${search}%`),
             ilike(product.sku, `%${search}%`),
@@ -253,6 +259,10 @@ export class ProductService {
                   and(
                     eq(productVariant.productId, product.id),
                     or(
+                      searchUuid
+                        ? eq(productVariant.id, searchUuid)
+                        : undefined,
+                      ilike(productVariant.title, `%${search}%`),
                       ilike(productVariant.sku, `%${search}%`),
                       ilike(productVariant.barcode, `%${search}%`),
                     ),
@@ -387,7 +397,7 @@ export class ProductService {
             }),
             ...(dto.price !== undefined && { price: new Decimal(dto.price) }),
             ...(dto.weight !== undefined && {
-              weight: dto.weight === null ? null : new Decimal(dto.weight),
+              weight: new Decimal(dto.weight),
             }),
             ...(dto.status !== undefined && { status: dto.status }),
             updatedBy: currentUser.id,
@@ -496,13 +506,12 @@ export class ProductService {
     }
 
     await tx.insert(productImage).values(
-      params.images.map((image, index) => ({
+      params.images.map((image) => ({
         businessId: params.businessId,
         productId: params.productId,
         variantId: params.variantId ?? null,
         imageUrl: image.imageUrl.trim(),
         altText: this.lookup.normalizeNullableText(image.altText),
-        sortOrder: index,
         isThumbnail: image.isThumbnail ?? false,
         createdBy: params.userId,
         updatedBy: params.userId,

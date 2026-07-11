@@ -35,6 +35,10 @@ import {
   paginatedResponse,
 } from "../../common/utils/api-response.util";
 import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../common/http/search.util";
+import {
   DatabaseService,
   DatabaseTransaction,
 } from "../../database/database.service";
@@ -121,11 +125,14 @@ export class PaymentGatewayService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const search = query.search?.trim();
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       query.status ? eq(paymentGateway.status, query.status) : undefined,
       search
         ? or(
+            searchUuid ? eq(paymentGateway.id, searchUuid) : undefined,
+            ilike(paymentGateway.code, `%${search}%`),
             ilike(paymentGateway.name, `%${search}%`),
             ilike(paymentGateway.description, `%${search}%`),
           )
@@ -162,7 +169,8 @@ export class PaymentGatewayService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-    const search = query.search?.trim();
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(paymentGatewayConfig.businessId, businessId),
       isNull(paymentGatewayConfig.deletedAt),
@@ -171,8 +179,18 @@ export class PaymentGatewayService {
       query.provider ? eq(paymentGateway.code, query.provider) : undefined,
       search
         ? or(
+            searchUuid ? eq(paymentGatewayConfig.id, searchUuid) : undefined,
+            searchUuid
+              ? eq(paymentGatewayConfig.gatewayId, searchUuid)
+              : undefined,
+            searchUuid
+              ? eq(paymentGatewayConfig.financeAccountId, searchUuid)
+              : undefined,
+            ilike(paymentGateway.code, `%${search}%`),
             ilike(paymentGateway.name, `%${search}%`),
             ilike(paymentGateway.description, `%${search}%`),
+            ilike(financeAccount.name, `%${search}%`),
+            ilike(financeAccount.accountNumber, `%${search}%`),
           )
         : undefined,
     );
@@ -202,6 +220,10 @@ export class PaymentGatewayService {
         .innerJoin(
           paymentGateway,
           eq(paymentGateway.id, paymentGatewayConfig.gatewayId),
+        )
+        .innerJoin(
+          financeAccount,
+          eq(financeAccount.id, paymentGatewayConfig.financeAccountId),
         )
         .where(where)
         .then(([row]) => row?.value ?? 0),
@@ -544,16 +566,11 @@ export class PaymentGatewayService {
     assertOrderCanAcceptPayment(row.status);
     assertOrderIsNotCod(row.isCod);
 
-    const pendingPayment = await this.findPendingGatewayPayment(
-      currentCustomer.businessId,
-      row.id,
-    );
-
-    if (pendingPayment) {
-      throw new BadRequestException(
-        "A gateway payment is already pending for this order. Complete or fail the existing payment before starting another one.",
-      );
-    }
+    // if (pendingPayment) {
+    //   throw new BadRequestException(
+    //     "A gateway payment is already pending for this order. Complete or fail the existing payment before starting another one.",
+    //   );
+    // }
 
     const amount = new Decimal(row.totalAmount).minus(row.paidAmount);
 
@@ -569,28 +586,43 @@ export class PaymentGatewayService {
       currentCustomer.businessId,
     );
 
-    const [createdPayment] = await this.db
-      .insert(orderPayment)
-      .values({
-        businessId: currentCustomer.businessId,
-        orderId: row.id,
-        financeAccountId: config.config.financeAccountId,
-        gatewayId: config.gateway.id,
-        gatewayConfigId: config.config.id,
-        paymentNo,
-        amount,
-        paymentMethod: OrderPaymentMethod.OTHER,
-        paymentStatus: OrderPaymentStatus.PENDING,
-        transactionReference: paymentNo,
-        gatewayPayload: {
-          requestedRedirects: {
-            successRedirectUrl: dto.successRedirectUrl,
-            failRedirectUrl: dto.failRedirectUrl,
-            cancelRedirectUrl: dto.cancelRedirectUrl,
-          },
-        } as JsonValue,
-      })
-      .returning();
+    const createdPayment = await this.db.transaction(async (tx) => {
+      const pendingPayment = await this.findPendingGatewayPayment(
+        currentCustomer.businessId,
+        row.id,
+      );
+      if (pendingPayment) {
+        await tx
+          .update(orderPayment)
+          .set({ paymentStatus: OrderPaymentStatus.FAILED })
+          .where(eq(orderPayment.id, pendingPayment.id));
+      }
+
+      const [createdPayment] = await tx
+        .insert(orderPayment)
+        .values({
+          businessId: currentCustomer.businessId,
+          orderId: row.id,
+          financeAccountId: config.config.financeAccountId,
+          gatewayId: config.gateway.id,
+          gatewayConfigId: config.config.id,
+          paymentNo,
+          amount,
+          paymentMethod: OrderPaymentMethod.OTHER,
+          paymentStatus: OrderPaymentStatus.PENDING,
+          transactionReference: paymentNo,
+          gatewayPayload: {
+            requestedRedirects: {
+              successRedirectUrl: dto.successRedirectUrl,
+              failRedirectUrl: dto.failRedirectUrl,
+              cancelRedirectUrl: dto.cancelRedirectUrl,
+            },
+          } as JsonValue,
+        })
+        .returning();
+
+      return createdPayment;
+    });
 
     let initiated: Awaited<
       ReturnType<PaymentGatewayProviderService["initiate"]>
@@ -1027,8 +1059,40 @@ export class PaymentGatewayService {
           this.stringValue(payload.sp_order_id) ??
           this.stringValue(payload.order_id)
         );
+      case PaymentGatewayProvider.BKASH:
+        return (
+          this.stringValue(payload.paymentID) ??
+          this.stringValue(payload.paymentId) ??
+          this.stringValue(payload.trxID)
+        );
     }
   }
+
+  // private redactConfig(
+  //   provider: PaymentGatewayProvider,
+  //   config: Record<string, unknown>,
+  // ) {
+  //   const redacted = { ...config };
+  //   const sensitiveKeys: Record<PaymentGatewayProvider, string[]> = {
+  //     [PaymentGatewayProvider.SSLCOMMERZ]: ["storePassword"],
+  //     [PaymentGatewayProvider.AAMARPAY]: ["signatureKey"],
+  //     [PaymentGatewayProvider.SHURJOPAY]: ["password"],
+  //     [PaymentGatewayProvider.BKASH]: [
+  //       "appKey",
+  //       "appSecret",
+  //       "username",
+  //       "password",
+  //     ],
+  //   };
+
+  //   for (const key of sensitiveKeys[provider]) {
+  //     if (redacted[key]) {
+  //       redacted[key] = "********";
+  //     }
+  //   }
+
+  //   return redacted;
+  // }
 
   private stringValue(value: unknown) {
     if (typeof value === "string") {

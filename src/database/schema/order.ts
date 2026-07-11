@@ -192,6 +192,9 @@ export const orderCart = pgTable(
     }),
     sessionId: varchar("session_id", { length: 150 }),
     status: orderCartStatusEnum().notNull(),
+    weight: decimal({ precision: 12, scale: 2 })
+      .default(new Decimal(0))
+      .notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()

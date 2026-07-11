@@ -1,12 +1,20 @@
-import { and, count, desc, eq, ilike, isNull, or } from "drizzle-orm";
+import { and, count, desc, eq, exists, ilike, isNull, or } from "drizzle-orm";
 
-import { supplierInvoice } from "@/database/schema";
+import {
+  supplier,
+  supplierInvoice,
+  supplierPurchaseOrder,
+} from "@/database/schema";
 import { Injectable, NotFoundException } from "@nestjs/common";
 
 import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
 import { DatabaseService } from "../../../database/database.service";
 import { QuerySupplierInvoiceDto } from "../dto/supplier.dto";
 import { SupplierInvoiceRepository } from "../infrastructure/supplier-invoice.repository";
@@ -29,6 +37,8 @@ export class SupplierInvoiceQueryService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(supplierInvoice.businessId, businessId),
       isNull(supplierInvoice.deletedAt),
@@ -36,10 +46,49 @@ export class SupplierInvoiceQueryService {
         ? eq(supplierInvoice.supplierId, query.supplierId)
         : undefined,
       query.status ? eq(supplierInvoice.status, query.status) : undefined,
-      query.search
+      search
         ? or(
-            ilike(supplierInvoice.invoiceNo, `%${query.search}%`),
-            ilike(supplierInvoice.note, `%${query.search}%`),
+            searchUuid ? eq(supplierInvoice.id, searchUuid) : undefined,
+            searchUuid ? eq(supplierInvoice.supplierId, searchUuid) : undefined,
+            searchUuid
+              ? eq(supplierInvoice.purchaseOrderId, searchUuid)
+              : undefined,
+            ilike(supplierInvoice.invoiceNo, `%${search}%`),
+            ilike(supplierInvoice.note, `%${search}%`),
+            exists(
+              this.db
+                .select({ id: supplierPurchaseOrder.id })
+                .from(supplierPurchaseOrder)
+                .where(
+                  and(
+                    eq(
+                      supplierPurchaseOrder.id,
+                      supplierInvoice.purchaseOrderId,
+                    ),
+                    eq(supplierPurchaseOrder.businessId, businessId),
+                    ilike(supplierPurchaseOrder.purchaseOrderNo, `%${search}%`),
+                    isNull(supplierPurchaseOrder.deletedAt),
+                  ),
+                ),
+            ),
+            exists(
+              this.db
+                .select({ id: supplier.id })
+                .from(supplier)
+                .where(
+                  and(
+                    eq(supplier.id, supplierInvoice.supplierId),
+                    eq(supplier.businessId, businessId),
+                    isNull(supplier.deletedAt),
+                    or(
+                      ilike(supplier.name, `%${search}%`),
+                      ilike(supplier.companyName, `%${search}%`),
+                      ilike(supplier.email, `%${search}%`),
+                      ilike(supplier.phone, `%${search}%`),
+                    ),
+                  ),
+                ),
+            ),
           )
         : undefined,
     );

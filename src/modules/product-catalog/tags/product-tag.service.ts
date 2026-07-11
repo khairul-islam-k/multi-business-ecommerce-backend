@@ -1,4 +1,4 @@
-import { and, count, eq, exists, ilike, isNull } from "drizzle-orm";
+import { and, count, eq, exists, ilike, isNull, or } from "drizzle-orm";
 
 import {
   product,
@@ -17,6 +17,10 @@ import {
   buildOrderBy,
   resolveSortColumn,
 } from "../../../common/http/sort.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
 import {
   apiResponse,
   paginatedResponse,
@@ -80,11 +84,18 @@ export class ProductTagService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(productTag.businessId, businessId),
       isNull(productTag.deletedAt),
       query.status ? eq(productTag.status, query.status) : undefined,
-      query.search ? ilike(productTag.name, `%${query.search}%`) : undefined,
+      search
+        ? or(
+            searchUuid ? eq(productTag.id, searchUuid) : undefined,
+            ilike(productTag.name, `%${search}%`),
+          )
+        : undefined,
     );
 
     const [items, total] = await Promise.all([

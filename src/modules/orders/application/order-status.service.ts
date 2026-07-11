@@ -24,7 +24,9 @@ import { FinanceCodeService } from "../../finance/application/finance-code.servi
 import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
 import {
   assertCanCancelOrder,
+  assertCanConfirmOrder,
   assertCanDeliverOrder,
+  assertCanProcessOrder,
   assertCanShipOrder,
 } from "../domain/order-status-machine";
 import { OrderRepository } from "../infrastructure/order.repository";
@@ -44,6 +46,63 @@ export class OrderStatusService {
     return this.database.db;
   }
 
+  async confirm(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    orderId: string,
+  ) {
+    const order = await this.orders.getByIdOrThrow(businessId, orderId);
+
+    assertCanConfirmOrder(order.status);
+
+    const updatedOrder = await this.db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(orderTable)
+        .set({ status: OrderStatus.CONFIRMED })
+        .where(eq(orderTable.id, orderId))
+        .returning();
+
+      await tx.insert(orderStatusLog).values({
+        orderId,
+        fromStatus: order.status,
+        toStatus: OrderStatus.CONFIRMED,
+        changedBy: currentUser.id,
+      });
+
+      return this.orders.hydrate(updated, tx);
+    });
+
+    return apiResponse(updatedOrder, "Order status updated to confirmed.");
+  }
+
+  async process(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    orderId: string,
+  ) {
+    const order = await this.orders.getByIdOrThrow(businessId, orderId);
+
+    assertCanProcessOrder(order.status);
+
+    const updatedOrder = await this.db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(orderTable)
+        .set({ status: OrderStatus.PROCESSING })
+        .where(eq(orderTable.id, orderId))
+        .returning();
+
+      await tx.insert(orderStatusLog).values({
+        orderId,
+        fromStatus: order.status,
+        toStatus: OrderStatus.PROCESSING,
+        changedBy: currentUser.id,
+      });
+
+      return this.orders.hydrate(updated, tx);
+    });
+
+    return apiResponse(updatedOrder, "Order status updated to processing.");
+  }
   async ship(
     currentUser: CurrentUserPayload,
     businessId: string,

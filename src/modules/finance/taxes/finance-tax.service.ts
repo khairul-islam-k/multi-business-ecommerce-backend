@@ -16,6 +16,10 @@ import {
 
 import { isUniqueConstraintError } from "../../../common/database/db-error.util";
 import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
+import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
@@ -64,14 +68,17 @@ export class FinanceTaxService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(financeTax.businessId, businessId),
       isNull(financeTax.deletedAt),
       query.status ? eq(financeTax.status, query.status) : undefined,
-      query.search
+      search
         ? or(
-            ilike(financeTax.name, `%${query.search}%`),
-            ilike(financeTax.description, `%${query.search}%`),
+            searchUuid ? eq(financeTax.id, searchUuid) : undefined,
+            ilike(financeTax.name, `%${search}%`),
+            ilike(financeTax.description, `%${search}%`),
           )
         : undefined,
     );

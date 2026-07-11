@@ -29,6 +29,34 @@
       "when": 1783239870415,
       "tag": "0003_shocking_sandman",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1783317628611,
+      "tag": "0004_robust_firebrand",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1783399581611,
+      "tag": "0005_sour_joystick",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783489402775,
+      "tag": "0006_misty_mandarin",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1783491293076,
+      "tag": "0007_spooky_aaron_stack",
+      "breakpoints": true
     }
   ]
 }

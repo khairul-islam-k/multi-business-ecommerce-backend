@@ -1,12 +1,16 @@
-import { and, asc, count, eq, ilike, isNull, or } from "drizzle-orm";
+import { and, asc, count, eq, exists, ilike, isNull, or } from "drizzle-orm";
 
 import {
+  courierShipment,
   customer,
+  invoice,
   Order,
   order,
   orderItem,
   orderPayment,
   orderStatusLog,
+  product,
+  productVariant,
 } from "@/database/schema";
 import { Injectable, NotFoundException } from "@nestjs/common";
 
@@ -14,6 +18,10 @@ import {
   buildOrderBy,
   resolveSortColumn,
 } from "../../../common/http/sort.util";
+import {
+  normalizeSearch,
+  normalizeSearchUuid,
+} from "../../../common/http/search.util";
 import {
   Database,
   DatabaseService,
@@ -33,6 +41,8 @@ export class OrderRepository {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const search = normalizeSearch(query.search);
+    const searchUuid = normalizeSearchUuid(search);
     const where = and(
       eq(order.businessId, businessId),
       isNull(order.deletedAt),
@@ -41,11 +51,40 @@ export class OrderRepository {
         ? eq(order.paymentStatus, query.paymentStatus)
         : undefined,
       query.orderType ? eq(order.orderType, query.orderType) : undefined,
-      query.search
+      search
         ? or(
-            ilike(order.orderNo, `%${query.search}%`),
-            ilike(order.customerName, `%${query.search}%`),
-            ilike(order.customerPhone, `%${query.search}%`),
+            searchUuid ? eq(order.id, searchUuid) : undefined,
+            searchUuid ? eq(order.customerId, searchUuid) : undefined,
+            searchUuid ? eq(order.warehouseId, searchUuid) : undefined,
+            ilike(order.orderNo, `%${search}%`),
+            ilike(order.customerName, `%${search}%`),
+            ilike(order.customerPhone, `%${search}%`),
+            ilike(order.customerEmail, `%${search}%`),
+            ilike(order.note, `%${search}%`),
+            exists(
+              this.db
+                .select({ id: invoice.id })
+                .from(invoice)
+                .where(
+                  and(
+                    eq(invoice.businessId, businessId),
+                    eq(invoice.orderId, order.id),
+                    ilike(invoice.invoiceNo, `%${search}%`),
+                    isNull(invoice.deletedAt),
+                  ),
+                ),
+            ),
+            exists(
+              this.db
+                .select({ id: orderPayment.id })
+                .from(orderPayment)
+                .where(
+                  and(
+                    eq(orderPayment.orderId, order.id),
+                    ilike(orderPayment.paymentNo, `%${search}%`),
+                  ),
+                ),
+            ),
           )
         : undefined,
     );
@@ -131,25 +170,35 @@ export class OrderRepository {
     order: Order,
     client: Database | DatabaseTransaction = this.db,
   ) {
-    const [existingCustomer, items, payments, statusLogs] = await Promise.all([
-      order.customerId
-        ? client
-            .select()
-            .from(customer)
-            .where(eq(customer.id, order.customerId))
-            .then(([row]) => row ?? null)
-        : Promise.resolve(null),
-      client.select().from(orderItem).where(eq(orderItem.orderId, order.id)),
-      client
-        .select()
-        .from(orderPayment)
-        .where(eq(orderPayment.orderId, order.id)),
-      client
-        .select()
-        .from(orderStatusLog)
-        .where(eq(orderStatusLog.orderId, order.id))
-        .orderBy(asc(orderStatusLog.createdAt)),
-    ]);
+    const [existingCustomer, items, payments, statusLogs, shipments] =
+      await Promise.all([
+        order.customerId
+          ? client
+              .select()
+              .from(customer)
+              .where(eq(customer.id, order.customerId))
+              .then(([row]) => row ?? null)
+          : Promise.resolve(null),
+        client
+          .select({ item: orderItem, product, variant: productVariant })
+          .from(orderItem)
+          .where(eq(orderItem.orderId, order.id))
+          .innerJoin(product, eq(product.id, orderItem.productId))
+          .leftJoin(productVariant, eq(productVariant.id, orderItem.variantId)),
+        client
+          .select()
+          .from(orderPayment)
+          .where(eq(orderPayment.orderId, order.id)),
+        client
+          .select()
+          .from(orderStatusLog)
+          .where(eq(orderStatusLog.orderId, order.id))
+          .orderBy(asc(orderStatusLog.createdAt)),
+        client
+          .select()
+          .from(courierShipment)
+          .where(eq(courierShipment.orderId, order.id)),
+      ]);
 
     return {
       ...order,
@@ -157,6 +206,7 @@ export class OrderRepository {
       items,
       payments,
       statusLogs,
+      shipments,
     };
   }
 }

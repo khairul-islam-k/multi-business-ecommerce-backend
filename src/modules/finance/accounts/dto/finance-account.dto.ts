@@ -107,4 +107,9 @@ export class QueryFinanceTransactionDto {
   @Min(1)
   @Max(100)
   limit?: number = 10;
+
+  @ApiPropertyOptional({ example: "TXN-001" })
+  @IsOptional()
+  @IsString()
+  search?: string;
 }

@@ -1,4 +1,4 @@
-import { Type } from "class-transformer";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 import {
   IsEnum,
   IsNumber,
@@ -10,7 +10,7 @@ import {
 } from "class-validator";
 
 import { FinanceTaxStatus } from "@/database/schema";
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 
 export class CreateFinanceTaxDto {
   @ApiProperty({ example: "VAT 5%" })
@@ -45,12 +45,12 @@ export class QueryFinanceTaxDto {
   @Min(1)
   page?: number = 1;
 
-  @ApiPropertyOptional({ example: 20 })
+  @ApiPropertyOptional({ example: 10 })
   @IsOptional()
   @Type(() => Number)
   @Min(1)
   @Max(100)
-  limit?: number = 20;
+  limit?: number = 10;
 
   @ApiPropertyOptional({ example: "vat" })
   @IsOptional()

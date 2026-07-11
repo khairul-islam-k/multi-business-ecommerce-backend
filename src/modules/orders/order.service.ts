@@ -123,6 +123,22 @@ export class OrderService {
     );
   }
 
+  async confirm(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    orderId: string,
+  ) {
+    return this.orderStatusService.confirm(currentUser, businessId, orderId);
+  }
+
+  async process(
+    currentUser: CurrentUserPayload,
+    businessId: string,
+    orderId: string,
+  ) {
+    return this.orderStatusService.process(currentUser, businessId, orderId);
+  }
+
   async ship(
     currentUser: CurrentUserPayload,
     businessId: string,

@@ -11,6 +11,25 @@ const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   [OrderStatus.RETURNED]: "returned",
 };
 
+export function assertCanConfirmOrder(status: OrderStatus) {
+  const shippableStatuses: OrderStatus[] = [OrderStatus.PLACED];
+
+  if (!shippableStatuses.includes(status)) {
+    throw new BadRequestException(
+      `This order cannot be marked as shipped because it is currently ${formatOrderStatus(status)}. Only ${formatAllowedStatuses(shippableStatuses)} orders can be confirmed. Please move the order to an allowed status first, or review whether it has already been completed or cancelled.`,
+    );
+  }
+}
+
+export function assertCanProcessOrder(status: OrderStatus) {
+  const shippableStatuses: OrderStatus[] = [OrderStatus.CONFIRMED];
+
+  if (!shippableStatuses.includes(status)) {
+    throw new BadRequestException(
+      `This order cannot be marked as shipped because it is currently ${formatOrderStatus(status)}. Only ${formatAllowedStatuses(shippableStatuses)} orders can be processed. Please move the order to an allowed status first, or review whether it has already been completed or cancelled.`,
+    );
+  }
+}
 export function assertCanShipOrder(status: OrderStatus) {
   const shippableStatuses: OrderStatus[] = [
     OrderStatus.CONFIRMED,
