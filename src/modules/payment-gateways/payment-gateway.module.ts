@@ -8,8 +8,7 @@ import { OrderModule } from "../orders/order.module";
 import { PackageModule } from "../packages/package.module";
 import { PermissionModule } from "../permissions/permission.module";
 import { WebsiteModule } from "../website/website.module";
-import { PaymentConfigEncryptionService } from "./payment-config-encryption.service";
-import { PaymentGatewayProviderService } from "./payment-gateway-provider.service";
+import { PaymentGatewayCoreModule } from "./payment-gateway-core.module";
 import { PaymentGatewayController } from "./payment-gateway.controller";
 import { PaymentGatewayService } from "./payment-gateway.service";
 import { StorefrontPaymentGatewayController } from "./storefront-payment-gateway.controller";
@@ -22,15 +21,12 @@ import { StorefrontPaymentGatewayController } from "./storefront-payment-gateway
     FinanceModule,
     OrderModule,
     PackageModule,
+    PaymentGatewayCoreModule,
     PermissionModule,
     WebsiteModule,
   ],
   controllers: [PaymentGatewayController, StorefrontPaymentGatewayController],
-  providers: [
-    PaymentGatewayService,
-    PaymentGatewayProviderService,
-    PaymentConfigEncryptionService,
-  ],
+  providers: [PaymentGatewayService],
   exports: [PaymentGatewayService],
 })
 export class PaymentGatewayModule {}

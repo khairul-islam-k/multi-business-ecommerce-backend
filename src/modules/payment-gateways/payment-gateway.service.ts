@@ -31,13 +31,13 @@ import {
 import { AppConfigService } from "../../common/config/app-config.service";
 import { isUniqueConstraintError } from "../../common/database/db-error.util";
 import {
-  apiResponse,
-  paginatedResponse,
-} from "../../common/utils/api-response.util";
-import {
   normalizeSearch,
   normalizeSearchUuid,
 } from "../../common/http/search.util";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../common/utils/api-response.util";
 import {
   DatabaseService,
   DatabaseTransaction,
@@ -49,6 +49,7 @@ import {
   assertOrderIsNotCod,
 } from "../orders/domain/order-payment.policy";
 import { OrderCodeRepository } from "../orders/infrastructure/order-code.repository";
+import { TenantPackageService } from "../packages/tenant/tenant-package.service";
 import { WebsiteService } from "../website/website.service";
 import {
   BulkCreatePaymentGatewayConfigDto,
@@ -83,6 +84,7 @@ export class PaymentGatewayService {
     private readonly orderCodes: OrderCodeRepository,
     private readonly orderPayments: OrderPaymentService,
     private readonly finance: FinanceLedgerService,
+    private readonly packages: TenantPackageService,
   ) {}
 
   private get db() {
@@ -699,7 +701,17 @@ export class PaymentGatewayService {
     eventType: string,
     payload: Record<string, unknown>,
   ) {
-    const payment = await this.getGatewayPaymentOrThrow(provider, paymentId);
+    const payment = await this.findGatewayPayment(provider, paymentId);
+
+    if (!payment) {
+      return this.packages.handleGatewayCallback(
+        provider,
+        paymentId,
+        eventType,
+        payload,
+      );
+    }
+
     const config = await this.getConfigWithGatewayOrThrow(
       payment.businessId,
       payment.gatewayConfigId ?? "",
@@ -992,7 +1004,7 @@ export class PaymentGatewayService {
     return row;
   }
 
-  private async getGatewayPaymentOrThrow(
+  private async findGatewayPayment(
     provider: PaymentGatewayProvider,
     paymentId: string,
   ) {
@@ -1005,11 +1017,7 @@ export class PaymentGatewayService {
       )
       .limit(1);
 
-    if (!row) {
-      throw new NotFoundException("Gateway payment not found");
-    }
-
-    return row.payment;
+    return row?.payment ?? null;
   }
 
   private toConfigResponse(

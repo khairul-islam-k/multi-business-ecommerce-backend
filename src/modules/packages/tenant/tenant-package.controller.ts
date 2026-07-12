@@ -2,6 +2,7 @@ import { PermissionAction, RbacFeature } from "@/database/schema";
 import {
   Controller,
   ForbiddenException,
+  Body,
   Get,
   Param,
   ParseUUIDPipe,
@@ -19,6 +20,7 @@ import { PermissionGuard } from "../../permissions/guards/permission.guard";
 import { QueryPackageDto } from "../dto/query-package.dto";
 import { SubscriptionGuard } from "../guards/subscription.guard";
 import { PackageSubscriptionService } from "../package-subscription.service";
+import { CheckoutPackagePlanDto } from "./dto/tenant-package.dto";
 import { TenantPackageService } from "./tenant-package.service";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
@@ -98,17 +100,22 @@ export class TenantPackageController {
   checkoutPlan(
     @CurrentUser() currentUser: CurrentUserPayload,
     @Param("planId", ParseUUIDPipe) planId: string,
+    @Body() dto: CheckoutPackagePlanDto,
   ) {
-    return this.packages.checkoutPlan(this.getTenantId(currentUser), planId);
+    return this.packages.checkoutPlan(
+      this.getTenantId(currentUser),
+      planId,
+      dto,
+    );
   }
 
   @ApiBearerAuth()
   @RequirePermission(RbacFeature.PACKAGE_MANAGEMENT, PermissionAction.CREATE)
   @Post("mock-payments/:paymentId/confirm")
   @ApiOperation({
-    summary: "Confirm mock payment",
+    summary: "Confirm package payment",
     description:
-      "Confirms mock payment and updates the record so staff can see the action has been accepted.",
+      "Confirms package payment and updates the record so staff can see the action has been accepted.",
   })
   confirmMockPayment(
     @CurrentUser() currentUser: CurrentUserPayload,

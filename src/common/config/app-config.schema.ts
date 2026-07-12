@@ -135,6 +135,18 @@ export class EnvironmentVariables {
   @IsString()
   PAYMENT_CONFIG_ENCRYPTION_KEY!: string;
 
+  @IsOptional()
+  @IsIn(["SSLCOMMERZ", "AAMARPAY", "SHURJOPAY", "BKASH"])
+  PACKAGE_PAYMENT_PROVIDER?: string;
+
+  @IsOptional()
+  @IsIn(["SANDBOX", "LIVE"])
+  PACKAGE_PAYMENT_MODE?: string;
+
+  @IsOptional()
+  @IsString()
+  PACKAGE_PAYMENT_CONFIG_JSON?: string;
+
   @Type(() => Number)
   @IsInt()
   @Min(1)
@@ -151,6 +163,9 @@ function normalizeOptionalBlankValues(config: RawConfig) {
     "SEED_ADMIN_NAME",
     "SEED_ADMIN_EMAIL",
     "SEED_ADMIN_PASSWORD",
+    "PACKAGE_PAYMENT_PROVIDER",
+    "PACKAGE_PAYMENT_MODE",
+    "PACKAGE_PAYMENT_CONFIG_JSON",
   ];
   const normalizedConfig = { ...config };
 

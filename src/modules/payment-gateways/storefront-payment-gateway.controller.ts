@@ -9,7 +9,7 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
-  Request,
+  Res,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
@@ -23,6 +23,7 @@ import {
 import { PaymentGatewayService } from "./payment-gateway.service";
 
 import type { CurrentCustomerPayload } from "../customer-auth/strategies/customer-jwt.strategy";
+import type { Response } from "express";
 
 @ApiTags("Storefront Payment Gateways")
 @Controller()
@@ -68,12 +69,16 @@ export class StorefrontPaymentGatewayController {
     @Param("eventType") eventType: string,
     @Body() body: Record<string, unknown>,
     @Query() query: PaymentCallbackQueryDto,
+    @Res({ passthrough: true }) response: Response,
   ) {
-    return this.gateways.handleGatewayCallback(provider, paymentId, eventType, {
-      ...query,
-      ...body,
-      __magic: "",
-    });
+    return this.redirectIfRequested(
+      response,
+      this.gateways.handleGatewayCallback(provider, paymentId, eventType, {
+        ...query,
+        ...body,
+        __magic: "",
+      }),
+    );
   }
 
   @Get("payment-gateways/callbacks/:provider/:paymentId/:eventType")
@@ -84,14 +89,43 @@ export class StorefrontPaymentGatewayController {
     @Param("paymentId", ParseUUIDPipe) paymentId: string,
     @Param("eventType") eventType: string,
     @Query() query: Record<string, unknown>,
+    @Res({ passthrough: true }) response: Response,
   ) {
-    return this.gateways.handleGatewayCallback(provider, paymentId, eventType, {
-      ...query,
-      __magic: "",
-    });
+    return this.redirectIfRequested(
+      response,
+      this.gateways.handleGatewayCallback(provider, paymentId, eventType, {
+        ...query,
+        __magic: "",
+      }),
+    );
   }
 
   private getRequestHost(host?: string, forwardedHost?: string) {
     return forwardedHost ?? host;
+  }
+
+  private async redirectIfRequested(
+    response: Response,
+    resultPromise: ReturnType<PaymentGatewayService["handleGatewayCallback"]>,
+  ) {
+    const result = await resultPromise;
+    const redirectUrl = this.getRedirectUrl(result.data);
+
+    if (redirectUrl) {
+      response.redirect(302, redirectUrl);
+      return;
+    }
+
+    return result;
+  }
+
+  private getRedirectUrl(data: unknown) {
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      return null;
+    }
+
+    const value = (data as Record<string, unknown>).redirectUrl;
+
+    return typeof value === "string" && value.trim() ? value : null;
   }
 }

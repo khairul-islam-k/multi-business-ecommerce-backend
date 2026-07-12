@@ -15,6 +15,12 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { decimal, JsonValue } from "./common";
+import {
+  paymentGateway,
+  paymentGatewayConfigStatusEnum,
+  paymentGatewayModeEnum,
+  paymentWebhookStatusEnum,
+} from "./payment_gateway";
 import { systemUser } from "./system";
 
 export const PackageBillingCycle = {
@@ -94,6 +100,7 @@ export const PackagePaymentStatus = {
   CONFIRMED: "CONFIRMED",
   CANCELLED: "CANCELLED",
   EXPIRED: "EXPIRED",
+  FAILED: "FAILED",
 } as const;
 export type PackagePaymentStatus =
   (typeof PackagePaymentStatus)[keyof typeof PackagePaymentStatus];
@@ -102,6 +109,7 @@ export const packagePaymentStatusEnum = pgEnum("PackagePaymentStatus", [
   "CONFIRMED",
   "CANCELLED",
   "EXPIRED",
+  "FAILED",
 ]);
 
 export const PackagePaymentType = {
@@ -257,6 +265,47 @@ export const packageSubscription = pgTable(
 export type PackageSubscription = typeof packageSubscription.$inferSelect;
 export type NewPackageSubscription = typeof packageSubscription.$inferInsert;
 
+export const packagePaymentGatewayConfig = pgTable(
+  "package_payment_gateway_configs",
+  {
+    id: uuid().primaryKey().defaultRandom().notNull(),
+    gatewayId: uuid("gateway_id")
+      .notNull()
+      .references((): AnyPgColumn => paymentGateway.id, {
+        onDelete: "restrict",
+      }),
+    configData: jsonb("config_data").$type<JsonValue>().notNull(),
+    mode: paymentGatewayModeEnum().notNull(),
+    status: paymentGatewayConfigStatusEnum().notNull(),
+    createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    deletedBy: uuid("deleted_by").references((): AnyPgColumn => systemUser.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+    deletedAt: timestamp("deleted_at", { mode: "date" }),
+  },
+  (table) => [
+    uniqueIndex("package_payment_gateway_configs_gateway_active_unique")
+      .on(table.gatewayId)
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("package_payment_gateway_configs_gateway_id_idx").on(table.gatewayId),
+    index("package_payment_gateway_configs_status_idx").on(table.status),
+  ],
+);
+export type PackagePaymentGatewayConfig =
+  typeof packagePaymentGatewayConfig.$inferSelect;
+export type NewPackagePaymentGatewayConfig =
+  typeof packagePaymentGatewayConfig.$inferInsert;
+
 export const packageTenantCreditLedger = pgTable(
   "package_tenant_credit_ledger",
   {
@@ -346,11 +395,22 @@ export const packagePayment = pgTable(
     }),
     type: packagePaymentTypeEnum().notNull(),
     status: packagePaymentStatusEnum().notNull(),
+    paymentNo: varchar("payment_no", { length: 100 }),
     amount: decimal({ precision: 12, scale: 2 }).notNull(),
     currencyCode: varchar("currency_code", { length: 10 }).notNull(),
+    gatewayConfigId: uuid("gateway_config_id").references(
+      (): AnyPgColumn => packagePaymentGatewayConfig.id,
+      { onDelete: "set null" },
+    ),
+    gatewaySessionId: varchar("gateway_session_id", { length: 255 }),
+    gatewayTransactionId: varchar("gateway_transaction_id", { length: 255 }),
+    gatewayEventId: varchar("gateway_event_id", { length: 255 }),
+    gatewayPayload: jsonb("gateway_payload").$type<JsonValue>(),
     metadata: jsonb().$type<JsonValue>(),
     expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
     confirmedAt: timestamp("confirmed_at", { mode: "date" }),
+    failedAt: timestamp("failed_at", { mode: "date" }),
+    failureReason: text("failure_reason"),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .defaultNow()
@@ -362,8 +422,53 @@ export const packagePayment = pgTable(
     index("package_payments_subscription_id_idx").on(table.subscriptionId),
     index("package_payments_plan_id_idx").on(table.planId),
     index("package_payments_status_idx").on(table.status),
+    uniqueIndex("package_payments_payment_no_unique")
+      .on(table.paymentNo)
+      .where(sql`${table.paymentNo} IS NOT NULL`),
+    index("package_payments_gateway_config_id_idx").on(table.gatewayConfigId),
+    index("package_payments_gateway_session_id_idx").on(table.gatewaySessionId),
+    index("package_payments_gateway_transaction_id_idx").on(
+      table.gatewayTransactionId,
+    ),
+    index("package_payments_gateway_event_id_idx").on(table.gatewayEventId),
     index("package_payments_expires_at_idx").on(table.expiresAt),
   ],
 );
 export type PackagePayment = typeof packagePayment.$inferSelect;
 export type NewPackagePayment = typeof packagePayment.$inferInsert;
+
+export const packagePaymentWebhookEvent = pgTable(
+  "package_payment_webhook_events",
+  {
+    id: uuid().primaryKey().defaultRandom().notNull(),
+    gatewayId: uuid("gateway_id")
+      .notNull()
+      .references((): AnyPgColumn => paymentGateway.id, {
+        onDelete: "restrict",
+      }),
+    packagePaymentId: uuid("package_payment_id").references(
+      (): AnyPgColumn => packagePayment.id,
+      { onDelete: "cascade" },
+    ),
+    eventType: varchar("event_type", { length: 100 }).notNull(),
+    eventId: varchar("event_id", { length: 150 }),
+    payload: jsonb().$type<JsonValue>().notNull(),
+    status: paymentWebhookStatusEnum().notNull(),
+    processedAt: timestamp("processed_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("package_payment_webhook_events_gateway_id_idx").on(table.gatewayId),
+    index("package_payment_webhook_events_payment_id_idx").on(
+      table.packagePaymentId,
+    ),
+    index("package_payment_webhook_events_event_type_idx").on(table.eventType),
+    index("package_payment_webhook_events_event_id_idx").on(table.eventId),
+    index("package_payment_webhook_events_status_idx").on(table.status),
+    index("package_payment_webhook_events_created_at_idx").on(table.createdAt),
+  ],
+);
+export type PackagePaymentWebhookEvent =
+  typeof packagePaymentWebhookEvent.$inferSelect;
+export type NewPackagePaymentWebhookEvent =
+  typeof packagePaymentWebhookEvent.$inferInsert;

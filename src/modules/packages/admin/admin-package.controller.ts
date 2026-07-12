@@ -153,9 +153,9 @@ export class AdminPackageController {
 
   @Patch("mock-payments/expire")
   @ApiOperation({
-    summary: "Expire pending mock payments",
+    summary: "Expire pending package payments",
     description:
-      "Expires pending mock payments that should no longer remain pending.",
+      "Expires pending package payments that should no longer remain pending.",
   })
   expirePendingMockPayments() {
     return this.packages.expirePendingMockPayments();

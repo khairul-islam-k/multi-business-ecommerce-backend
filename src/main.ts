@@ -32,20 +32,30 @@ async function bootstrap() {
   const database = app.get(DatabaseService);
   const uploadRoot = appConfig.mediaUploadRoot;
   const publicUploadPrefix = appConfig.publicUploadPrefix;
+  const corsMethods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
+  const corsAllowedHeaders = [
+    "Content-Type",
+    "Authorization",
+    "x-forwarded-host",
+    "host",
+  ];
+  const corsOrigin = createCorsOrigin({
+    allowedOrigins: appConfig.corsOrigins,
+    allowedSubdomainBases: appConfig.corsSubdomainBases,
+    isAllowedCustomDomain: createCustomDomainCorsChecker(database),
+  });
 
-  app.enableCors({
-    origin: createCorsOrigin({
-      allowedOrigins: appConfig.corsOrigins,
-      allowedSubdomainBases: appConfig.corsSubdomainBases,
-      isAllowedCustomDomain: createCustomDomainCorsChecker(database),
-    }),
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "x-forwarded-host",
-      "host",
-    ],
+  app.enableCors((request, callback) => {
+    const origin = request.headers.origin;
+    const path = request.originalUrl ?? request.url ?? "";
+    const allowNullPaymentCallbackOrigin =
+      origin === "null" && path.includes("/payment-gateways/callbacks/");
+
+    callback(null, {
+      origin: allowNullPaymentCallbackOrigin ? true : corsOrigin,
+      methods: corsMethods,
+      allowedHeaders: corsAllowedHeaders,
+    });
   });
 
   app.setGlobalPrefix("api/v1");

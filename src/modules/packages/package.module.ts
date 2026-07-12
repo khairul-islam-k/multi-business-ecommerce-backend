@@ -1,5 +1,6 @@
 import { forwardRef, Module } from "@nestjs/common";
 
+import { PaymentGatewayCoreModule } from "../payment-gateways/payment-gateway-core.module";
 import { PermissionModule } from "../permissions/permission.module";
 import { AdminPackageController } from "./admin/admin-package.controller";
 import { AdminPackageService } from "./admin/admin-package.service";
@@ -11,7 +12,7 @@ import { TenantPackageController } from "./tenant/tenant-package.controller";
 import { TenantPackageService } from "./tenant/tenant-package.service";
 
 @Module({
-  imports: [forwardRef(() => PermissionModule)],
+  imports: [forwardRef(() => PermissionModule), PaymentGatewayCoreModule],
   controllers: [AdminPackageController, TenantPackageController],
   providers: [
     AdminPackageService,
@@ -22,6 +23,7 @@ import { TenantPackageService } from "./tenant/tenant-package.service";
     PackageLimitGuard,
   ],
   exports: [
+    TenantPackageService,
     PackageSubscriptionService,
     PackageLimitService,
     SubscriptionGuard,

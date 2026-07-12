@@ -111,4 +111,18 @@ export class AppConfigService {
       "PAYMENT_CONFIG_ENCRYPTION_KEY",
     );
   }
+
+  get packagePaymentProvider() {
+    return this.configService.get<string>("PACKAGE_PAYMENT_PROVIDER") ?? null;
+  }
+
+  get packagePaymentMode() {
+    return this.configService.get<string>("PACKAGE_PAYMENT_MODE") ?? null;
+  }
+
+  get packagePaymentConfigJson() {
+    return (
+      this.configService.get<string>("PACKAGE_PAYMENT_CONFIG_JSON") ?? null
+    );
+  }
 }

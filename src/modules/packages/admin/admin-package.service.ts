@@ -385,7 +385,7 @@ export class AdminPackageService {
 
     return apiResponse(
       { count: expired.length },
-      "Expired pending package mock payments",
+      "Expired pending package payments",
     );
   }
 
