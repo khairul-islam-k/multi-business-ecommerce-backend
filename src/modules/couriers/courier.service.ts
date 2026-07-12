@@ -843,7 +843,8 @@ export class CourierService {
       merchantParcelId: shipment.shipmentNo,
       customerName:
         shipment.recipientName ?? orderRow.customerName ?? "Customer",
-      customerPhone: shipment.recipientPhone ?? orderRow.customerPhone ?? "",
+      customerPhone:
+        shipment.recipientPhone ?? orderRow.customerPhone ?? "0123456789",
       deliveryAreaId: this.required(
         shipment.deliveryAreaId,
         "Delivery area is missing",

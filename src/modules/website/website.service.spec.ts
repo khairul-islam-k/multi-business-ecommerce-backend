@@ -1,9 +1,4 @@
-import { describe, expect, it, jest } from "@jest/globals";
-import { BadRequestException } from "@nestjs/common";
-
 import {
-  WebsiteStatus,
-  WebsiteTemplate,
   website,
   websiteConfig,
   websiteDomain,
@@ -11,8 +6,12 @@ import {
   WebsiteDomainType,
   WebsiteDomainVerificationStatus,
   websiteSeoSetting,
+  WebsiteStatus,
+  WebsiteTemplate,
   websiteThemeSetting,
 } from "@/database/schema";
+import { describe, expect, it, jest } from "@jest/globals";
+import { BadRequestException } from "@nestjs/common";
 
 import { WebsiteService } from "./website.service";
 

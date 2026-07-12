@@ -37,6 +37,11 @@ import { OverviewQueryDto } from "./dto/dashboard.dto";
 
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 
+type DateRange = {
+  from: Date;
+  to: Date;
+};
+
 type OverviewCard = {
   key: string;
   label: string;
@@ -1132,8 +1137,3 @@ export class DashboardService {
     return JSON.stringify(value);
   }
 }
-
-type DateRange = {
-  from: Date;
-  to: Date;
-};

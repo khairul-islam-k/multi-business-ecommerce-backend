@@ -35,13 +35,13 @@ import {
 
 import { isUniqueConstraintError } from "../../common/database/db-error.util";
 import {
-  apiResponse,
-  paginatedResponse,
-} from "../../common/utils/api-response.util";
-import {
   normalizeSearch,
   normalizeSearchUuid,
 } from "../../common/http/search.util";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../common/utils/api-response.util";
 import {
   generateRandomSlug,
   slugify,
@@ -108,13 +108,13 @@ export class WebsiteService {
           .returning();
 
         await Promise.all(
-          this.appConfig.corsSubdomainBases.map(async (domain) => {
+          this.appConfig.corsSubdomainBases.map(async (domain, i) => {
             await tx.insert(websiteDomain).values({
               websiteId: item.id,
               domain: null,
               subdomain: `${subdomain}.${domain}`,
               domainType: WebsiteDomainType.SUBDOMAIN,
-              isPrimary: true,
+              isPrimary: i === 0,
               verificationStatus: WebsiteDomainVerificationStatus.VERIFIED,
               sslStatus: WebsiteDomainSslStatus.ACTIVE,
               verifiedAt: new Date(),
