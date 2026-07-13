@@ -1,4 +1,3 @@
-import { sql } from "drizzle-orm";
 import {
   AnyPgColumn,
   boolean,
@@ -14,16 +13,18 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
-import { business } from "./business";
 import { JsonValue } from "./common";
+import { business } from "./business";
+import { sql } from "drizzle-orm";
 import { systemUser } from "./system";
 
 export const WebsiteTemplate = {
   FASHION: "FASHION",
+  ELECTRONIC: "ELECTRONIC",
 } as const;
 export type WebsiteTemplate =
   (typeof WebsiteTemplate)[keyof typeof WebsiteTemplate];
-export const websiteTemplateEnum = pgEnum("WebsiteTemplate", ["FASHION"]);
+export const websiteTemplateEnum = pgEnum("WebsiteTemplate", ["FASHION", "ELECTRONIC"]);
 
 export const WebsiteStatus = {
   DRAFT: "DRAFT",
