@@ -89,12 +89,12 @@ export class StorefrontController {
   findProductReviews(
     @Headers("host") host: string | undefined,
     @Headers("x-forwarded-host") forwardedHost: string | undefined,
-    @Param("productId", ParseUUIDPipe) productId: string,
+    @Param("productSlug", ParseUUIDPipe) productSlug: string,
     @Query() query: StorefrontProductReviewQueryDto,
   ) {
     return this.storefront.findProductReviews(
       this.getRequestHost(host, forwardedHost),
-      productId,
+      productSlug,
       query,
     );
   }

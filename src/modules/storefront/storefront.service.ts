@@ -433,14 +433,18 @@ export class StorefrontService {
 
   async findProductReviews(
     host: string | undefined,
-    productId: string,
+    productSlug: string,
     query: StorefrontProductReviewQueryDto,
   ) {
     const website = await this.getPublishedWebsite(host);
+    const product = await this.getActiveProductBySlugOrThrow(
+      website.businessId,
+      productSlug,
+    );
     const { reviews, page, limit, total, totalPages } =
       await this.reviews.findApprovedForProduct(
         website.businessId,
-        productId,
+        product.id,
         undefined,
         query,
       );
