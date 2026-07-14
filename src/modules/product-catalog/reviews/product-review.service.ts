@@ -1,3 +1,4 @@
+import Decimal from "decimal.js";
 import { and, avg, count, desc, eq, isNull } from "drizzle-orm";
 
 import { productReview, ProductReviewStatus } from "@/database/schema";
@@ -16,6 +17,7 @@ import {
 } from "./dto/product-review.dto";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import { StorefrontProductReviewQueryDto } from "@/modules/storefront/dto/storefront.dto";
 
 @Injectable()
 export class ProductReviewService {
@@ -42,7 +44,7 @@ export class ProductReviewService {
         businessId,
         productId: dto.productId,
         variantId: dto.variantId ?? null,
-        rating: dto.rating,
+        rating: new Decimal(dto.rating),
         title: this.normalizeNullableText(dto.title),
         comment: this.normalizeNullableText(dto.comment),
         reviewerName: dto.reviewerName.trim(),
@@ -104,20 +106,51 @@ export class ProductReviewService {
     businessId: string,
     productId: string,
     variantId?: string,
+    query?: StorefrontProductReviewQueryDto,
   ) {
-    return this.db
-      .select()
-      .from(productReview)
-      .where(
-        and(
-          eq(productReview.businessId, businessId),
-          eq(productReview.productId, productId),
-          variantId ? eq(productReview.variantId, variantId) : undefined,
-          eq(productReview.status, ProductReviewStatus.APPROVED),
-          isNull(productReview.deletedAt),
-        ),
-      )
-      .orderBy(desc(productReview.createdAt));
+    const page = query?.page ?? 1;
+    const limit = query?.limit ?? 12;
+    const skip = (page - 1) * limit;
+
+    const [reviews, total] = await Promise.all([
+      this.db
+        .select()
+        .from(productReview)
+        .where(
+          and(
+            eq(productReview.businessId, businessId),
+            eq(productReview.productId, productId),
+            variantId ? eq(productReview.variantId, variantId) : undefined,
+            eq(productReview.status, ProductReviewStatus.APPROVED),
+            isNull(productReview.deletedAt),
+          ),
+        )
+        .orderBy(desc(productReview.createdAt))
+        .limit(limit)
+        .offset(skip),
+
+      this.db
+        .select({ value: count() })
+        .from(productReview)
+        .where(
+          and(
+            eq(productReview.businessId, businessId),
+            eq(productReview.productId, productId),
+            variantId ? eq(productReview.variantId, variantId) : undefined,
+            eq(productReview.status, ProductReviewStatus.APPROVED),
+            isNull(productReview.deletedAt),
+          ),
+        )
+        .then(([row]) => row?.value ?? 0),
+    ]);
+
+    return {
+      reviews,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async getSummary(businessId: string, productId: string, variantId?: string) {

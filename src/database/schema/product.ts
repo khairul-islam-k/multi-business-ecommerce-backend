@@ -558,7 +558,7 @@ export const productReview = pgTable(
       (): AnyPgColumn => productVariant.id,
       { onDelete: "set null" },
     ),
-    rating: integer().notNull(),
+    rating: decimal().notNull(),
     title: varchar({ length: 150 }),
     comment: text(),
     reviewerName: varchar("reviewer_name", { length: 150 }).notNull(),

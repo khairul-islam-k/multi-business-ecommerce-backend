@@ -35,11 +35,11 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 
-import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 import {
   normalizeSearch,
   normalizeSearchUuid,
 } from "../../common/http/search.util";
+import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 import {
   apiResponse,
   paginatedResponse,
@@ -51,6 +51,7 @@ import {
   ResolveStorefrontVariantDto,
   StorefrontCatalogSearchDto,
   StorefrontProductQueryDto,
+  StorefrontProductReviewQueryDto,
   StorefrontProductSortBy,
 } from "./dto/storefront.dto";
 
@@ -430,14 +431,25 @@ export class StorefrontService {
     return apiResponse(await this.hydrateVariant(item, matchedVariant));
   }
 
-  async findProductReviews(host: string | undefined, productId: string) {
+  async findProductReviews(
+    host: string | undefined,
+    productId: string,
+    query: StorefrontProductReviewQueryDto,
+  ) {
     const website = await this.getPublishedWebsite(host);
-    const reviews = await this.reviews.findApprovedForProduct(
-      website.businessId,
-      productId,
-    );
+    const { reviews, page, limit, total, totalPages } =
+      await this.reviews.findApprovedForProduct(
+        website.businessId,
+        productId,
+        undefined,
+        query,
+      );
 
-    return apiResponse(reviews);
+    return paginatedResponse(
+      reviews,
+      { page, limit, total, totalPages },
+      "Storefront product reviews were loaded successfully. The response includes the requested page of active storefront product reviews and pagination metadata for browsing more results.",
+    );
   }
 
   private async getPublishedWebsite(host?: string) {

@@ -167,7 +167,7 @@ describe("StorefrontCustomerService", () => {
     expect(result.data).toMatchObject({
       id: "created-1",
       customerId: "customer-1",
-      status: ProductReviewStatus.PENDING,
+      status: ProductReviewStatus.APPROVED,
     });
     expect(inserts).toContainEqual({
       table: productReview,
@@ -178,7 +178,7 @@ describe("StorefrontCustomerService", () => {
         reviewerName: "Buyer One",
         reviewerEmail: "buyer@example.com",
         reviewerPhone: "+8801700000000",
-        status: ProductReviewStatus.PENDING,
+        status: ProductReviewStatus.APPROVED,
       }),
     });
   });

@@ -762,7 +762,7 @@ export class StorefrontCustomerService {
         productId: dto.productId,
         customerId: currentCustomer.customerId,
         variantId: dto.variantId ?? null,
-        rating: dto.rating,
+        rating: new Decimal(dto.rating),
         title: normalizeOptionalText(dto.title),
         comment: normalizeOptionalText(dto.comment),
         reviewerName: normalizeRequiredText(customerRow.name),

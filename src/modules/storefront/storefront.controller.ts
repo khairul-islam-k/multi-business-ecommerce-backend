@@ -14,6 +14,7 @@ import {
   ResolveStorefrontVariantDto,
   StorefrontCatalogSearchDto,
   StorefrontProductQueryDto,
+  StorefrontProductReviewQueryDto,
 } from "./dto/storefront.dto";
 import { StorefrontService } from "./storefront.service";
 
@@ -89,10 +90,12 @@ export class StorefrontController {
     @Headers("host") host: string | undefined,
     @Headers("x-forwarded-host") forwardedHost: string | undefined,
     @Param("productId", ParseUUIDPipe) productId: string,
+    @Query() query: StorefrontProductReviewQueryDto,
   ) {
     return this.storefront.findProductReviews(
       this.getRequestHost(host, forwardedHost),
       productId,
+      query,
     );
   }
 

@@ -11,7 +11,10 @@ import {
 
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
-import { SortedPaginationQueryDto } from "../../../common/http/query.dto";
+import {
+  PaginationQueryDto,
+  SortedPaginationQueryDto,
+} from "../../../common/http/query.dto";
 
 export class StorefrontCatalogSearchDto {
   @ApiPropertyOptional({ example: "search" })
@@ -55,6 +58,8 @@ export class StorefrontProductQueryDto extends SortedPaginationQueryDto<Storefro
   @IsIn(Object.values(StorefrontProductSortBy))
   sortBy?: StorefrontProductSortBy = StorefrontProductSortBy.CREATED_AT;
 }
+
+export class StorefrontProductReviewQueryDto extends PaginationQueryDto {}
 
 export class StorefrontVariantAttributeSelectionDto {
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
