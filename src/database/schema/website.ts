@@ -24,7 +24,10 @@ export const WebsiteTemplate = {
 } as const;
 export type WebsiteTemplate =
   (typeof WebsiteTemplate)[keyof typeof WebsiteTemplate];
-export const websiteTemplateEnum = pgEnum("WebsiteTemplate", ["FASHION", "ELECTRONIC"]);
+export const websiteTemplateEnum = pgEnum("WebsiteTemplate", [
+  "FASHION",
+  "ELECTRONIC",
+]);
 
 export const WebsiteStatus = {
   DRAFT: "DRAFT",

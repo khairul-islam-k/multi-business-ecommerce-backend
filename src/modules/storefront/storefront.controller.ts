@@ -84,12 +84,12 @@ export class StorefrontController {
     );
   }
 
-  @Get("products/:productId/reviews")
+  @Get("products/:productSlug/reviews")
   @ApiOperation({ summary: "Get storefront product reviews" })
   findProductReviews(
     @Headers("host") host: string | undefined,
     @Headers("x-forwarded-host") forwardedHost: string | undefined,
-    @Param("productSlug", ParseUUIDPipe) productSlug: string,
+    @Param("productSlug") productSlug: string,
     @Query() query: StorefrontProductReviewQueryDto,
   ) {
     return this.storefront.findProductReviews(
