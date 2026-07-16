@@ -122,32 +122,27 @@ export class InventoryLookupService {
 
   async getStock(
     businessId: string,
-    productIdOrVariantId: string,
+    productId: string,
     variantId?: string | null,
   ) {
-    const productId = variantId === undefined ? "" : productIdOrVariantId;
-    const itemVariantId =
-      variantId === undefined ? productIdOrVariantId : variantId;
-
     const [stock] = await this.db
       .select()
       .from(inventoryStock)
       .where(
-        variantId === undefined
+        variantId
           ? and(
               eq(inventoryStock.businessId, businessId),
-              eq(inventoryStock.variantId, productIdOrVariantId),
+              eq(inventoryStock.productId, productId),
+              eq(inventoryStock.variantId, variantId),
+              eq(
+                inventoryStock.stockItemKey,
+                buildStockItemKey(productId, variantId),
+              ),
             )
           : and(
               eq(inventoryStock.businessId, businessId),
               eq(inventoryStock.productId, productId),
-              itemVariantId
-                ? eq(inventoryStock.variantId, itemVariantId)
-                : isNull(inventoryStock.variantId),
-              eq(
-                inventoryStock.stockItemKey,
-                buildStockItemKey(productId, itemVariantId),
-              ),
+              isNull(inventoryStock.variantId),
             ),
       );
 
@@ -157,34 +152,29 @@ export class InventoryLookupService {
   async getWarehouseStock(
     businessId: string,
     warehouseId: string,
-    productIdOrVariantId: string,
+    productId: string,
     variantId?: string | null,
   ) {
-    const productId = variantId === undefined ? "" : productIdOrVariantId;
-    const itemVariantId =
-      variantId === undefined ? productIdOrVariantId : variantId;
-
     const [warehouseStock] = await this.db
       .select()
       .from(inventoryWarehouseStock)
       .where(
-        variantId === undefined
+        variantId
           ? and(
               eq(inventoryWarehouseStock.businessId, businessId),
               eq(inventoryWarehouseStock.warehouseId, warehouseId),
-              eq(inventoryWarehouseStock.variantId, productIdOrVariantId),
+              eq(inventoryWarehouseStock.productId, productId),
+              eq(inventoryWarehouseStock.variantId, variantId),
+              eq(
+                inventoryWarehouseStock.stockItemKey,
+                buildStockItemKey(productId, variantId),
+              ),
             )
           : and(
               eq(inventoryWarehouseStock.businessId, businessId),
               eq(inventoryWarehouseStock.warehouseId, warehouseId),
               eq(inventoryWarehouseStock.productId, productId),
-              itemVariantId
-                ? eq(inventoryWarehouseStock.variantId, itemVariantId)
-                : isNull(inventoryWarehouseStock.variantId),
-              eq(
-                inventoryWarehouseStock.stockItemKey,
-                buildStockItemKey(productId, itemVariantId),
-              ),
+              isNull(inventoryWarehouseStock.variantId),
             ),
       );
 

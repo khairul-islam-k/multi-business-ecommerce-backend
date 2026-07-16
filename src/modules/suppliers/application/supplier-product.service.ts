@@ -283,10 +283,10 @@ export class SupplierProductService {
             supplierSku: normalizeNullableText(dto.supplierSku),
           }),
           ...(dto.lastPurchasePrice !== undefined && {
-            lastPurchasePrice: new Decimal(dto.lastPurchasePrice),
+            lastPurchasePrice: new Decimal(dto.lastPurchasePrice || 0),
           }),
           ...(dto.minOrderQuantity !== undefined && {
-            minOrderQuantity: new Decimal(dto.minOrderQuantity),
+            minOrderQuantity: new Decimal(dto.minOrderQuantity || 0),
           }),
           ...(dto.leadTimeDays !== undefined && {
             leadTimeDays: dto.leadTimeDays,

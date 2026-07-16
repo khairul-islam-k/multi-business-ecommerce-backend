@@ -347,13 +347,13 @@ export class ProductCatalogLookupService {
     }
 
     const attributeIds = pairs.map((pair) => pair.attributeId);
-    const uniqueAttributeIds = new Set(attributeIds);
+    // const uniqueAttributeIds = new Set(attributeIds);
 
-    if (uniqueAttributeIds.size !== pairs.length) {
-      throw new BadRequestException(
-        "Variant cannot use the same attribute more than once",
-      );
-    }
+    // if (uniqueAttributeIds.size !== pairs.length) {
+    //   throw new BadRequestException(
+    //     "Variant cannot use the same attribute more than once",
+    //   );
+    // }
 
     const valueIds = pairs.map((pair) => pair.attributeValueId);
     const values = await this.db

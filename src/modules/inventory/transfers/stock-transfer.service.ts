@@ -90,6 +90,7 @@ export class StockTransferService {
       ),
     ]);
 
+    console.log(dto.items);
     const stockChecks = await Promise.all(
       dto.items.map(async (item) => {
         const availableStock =
@@ -99,6 +100,7 @@ export class StockTransferService {
             item.productId,
             item.variantId,
           );
+        console.log(availableStock);
 
         return availableStock.totalQuantity.lessThan(item.requestedQuantity);
       }),
