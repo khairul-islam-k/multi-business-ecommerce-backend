@@ -254,13 +254,21 @@ export const product = pgTable(
       .references((): AnyPgColumn => financeTax.id, {
         onDelete: "restrict",
       }),
+
     name: varchar({ length: 200 }).notNull(),
     slug: varchar({ length: 220 }).notNull(),
     description: text(),
     sku: varchar({ length: 100 }).notNull(),
     barcode: varchar({ length: 100 }).notNull(),
+
     price: decimal({ precision: 12, scale: 2 }).notNull(),
     weight: decimal({ precision: 10, scale: 2 }).notNull(),
+
+    inOffer: boolean("in_offer").default(false),
+    offerPrice: decimal("offer_price"),
+    startingFrom: timestamp("starting_from"),
+    endsIn: timestamp("ends_in"),
+
     status: catalogProductStatusEnum().notNull(),
     createdBy: uuid("created_by").references((): AnyPgColumn => systemUser.id, {
       onDelete: "set null",

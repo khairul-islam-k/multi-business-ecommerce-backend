@@ -17,6 +17,7 @@ import {
 import { ProductVariantStatus } from "@/database/schema";
 import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 
+import { SearchablePaginationQueryDto } from "../../../../common/http/query.dto";
 import { ProductImagesDto } from "../../common/dto/product-media.dto";
 
 export class ProductVariantAttributeInputDto {
@@ -113,14 +114,9 @@ export class ProductVariantOptionsDto {
   includeOutOfStock?: boolean;
 }
 
-export class QueryProductVariantDto {
+export class QueryProductVariantDto extends SearchablePaginationQueryDto {
   @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsOptional()
   @IsUUID()
   warehouseId?: string;
-
-  @ApiPropertyOptional({ example: "red" })
-  @IsOptional()
-  @IsString()
-  search?: string;
 }

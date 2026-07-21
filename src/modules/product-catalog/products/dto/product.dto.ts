@@ -1,6 +1,8 @@
 import { Type } from "class-transformer";
 import {
   IsArray,
+  IsBoolean,
+  IsDate,
   IsEnum,
   IsIn,
   IsNumber,
@@ -48,6 +50,38 @@ export class CreateProductDto extends ProductImagesDto {
   @IsNumber()
   @Min(0.001)
   weight!: number;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @IsBoolean()
+  inOffer?: boolean;
+
+  @ApiPropertyOptional({ example: 999 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  offerPrice?: number | null;
+
+  @ApiPropertyOptional({
+    example: "2026-07-21T00:00:00.000Z",
+    type: String,
+    format: "date-time",
+  })
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  startingFrom?: Date | null;
+
+  @ApiPropertyOptional({
+    example: "2026-07-31T23:59:59.000Z",
+    type: String,
+    format: "date-time",
+  })
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  endsIn?: Date | null;
 
   @ApiProperty({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsUUID()

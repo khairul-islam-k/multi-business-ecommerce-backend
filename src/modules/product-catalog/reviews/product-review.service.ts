@@ -8,6 +8,7 @@ import {
   apiResponse,
   paginatedResponse,
 } from "../../../common/utils/api-response.util";
+import type { PaginationQueryDto } from "../../../common/http/query.dto";
 import { DatabaseService } from "../../../database/database.service";
 import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
 import {
@@ -17,7 +18,6 @@ import {
 } from "./dto/product-review.dto";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
-import { StorefrontProductReviewQueryDto } from "@/modules/storefront/dto/storefront.dto";
 
 @Injectable()
 export class ProductReviewService {
@@ -106,7 +106,27 @@ export class ProductReviewService {
     businessId: string,
     productId: string,
     variantId?: string,
-    query?: StorefrontProductReviewQueryDto,
+  ) {
+    return this.db
+      .select()
+      .from(productReview)
+      .where(
+        and(
+          eq(productReview.businessId, businessId),
+          eq(productReview.productId, productId),
+          variantId ? eq(productReview.variantId, variantId) : undefined,
+          eq(productReview.status, ProductReviewStatus.APPROVED),
+          isNull(productReview.deletedAt),
+        ),
+      )
+      .orderBy(desc(productReview.createdAt));
+  }
+
+  async findApprovedForProductPage(
+    businessId: string,
+    productId: string,
+    variantId: string | undefined,
+    query?: PaginationQueryDto,
   ) {
     const page = query?.page ?? 1;
     const limit = query?.limit ?? 12;

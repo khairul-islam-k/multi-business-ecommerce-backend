@@ -45,6 +45,10 @@ import {
   paginatedResponse,
 } from "../../common/utils/api-response.util";
 import { DatabaseService } from "../../database/database.service";
+import {
+  isProductOfferActive,
+  resolveProductEffectivePrice,
+} from "../product-catalog/common/product-offer-price";
 import { ProductReviewService } from "../product-catalog/reviews/product-review.service";
 import { WebsiteService } from "../website/website.service";
 import {
@@ -442,7 +446,7 @@ export class StorefrontService {
       productSlug,
     );
     const { reviews, page, limit, total, totalPages } =
-      await this.reviews.findApprovedForProduct(
+      await this.reviews.findApprovedForProductPage(
         website.businessId,
         product.id,
         undefined,
@@ -577,16 +581,20 @@ export class StorefrontService {
                 isNull(productImage.deletedAt),
               ),
             );
+    const productEffectivePrice = resolveProductEffectivePrice(item);
 
     return {
       ...item,
+      effectivePrice: productEffectivePrice.toString(),
+      offerActive: isProductOfferActive(item),
       category,
       brand,
       tags,
       images,
       variants: variants.map((variant) => ({
         ...variant,
-        effectivePrice: (variant.priceOverride ?? item.price).toString(),
+        effectivePrice: (variant.priceOverride ?? productEffectivePrice)
+          .toString(),
         images: variantImages.filter((image) => image.variantId === variant.id),
         stockSummary: this.buildVariantStockSummary(stocks, variant.id),
       })),
@@ -714,10 +722,12 @@ export class StorefrontService {
         )
         .where(eq(productVariantAttribute.variantId, variant.id)),
     ]);
+    const productEffectivePrice = resolveProductEffectivePrice(item);
 
     return {
       ...variant,
-      effectivePrice: (variant.priceOverride ?? item.price).toString(),
+      effectivePrice: (variant.priceOverride ?? productEffectivePrice)
+        .toString(),
       images,
       attributes: attributes.map((row) => ({
         id: row.product_variant_attributes.id,

@@ -71,6 +71,13 @@
       "when": 1784010376355,
       "tag": "0009_useful_roland_deschain",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784624395121,
+      "tag": "0010_volatile_leader",
+      "breakpoints": true
     }
   ]
 }

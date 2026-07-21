@@ -67,6 +67,7 @@ import { DatabaseService } from "../../database/database.service";
 import { FinanceCodeService } from "../finance/application/finance-code.service";
 import { InventoryLookupService } from "../inventory/common/inventory-lookup.service";
 import { OrderCodeRepository } from "../orders/infrastructure/order-code.repository";
+import { resolveProductEffectivePrice } from "../product-catalog/common/product-offer-price";
 import { WebsiteService } from "../website/website.service";
 import { CourierConfigEncryptionService } from "./courier-config-encryption.service";
 import {
@@ -1193,6 +1194,10 @@ export class CourierService {
       .select({
         id: product.id,
         price: product.price,
+        inOffer: product.inOffer,
+        offerPrice: product.offerPrice,
+        startingFrom: product.startingFrom,
+        endsIn: product.endsIn,
         weight: product.weight,
         taxId: product.taxId,
       })
@@ -1271,7 +1276,7 @@ export class CourierService {
     }
 
     return {
-      price: new Decimal(productRow.price),
+      price: resolveProductEffectivePrice(productRow),
       productWeight: productRow.weight ? new Decimal(productRow.weight) : null,
       priceOverride: selectedVariant?.priceOverride
         ? new Decimal(selectedVariant.priceOverride)

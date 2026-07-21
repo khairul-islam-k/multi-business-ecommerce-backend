@@ -75,6 +75,10 @@ import {
 import { DatabaseService } from "../../../database/database.service";
 import { buildStockItemKey } from "../../inventory/domain/stock-item-key";
 import { ProductImageInputDto } from "../common/dto/product-media.dto";
+import {
+  isProductOfferActive,
+  resolveProductEffectivePrice,
+} from "../common/product-offer-price";
 import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
 import {
   CreateProductDto,
@@ -104,7 +108,14 @@ type ProductReviewSummary = {
   averageRating: number;
 };
 
+type ProductOfferState = Pick<
+  Product,
+  "price" | "inOffer" | "offerPrice" | "startingFrom" | "endsIn"
+>;
+
 type ProductWithDetails = Product & {
+  effectivePrice: Decimal;
+  offerActive: boolean;
   category: ProductCategory | null;
   brand: ProductBrand | null;
   unit: ProductUnit | null;
@@ -164,6 +175,7 @@ export class ProductService {
             barcode,
             price: new Decimal(dto.price ?? 0),
             weight: new Decimal(dto.weight),
+            ...this.prepareOfferInsertFields(dto),
             status: dto.status ?? CatalogProductStatus.DRAFT,
             createdBy: currentUser.id,
             updatedBy: currentUser.id,
@@ -339,7 +351,14 @@ export class ProductService {
     productId: string,
     dto: UpdateProductDto,
   ) {
-    await this.lookup.assertProductExists(businessId, productId);
+    const existingProduct = await this.findProductRow(businessId, productId);
+
+    if (!existingProduct) {
+      throw new NotFoundException(
+        "Product could not be found. It may not exist, may have been deleted, or may not belong to the current business or storefront.",
+      );
+    }
+
     await this.lookup.assertProductReferences(businessId, dto);
 
     const tagIds =
@@ -399,6 +418,7 @@ export class ProductService {
             ...(dto.weight !== undefined && {
               weight: new Decimal(dto.weight),
             }),
+            ...this.prepareOfferUpdateFields(dto, existingProduct),
             ...(dto.status !== undefined && { status: dto.status }),
             updatedBy: currentUser.id,
           })
@@ -742,6 +762,8 @@ export class ProductService {
 
     return {
       ...item,
+      effectivePrice: resolveProductEffectivePrice(item),
+      offerActive: isProductOfferActive(item),
       category,
       brand,
       unit,
@@ -750,6 +772,127 @@ export class ProductService {
       variants,
       reviewSummary: this.getEmptyReviewSummary(),
     };
+  }
+
+  private prepareOfferInsertFields(dto: CreateProductDto) {
+    const state = this.mergeOfferState(dto, {
+      price: new Decimal(dto.price ?? 0),
+      inOffer: false,
+      offerPrice: null,
+      startingFrom: null,
+      endsIn: null,
+    });
+
+    this.assertOfferConfiguration(state);
+
+    return {
+      inOffer: state.inOffer,
+      offerPrice: state.offerPrice,
+      startingFrom: state.startingFrom,
+      endsIn: state.endsIn,
+    };
+  }
+
+  private prepareOfferUpdateFields(dto: UpdateProductDto, current: Product) {
+    const hasOfferInput =
+      dto.price !== undefined ||
+      dto.inOffer !== undefined ||
+      dto.offerPrice !== undefined ||
+      dto.startingFrom !== undefined ||
+      dto.endsIn !== undefined;
+
+    if (!hasOfferInput) {
+      return {};
+    }
+
+    const state = this.mergeOfferState(dto, current);
+
+    this.assertOfferConfiguration(state);
+
+    return {
+      ...(dto.inOffer !== undefined && { inOffer: state.inOffer }),
+      ...(dto.offerPrice !== undefined && { offerPrice: state.offerPrice }),
+      ...(dto.startingFrom !== undefined && {
+        startingFrom: state.startingFrom,
+      }),
+      ...(dto.endsIn !== undefined && { endsIn: state.endsIn }),
+    };
+  }
+
+  private mergeOfferState(
+    dto: Pick<
+      UpdateProductDto,
+      "price" | "inOffer" | "offerPrice" | "startingFrom" | "endsIn"
+    >,
+    current: ProductOfferState,
+  ) {
+    return {
+      price:
+        dto.price === undefined
+          ? new Decimal(current.price)
+          : new Decimal(dto.price),
+      inOffer: dto.inOffer ?? current.inOffer ?? false,
+      offerPrice:
+        dto.offerPrice === undefined
+          ? current.offerPrice
+          : dto.offerPrice === null
+            ? null
+            : new Decimal(dto.offerPrice),
+      startingFrom:
+        dto.startingFrom === undefined
+          ? current.startingFrom
+          : this.normalizeOfferDate(dto.startingFrom),
+      endsIn:
+        dto.endsIn === undefined
+          ? current.endsIn
+          : this.normalizeOfferDate(dto.endsIn),
+    };
+  }
+
+  private assertOfferConfiguration(state: ProductOfferState) {
+    if (
+      state.startingFrom &&
+      state.endsIn &&
+      state.startingFrom > state.endsIn
+    ) {
+      throw new BadRequestException(
+        "Offer start date must be before offer end date",
+      );
+    }
+
+    if (state.inOffer !== true) {
+      return;
+    }
+
+    if (!state.offerPrice) {
+      throw new BadRequestException(
+        "Offer price is required when product offer is enabled",
+      );
+    }
+
+    if (new Decimal(state.offerPrice).lessThan(0)) {
+      throw new BadRequestException("Offer price cannot be negative");
+    }
+
+    if (!state.startingFrom || !state.endsIn) {
+      throw new BadRequestException(
+        "Offer start and end dates are required when product offer is enabled",
+      );
+    }
+  }
+
+  private normalizeOfferDate(value?: Date | string | null) {
+    if (value == null) {
+      return null;
+    }
+
+    const date = value instanceof Date ? value : new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException("Offer date is invalid");
+    }
+
+    return date;
   }
 
   private getEmptyReviewSummary(): ProductReviewSummary {

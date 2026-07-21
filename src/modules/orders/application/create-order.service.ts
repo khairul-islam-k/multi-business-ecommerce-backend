@@ -41,6 +41,7 @@ import {
 import { FinanceLedgerService } from "../../finance/common/finance-ledger.service";
 import { InventoryLookupService } from "../../inventory/common/inventory-lookup.service";
 import { CreatePosSaleDto } from "../../pos/dto/pos-sale.dto";
+import { resolveProductEffectivePrice } from "../../product-catalog/common/product-offer-price";
 import { assertOrderItems } from "../domain/order-item.policy";
 import { assertOrderPaymentInput } from "../domain/order-payment.policy";
 import { calculateOrderTotals } from "../domain/order-totals.calculator";
@@ -443,6 +444,10 @@ export class CreateOrderService {
         .select({
           id: product.id,
           price: product.price,
+          inOffer: product.inOffer,
+          offerPrice: product.offerPrice,
+          startingFrom: product.startingFrom,
+          endsIn: product.endsIn,
           taxId: product.taxId,
         })
         .from(product)
@@ -508,7 +513,9 @@ export class CreateOrderService {
 
       const quantity = new Decimal(item.quantity);
       const discountAmount = new Decimal(item.discountAmount ?? 0);
-      const unitPrice = selectedVariant?.priceOverride ?? productRow.price;
+      const productEffectivePrice = resolveProductEffectivePrice(productRow);
+      const unitPrice =
+        selectedVariant?.priceOverride ?? productEffectivePrice;
       const lineSubtotal = quantity.mul(unitPrice);
       const taxableAmount = lineSubtotal.minus(discountAmount);
       const taxAmount = taxableAmount.mul(rate).div(100).toDecimalPlaces(2);

@@ -2,7 +2,7 @@ import { Type } from "class-transformer";
 import {
   IsEmail,
   IsEnum,
-  IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -26,7 +26,7 @@ export class CreateProductReviewDto {
 
   @ApiProperty({ example: 5 })
   @Type(() => Number)
-  @IsInt()
+  @IsNumber()
   @Min(1)
   @Max(5)
   rating!: number;

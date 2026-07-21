@@ -48,7 +48,10 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 
-import { apiResponse } from "../../../common/utils/api-response.util";
+import {
+  apiResponse,
+  paginatedResponse,
+} from "../../../common/utils/api-response.util";
 import {
   normalizeSearch,
   normalizeSearchUuid,
@@ -59,6 +62,7 @@ import {
 } from "../../../database/database.service";
 import { buildStockItemKey } from "../../inventory/domain/stock-item-key";
 import { ProductCatalogLookupService } from "../common/product-catalog-lookup.service";
+import { resolveProductEffectivePrice } from "../common/product-offer-price";
 import {
   assertBulkUpdateAttributeCombinations,
   assertUniqueAttributeCombinations,
@@ -83,7 +87,10 @@ type VariantAttributeWithDetails = ProductVariantAttribute & {
 };
 
 type ProductVariantWithDetails = ProductVariant & {
-  product: Pick<Product, "name" | "price">;
+  product: Pick<
+    Product,
+    "name" | "price" | "inOffer" | "offerPrice" | "startingFrom" | "endsIn"
+  >;
   attributes: VariantAttributeWithDetails[];
   images: ProductImage[];
 };
@@ -345,6 +352,9 @@ export class ProductVariantService {
   ) {
     await this.lookup.assertProductExists(businessId, productId);
 
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const skip = (page - 1) * limit;
     const search = normalizeSearch(query.search);
     const searchUuid = normalizeSearchUuid(search);
     const where = and(
@@ -396,14 +406,32 @@ export class ProductVariantService {
         : undefined,
     );
 
-    const variants = await this.db
-      .select()
-      .from(productVariant)
-      .where(where)
-      .orderBy(desc(productVariant.createdAt))
-      .then((rows) => this.getVariantsDetails(rows));
+    const [variants, total] = await Promise.all([
+      this.db
+        .select()
+        .from(productVariant)
+        .where(where)
+        .orderBy(desc(productVariant.createdAt))
+        .limit(limit)
+        .offset(skip)
+        .then((rows) => this.getVariantsDetails(rows)),
+      this.db
+        .select({ value: count() })
+        .from(productVariant)
+        .where(where)
+        .then(([row]) => row?.value ?? 0),
+    ]);
 
-    return apiResponse(variants);
+    return paginatedResponse(
+      variants,
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      "Product variants were loaded successfully. The response includes the requested page of variants for this product and pagination metadata for browsing more results.",
+    );
   }
 
   async findOne(businessId: string, productId: string, variantId: string) {
@@ -773,12 +801,14 @@ export class ProductVariantService {
         stock.totalQuantity - stock.quantityReserved,
         0,
       );
+      const productEffectivePrice = resolveProductEffectivePrice(
+        variant.product,
+      );
 
       return {
         ...variant,
-        effectivePrice: (
-          variant.priceOverride ?? variant.product.price
-        ).toString(),
+        effectivePrice: (variant.priceOverride ?? productEffectivePrice)
+          .toString(),
         stock: {
           ...stock,
           availableQuantity,
@@ -1182,7 +1212,14 @@ export class ProductVariantService {
   ): Promise<ProductVariantWithDetails> {
     const [productSummary, attributes, images] = await Promise.all([
       this.db
-        .select({ name: product.name, price: product.price })
+        .select({
+          name: product.name,
+          price: product.price,
+          inOffer: product.inOffer,
+          offerPrice: product.offerPrice,
+          startingFrom: product.startingFrom,
+          endsIn: product.endsIn,
+        })
         .from(product)
         .where(eq(product.id, variant.productId))
         .limit(1)
