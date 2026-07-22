@@ -1,4 +1,4 @@
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   IsArray,
   IsBoolean,
@@ -123,6 +123,21 @@ export class QueryProductDto extends SortedPaginationQueryDto<ProductSortBy> {
   @IsOptional()
   @IsUUID()
   categoryId?: string;
+
+  @ApiPropertyOptional({
+    type: Boolean,
+    example: true,
+    description: "Filter products by offer status",
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === true || value === "true") return true;
+    if (value === false || value === "false") return false;
+
+    return value;
+  })
+  @IsBoolean()
+  inOffer?: boolean;
 
   @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
   @IsOptional()

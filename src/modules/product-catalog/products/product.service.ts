@@ -227,6 +227,9 @@ export class ProductService {
       eq(product.businessId, businessId),
       isNull(product.deletedAt),
       query.status ? eq(product.status, query.status) : undefined,
+      query.inOffer !== undefined
+        ? eq(product.inOffer, query.inOffer)
+        : undefined,
       query.categoryId ? eq(product.categoryId, query.categoryId) : undefined,
       query.brandId ? eq(product.brandId, query.brandId) : undefined,
       query.tagId

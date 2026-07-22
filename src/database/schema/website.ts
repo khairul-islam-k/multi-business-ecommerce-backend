@@ -21,12 +21,14 @@ import { systemUser } from "./system";
 export const WebsiteTemplate = {
   FASHION: "FASHION",
   ELECTRONIC: "ELECTRONIC",
+  GROCERY: "GROCERY",
 } as const;
 export type WebsiteTemplate =
   (typeof WebsiteTemplate)[keyof typeof WebsiteTemplate];
 export const websiteTemplateEnum = pgEnum("WebsiteTemplate", [
   "FASHION",
   "ELECTRONIC",
+  "GROCERY",
 ]);
 
 export const WebsiteStatus = {
