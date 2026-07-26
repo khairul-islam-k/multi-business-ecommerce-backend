@@ -16,6 +16,7 @@ const MIME_EXTENSION_MAP: Record<string, string> = {
   "image/jpeg": ".jpg",
   "image/png": ".png",
   "image/webp": ".webp",
+  "image/avif": ".avif",
 };
 
 @Injectable()
