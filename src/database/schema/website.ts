@@ -25,8 +25,10 @@ export const WebsiteTemplate = {
   FURNITURE: "FURNITURE",
   PHARMACY: "PHARMACY",
   VEHICLE: "VEHICLE",
-  SHOWS: "SHOWS",
+  SHOES: "SHOES",
   COSMETICS: "COSMETICS",
+  TOY: "TOY",
+  RESTAURANT: "RESTAURANT",
 } as const;
 export type WebsiteTemplate =
   (typeof WebsiteTemplate)[keyof typeof WebsiteTemplate];
@@ -37,8 +39,10 @@ export const websiteTemplateEnum = pgEnum("WebsiteTemplate", [
   "FURNITURE",
   "PHARMACY",
   "VEHICLE",
-  "SHOWS",
+  "SHOES",
   "COSMETICS",
+  "TOY",
+  "RESTAURANT",
 ]);
 
 export const WebsiteStatus = {
