@@ -7,6 +7,7 @@ import {
   ilike,
   isNull,
   max,
+  ne,
   or,
 } from "drizzle-orm";
 
@@ -631,7 +632,11 @@ export class WebsiteService {
       .from(websiteDomain)
       .innerJoin(website, eq(website.id, websiteDomain.websiteId))
       .where(
-        or(eq(websiteDomain.domain, host), eq(websiteDomain.subdomain, host)),
+        and(
+          or(eq(websiteDomain.domain, host), eq(websiteDomain.subdomain, host)),
+          ne(website.status, WebsiteStatus.ARCHIVED),
+          isNull(website.deletedAt),
+        ),
       )
       .limit(1);
 

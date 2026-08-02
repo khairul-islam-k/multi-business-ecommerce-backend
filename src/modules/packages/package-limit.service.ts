@@ -194,7 +194,7 @@ export class PackageLimitService {
     return counter?.usedValue ?? 0;
   }
 
-  private getLiveUsage(tenantId: string, limitKey: PackageLimitKey) {
+  private async getLiveUsage(tenantId: string, limitKey: PackageLimitKey) {
     if (limitKey === PackageLimitKey.MAX_BUSINESSES) {
       return this.db
         .select({ value: count() })

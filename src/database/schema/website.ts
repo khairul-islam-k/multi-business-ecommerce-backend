@@ -19,30 +19,30 @@ import { sql } from "drizzle-orm";
 import { systemUser } from "./system";
 
 export const WebsiteTemplate = {
-  FASHION: "FASHION",
-  ELECTRONIC: "ELECTRONIC",
-  GROCERY: "GROCERY",
-  FURNITURE: "FURNITURE",
-  PHARMACY: "PHARMACY",
-  VEHICLE: "VEHICLE",
-  SHOES: "SHOES",
-  COSMETICS: "COSMETICS",
   TOY: "TOY",
+  SHOES: "SHOES",
+  VEHICLE: "VEHICLE",
+  FASHION: "FASHION",
+  GROCERY: "GROCERY",
+  PHARMACY: "PHARMACY",
+  FURNITURE: "FURNITURE",
+  COSMETICS: "COSMETICS",
   RESTAURANT: "RESTAURANT",
+  ELECTRONIC: "ELECTRONIC",
 } as const;
 export type WebsiteTemplate =
   (typeof WebsiteTemplate)[keyof typeof WebsiteTemplate];
 export const websiteTemplateEnum = pgEnum("WebsiteTemplate", [
-  "FASHION",
-  "ELECTRONIC",
-  "GROCERY",
-  "FURNITURE",
-  "PHARMACY",
-  "VEHICLE",
-  "SHOES",
-  "COSMETICS",
   "TOY",
+  "SHOES",
+  "VEHICLE",
+  "FASHION",
+  "GROCERY",
+  "PHARMACY",
+  "FURNITURE",
+  "COSMETICS",
   "RESTAURANT",
+  "ELECTRONIC",
 ]);
 
 export const WebsiteStatus = {

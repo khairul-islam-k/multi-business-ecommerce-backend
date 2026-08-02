@@ -41,10 +41,10 @@ import type {
 import { buildOrderBy, resolveSortColumn } from "../../common/http/sort.util";
 
 const SUPPORTED_IMAGE_MIME_TYPES = new Set([
-  "image/gif",
   "image/jpeg",
   "image/png",
   "image/webp",
+  "image/avif",
 ]);
 
 type MediaAssetTagWithTag = MediaAssetTag & {
