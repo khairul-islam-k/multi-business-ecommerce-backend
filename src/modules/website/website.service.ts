@@ -672,15 +672,15 @@ export class WebsiteService {
       );
     }
 
-    if (row.site.deletedAt !== null) {
-      throw new NotFoundException(
-        `The storefront domain "${host}" belongs to a website that has been deleted. Restore the website or attach the domain to another published website before using this storefront.`,
-      );
-    }
-
     if (row.site.status !== WebsiteStatus.PUBLISHED) {
       throw new BadRequestException(
         `The storefront domain "${host}" belongs to a website whose current status is ${row.site.status}. Publish the website before using this domain for storefront requests.`,
+      );
+    }
+
+    if (row.site.deletedAt !== null) {
+      throw new NotFoundException(
+        `The storefront domain "${host}" belongs to a website that has been deleted. Restore the website or attach the domain to another published website before using this storefront.`,
       );
     }
   }
