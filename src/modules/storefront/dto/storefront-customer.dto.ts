@@ -146,15 +146,15 @@ export class CreateStorefrontReviewDto {
     type: [String],
     maxItems: 5,
     example: [
-      "https://example.com/uploads/reviews/review-1.webp",
-      "https://example.com/uploads/reviews/review-2.webp",
+      "/uploads/reviews/review-1.webp",
+      "/uploads/reviews/review-2.webp",
     ],
-    description: "Review image URLs. Maximum 5 images.",
+    description: "Review image paths. Maximum 5 images.",
   })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(5)
-  @IsUrl({}, { each: true })
+  @IsString({ each: true })
   images?: string[];
 }
 
