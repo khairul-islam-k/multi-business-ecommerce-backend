@@ -12,6 +12,7 @@ import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import {
   ResolveStorefrontVariantDto,
   StorefrontCatalogSearchDto,
+  StorefrontContactDto,
   StorefrontProductQueryDto,
   StorefrontProductReviewQueryDto,
 } from "./dto/storefront.dto";
@@ -122,6 +123,20 @@ export class StorefrontController {
     return this.storefront.resolveProductVariant(
       this.getRequestHost(host, forwardedHost),
       productSlug,
+      dto,
+    );
+  }
+
+  // contact
+  @Post("contact")
+  @ApiOperation({ summary: "send contact message" })
+  contactMessage(
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined,
+    @Body() dto: StorefrontContactDto,
+  ) {
+    return this.storefront.contactMessage(
+      this.getRequestHost(host, forwardedHost),
       dto,
     );
   }

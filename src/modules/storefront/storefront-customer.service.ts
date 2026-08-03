@@ -13,6 +13,7 @@ import {
 } from "drizzle-orm";
 
 import {
+  business,
   businessSetting,
   CatalogProductStatus,
   customer,
@@ -33,9 +34,12 @@ import {
   product,
   productImage,
   productReview,
+  productReviewImage,
+  ProductReviewImage,
   ProductReviewStatus,
   productVariant,
   ProductVariantStatus,
+  systemUser,
 } from "@/database/schema";
 import {
   BadRequestException,
@@ -85,6 +89,10 @@ import {
 } from "./dto/storefront-customer.dto";
 
 import type { CurrentCustomerPayload } from "../customer-auth/strategies/customer-jwt.strategy";
+import type { UploadableMediaFile } from "../media/uploaders/media-uploader.types";
+import { UploadMediaDto } from "../media/dto/upload-media.dto";
+import { MediaService } from "../media/media.service";
+import type { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 
 @Injectable()
 export class StorefrontCustomerService {
@@ -94,7 +102,8 @@ export class StorefrontCustomerService {
     private readonly orders: OrderService,
     private readonly orderCodes: OrderCodeRepository,
     private readonly couriers: CourierService,
-  ) {}
+    private readonly mediaService: MediaService,
+  ) { }
 
   private get db() {
     return this.database.db;
@@ -116,12 +125,12 @@ export class StorefrontCustomerService {
       isNull(customerAddress.deletedAt),
       search
         ? or(
-            searchUuid ? eq(customerAddress.id, searchUuid) : undefined,
-            ilike(customerAddress.name, `%${search}%`),
-            ilike(customerAddress.address, `%${search}%`),
-            ilike(customerAddress.city, `%${search}%`),
-            ilike(customerAddress.country, `%${search}%`),
-          )
+          searchUuid ? eq(customerAddress.id, searchUuid) : undefined,
+          ilike(customerAddress.name, `%${search}%`),
+          ilike(customerAddress.address, `%${search}%`),
+          ilike(customerAddress.city, `%${search}%`),
+          ilike(customerAddress.country, `%${search}%`),
+        )
         : undefined,
     );
 
@@ -317,38 +326,38 @@ export class StorefrontCustomerService {
       query.status ? eq(orderCart.status, query.status) : undefined,
       search
         ? or(
-            searchUuid ? eq(orderCart.id, searchUuid) : undefined,
-            exists(
-              this.db
-                .select({ id: orderCartItem.id })
-                .from(orderCartItem)
-                .innerJoin(product, eq(product.id, orderCartItem.productId))
-                .leftJoin(
-                  productVariant,
-                  eq(productVariant.id, orderCartItem.variantId),
-                )
-                .where(
-                  and(
-                    eq(orderCartItem.cartId, orderCart.id),
-                    eq(product.businessId, currentCustomer.businessId),
-                    isNull(product.deletedAt),
-                    or(
-                      searchUuid ? eq(product.id, searchUuid) : undefined,
-                      searchUuid
-                        ? eq(productVariant.id, searchUuid)
-                        : undefined,
-                      ilike(product.name, `%${search}%`),
-                      ilike(product.slug, `%${search}%`),
-                      ilike(product.sku, `%${search}%`),
-                      ilike(product.barcode, `%${search}%`),
-                      ilike(productVariant.title, `%${search}%`),
-                      ilike(productVariant.sku, `%${search}%`),
-                      ilike(productVariant.barcode, `%${search}%`),
-                    ),
+          searchUuid ? eq(orderCart.id, searchUuid) : undefined,
+          exists(
+            this.db
+              .select({ id: orderCartItem.id })
+              .from(orderCartItem)
+              .innerJoin(product, eq(product.id, orderCartItem.productId))
+              .leftJoin(
+                productVariant,
+                eq(productVariant.id, orderCartItem.variantId),
+              )
+              .where(
+                and(
+                  eq(orderCartItem.cartId, orderCart.id),
+                  eq(product.businessId, currentCustomer.businessId),
+                  isNull(product.deletedAt),
+                  or(
+                    searchUuid ? eq(product.id, searchUuid) : undefined,
+                    searchUuid
+                      ? eq(productVariant.id, searchUuid)
+                      : undefined,
+                    ilike(product.name, `%${search}%`),
+                    ilike(product.slug, `%${search}%`),
+                    ilike(product.sku, `%${search}%`),
+                    ilike(product.barcode, `%${search}%`),
+                    ilike(productVariant.title, `%${search}%`),
+                    ilike(productVariant.sku, `%${search}%`),
+                    ilike(productVariant.barcode, `%${search}%`),
                   ),
                 ),
-            ),
-          )
+              ),
+          ),
+        )
         : undefined,
     );
 
@@ -432,35 +441,35 @@ export class StorefrontCustomerService {
       eq(customerWishlist.customerId, currentCustomer.customerId),
       search
         ? exists(
-            this.db
-              .select({ id: product.id })
-              .from(product)
-              .leftJoin(
-                productVariant,
-                eq(productVariant.id, customerWishlist.variantId),
-              )
-              .where(
-                and(
-                  eq(product.id, customerWishlist.productId),
-                  eq(product.businessId, currentCustomer.businessId),
-                  isNull(product.deletedAt),
-                  or(
-                    searchUuid
-                      ? eq(customerWishlist.id, searchUuid)
-                      : undefined,
-                    searchUuid ? eq(product.id, searchUuid) : undefined,
-                    searchUuid ? eq(productVariant.id, searchUuid) : undefined,
-                    ilike(product.name, `%${search}%`),
-                    ilike(product.slug, `%${search}%`),
-                    ilike(product.sku, `%${search}%`),
-                    ilike(product.barcode, `%${search}%`),
-                    ilike(productVariant.title, `%${search}%`),
-                    ilike(productVariant.sku, `%${search}%`),
-                    ilike(productVariant.barcode, `%${search}%`),
-                  ),
+          this.db
+            .select({ id: product.id })
+            .from(product)
+            .leftJoin(
+              productVariant,
+              eq(productVariant.id, customerWishlist.variantId),
+            )
+            .where(
+              and(
+                eq(product.id, customerWishlist.productId),
+                eq(product.businessId, currentCustomer.businessId),
+                isNull(product.deletedAt),
+                or(
+                  searchUuid
+                    ? eq(customerWishlist.id, searchUuid)
+                    : undefined,
+                  searchUuid ? eq(product.id, searchUuid) : undefined,
+                  searchUuid ? eq(productVariant.id, searchUuid) : undefined,
+                  ilike(product.name, `%${search}%`),
+                  ilike(product.slug, `%${search}%`),
+                  ilike(product.sku, `%${search}%`),
+                  ilike(product.barcode, `%${search}%`),
+                  ilike(productVariant.title, `%${search}%`),
+                  ilike(productVariant.sku, `%${search}%`),
+                  ilike(productVariant.barcode, `%${search}%`),
                 ),
               ),
-          )
+            ),
+        )
         : undefined,
     );
 
@@ -746,33 +755,108 @@ export class StorefrontCustomerService {
     );
   }
 
+  async uploadImage(
+    customer: CurrentCustomerPayload,
+    file: UploadableMediaFile | undefined,
+    dto: UploadMediaDto,
+  ) {
+    const [businessRow] = await this.db
+      .select()
+      .from(business)
+      .where(
+        and(eq(business.id, customer.businessId), isNull(business.deletedAt)),
+      )
+      .limit(1);
+
+    if (!businessRow) {
+      throw new NotFoundException("Business not found.");
+    }
+
+    const [userRow] = await this.db
+      .select()
+      .from(systemUser)
+      .where(
+        and(
+          eq(systemUser.id, businessRow.ownerUserId),
+          isNull(systemUser.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!userRow) {
+      throw new NotFoundException("User not Found");
+    }
+
+    const currentUser: CurrentUserPayload = {
+      id: userRow.id,
+      name: userRow.name,
+      email: userRow.email,
+      type: userRow.type,
+      status: userRow.status,
+      businessId: businessRow.id,
+      tenantId: userRow.tenantId,
+    };
+
+    return await this.mediaService.uploadImage(
+      currentUser,
+      customer.businessId,
+      file,
+      dto,
+    );
+  }
+
   async createReview(
     currentCustomer: CurrentCustomerPayload,
     websiteId: string | undefined,
     dto: CreateStorefrontReviewDto,
   ) {
     await this.assertStorefrontCustomer(currentCustomer, websiteId);
+
     await this.assertReviewTarget(currentCustomer.businessId, dto);
+
     const customerRow = await this.getCustomerOrThrow(currentCustomer);
 
-    const [review] = await this.db
-      .insert(productReview)
-      .values({
-        businessId: currentCustomer.businessId,
-        productId: dto.productId,
-        customerId: currentCustomer.customerId,
-        variantId: dto.variantId ?? null,
-        rating: new Decimal(dto.rating),
-        title: normalizeOptionalText(dto.title),
-        comment: normalizeOptionalText(dto.comment),
-        reviewerName: normalizeRequiredText(customerRow.name),
-        reviewerEmail: normalizeOptionalText(currentCustomer.email),
-        reviewerPhone: normalizeOptionalText(customerRow.phone),
-        status: ProductReviewStatus.APPROVED,
-      })
-      .returning();
+    const result = await this.db.transaction(async (tx) => {
+      const [review] = await tx
+        .insert(productReview)
+        .values({
+          businessId: currentCustomer.businessId,
+          productId: dto.productId,
+          customerId: currentCustomer.customerId,
+          variantId: dto.variantId ?? null,
+          rating: new Decimal(dto.rating),
+          title: normalizeOptionalText(dto.title),
+          comment: normalizeOptionalText(dto.comment),
+          reviewerName: normalizeRequiredText(customerRow.name),
+          reviewerEmail: normalizeOptionalText(currentCustomer.email),
+          reviewerPhone: normalizeOptionalText(customerRow.phone),
+          status: ProductReviewStatus.APPROVED,
+        })
+        .returning();
 
-    return apiResponse(review, "Product review created successfully");
+      let images: ProductReviewImage[] = [];
+
+      if (dto.images?.length) {
+        images = await tx
+          .insert(productReviewImage)
+          .values(
+            dto.images.map((imageUrl) => ({
+              businessId: currentCustomer.businessId,
+              reviewId: review.id,
+              imageUrl: imageUrl.trim(),
+              altText: null,
+            })),
+          )
+          .returning();
+      }
+
+      return {
+        ...review,
+        images,
+      };
+    });
+
+    return apiResponse(result, "Product review created successfully");
   }
 
   async placeOrder(
@@ -839,24 +923,24 @@ export class StorefrontCustomerService {
 
     const shippingAddressSnapshot = dto.shippingAddressId
       ? this.buildAddressSnapshot(
-          await this.getCustomerAddressOrThrow(
-            currentCustomer,
-            dto.shippingAddressId,
-          ),
-        )
+        await this.getCustomerAddressOrThrow(
+          currentCustomer,
+          dto.shippingAddressId,
+        ),
+      )
       : dto.shippingAddressSnapshot;
     const courierSelection = dto.courierConfigId
       ? await this.couriers.prepareStorefrontOrderCourier(
-          currentCustomer.businessId,
-          dto.courierConfigId,
-          dto.courierQuote,
-          dto.paymentMethod === StorefrontCheckoutPaymentMethod.COD,
-          cartItems.map((row) => ({
-            productId: row.productId,
-            variantId: row.variantId,
-            quantity: row.quantity,
-          })),
-        )
+        currentCustomer.businessId,
+        dto.courierConfigId,
+        dto.courierQuote,
+        dto.paymentMethod === StorefrontCheckoutPaymentMethod.COD,
+        cartItems.map((row) => ({
+          productId: row.productId,
+          variantId: row.variantId,
+          quantity: row.quantity,
+        })),
+      )
       : null;
 
     const createdOrderResponse = await this.orders.createStorefrontOrder(
@@ -891,9 +975,9 @@ export class StorefrontCustomerService {
 
     const courierBooking = courierSelection
       ? await this.couriers.tryBookShipmentForOrder(
-          currentCustomer.businessId,
-          createdOrderResponse.data.id,
-        )
+        currentCustomer.businessId,
+        createdOrderResponse.data.id,
+      )
       : null;
 
     await this.db
@@ -937,42 +1021,42 @@ export class StorefrontCustomerService {
         : undefined,
       search
         ? or(
-            searchUuid ? eq(order.id, searchUuid) : undefined,
-            searchUuid ? eq(order.warehouseId, searchUuid) : undefined,
-            ilike(order.orderNo, `%${search}%`),
-            ilike(order.note, `%${search}%`),
-            exists(
-              this.db
-                .select({ id: orderItem.id })
-                .from(orderItem)
-                .innerJoin(product, eq(product.id, orderItem.productId))
-                .leftJoin(
-                  productVariant,
-                  eq(productVariant.id, orderItem.variantId),
-                )
-                .where(
-                  and(
-                    eq(orderItem.orderId, order.id),
-                    eq(product.businessId, currentCustomer.businessId),
-                    isNull(product.deletedAt),
-                    or(
-                      searchUuid ? eq(orderItem.id, searchUuid) : undefined,
-                      searchUuid ? eq(product.id, searchUuid) : undefined,
-                      searchUuid
-                        ? eq(productVariant.id, searchUuid)
-                        : undefined,
-                      ilike(product.name, `%${search}%`),
-                      ilike(product.slug, `%${search}%`),
-                      ilike(product.sku, `%${search}%`),
-                      ilike(product.barcode, `%${search}%`),
-                      ilike(productVariant.title, `%${search}%`),
-                      ilike(productVariant.sku, `%${search}%`),
-                      ilike(productVariant.barcode, `%${search}%`),
-                    ),
+          searchUuid ? eq(order.id, searchUuid) : undefined,
+          searchUuid ? eq(order.warehouseId, searchUuid) : undefined,
+          ilike(order.orderNo, `%${search}%`),
+          ilike(order.note, `%${search}%`),
+          exists(
+            this.db
+              .select({ id: orderItem.id })
+              .from(orderItem)
+              .innerJoin(product, eq(product.id, orderItem.productId))
+              .leftJoin(
+                productVariant,
+                eq(productVariant.id, orderItem.variantId),
+              )
+              .where(
+                and(
+                  eq(orderItem.orderId, order.id),
+                  eq(product.businessId, currentCustomer.businessId),
+                  isNull(product.deletedAt),
+                  or(
+                    searchUuid ? eq(orderItem.id, searchUuid) : undefined,
+                    searchUuid ? eq(product.id, searchUuid) : undefined,
+                    searchUuid
+                      ? eq(productVariant.id, searchUuid)
+                      : undefined,
+                    ilike(product.name, `%${search}%`),
+                    ilike(product.slug, `%${search}%`),
+                    ilike(product.sku, `%${search}%`),
+                    ilike(product.barcode, `%${search}%`),
+                    ilike(productVariant.title, `%${search}%`),
+                    ilike(productVariant.sku, `%${search}%`),
+                    ilike(productVariant.barcode, `%${search}%`),
                   ),
                 ),
-            ),
-          )
+              ),
+          ),
+        )
         : undefined,
     );
 
@@ -1221,12 +1305,12 @@ export class StorefrontCustomerService {
       query.status ? eq(orderReturn.status, query.status) : undefined,
       search
         ? or(
-            searchUuid ? eq(orderReturn.id, searchUuid) : undefined,
-            searchUuid ? eq(orderReturn.orderId, searchUuid) : undefined,
-            ilike(orderReturn.returnNo, `%${search}%`),
-            ilike(orderReturn.reason, `%${search}%`),
-            ilike(order.orderNo, `%${search}%`),
-          )
+          searchUuid ? eq(orderReturn.id, searchUuid) : undefined,
+          searchUuid ? eq(orderReturn.orderId, searchUuid) : undefined,
+          ilike(orderReturn.returnNo, `%${search}%`),
+          ilike(orderReturn.reason, `%${search}%`),
+          ilike(order.orderNo, `%${search}%`),
+        )
         : undefined,
     );
 
@@ -1318,32 +1402,58 @@ export class StorefrontCustomerService {
     websiteId: string | undefined,
     query: StorefrontReviewQueryDto,
   ) {
-    await this.assertStorefrontCustomer(currentCustomer, websiteId);
+    await this.assertStorefrontCustomer(
+      currentCustomer,
+      websiteId,
+    );
+
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+
     const search = normalizeSearch(query.search);
     const searchUuid = normalizeSearchUuid(search);
+
     const where = and(
-      eq(productReview.businessId, currentCustomer.businessId),
-      eq(productReview.customerId, currentCustomer.customerId),
+      eq(
+        productReview.businessId,
+        currentCustomer.businessId,
+      ),
+      eq(
+        productReview.customerId,
+        currentCustomer.customerId,
+      ),
       isNull(productReview.deletedAt),
+
       query.productId
         ? eq(productReview.productId, query.productId)
         : undefined,
-      query.status ? eq(productReview.status, query.status) : undefined,
+
+      query.status
+        ? eq(productReview.status, query.status)
+        : undefined,
+
       search
         ? or(
-            searchUuid ? eq(productReview.id, searchUuid) : undefined,
-            searchUuid ? eq(productReview.productId, searchUuid) : undefined,
-            searchUuid ? eq(productReview.variantId, searchUuid) : undefined,
-            ilike(productReview.title, `%${search}%`),
-            ilike(productReview.comment, `%${search}%`),
-            ilike(product.name, `%${search}%`),
-            ilike(product.slug, `%${search}%`),
-            ilike(product.sku, `%${search}%`),
-            ilike(product.barcode, `%${search}%`),
-          )
+          searchUuid
+            ? eq(productReview.id, searchUuid)
+            : undefined,
+
+          searchUuid
+            ? eq(productReview.productId, searchUuid)
+            : undefined,
+
+          searchUuid
+            ? eq(productReview.variantId, searchUuid)
+            : undefined,
+
+          ilike(productReview.title, `%${search}%`),
+          ilike(productReview.comment, `%${search}%`),
+          ilike(product.name, `%${search}%`),
+          ilike(product.slug, `%${search}%`),
+          ilike(product.sku, `%${search}%`),
+          ilike(product.barcode, `%${search}%`),
+        )
         : undefined,
     );
 
@@ -1351,31 +1461,92 @@ export class StorefrontCustomerService {
       this.db
         .select()
         .from(productReview)
-        .innerJoin(product, eq(product.id, productReview.productId))
+        .innerJoin(
+          product,
+          eq(product.id, productReview.productId),
+        )
         .where(where)
         .orderBy(desc(productReview.createdAt))
         .limit(limit)
         .offset(skip),
+
       this.db
-        .select({ value: count() })
+        .select({
+          value: count(),
+        })
         .from(productReview)
-        .innerJoin(product, eq(product.id, productReview.productId))
+        .innerJoin(
+          product,
+          eq(product.id, productReview.productId),
+        )
         .where(where)
         .then(([row]) => row?.value ?? 0),
     ]);
 
+    const reviewIds = items.map(
+      (item) => item.product_reviews.id,
+    );
+
+    const imageRows =
+      reviewIds.length > 0
+        ? await this.db
+          .select()
+          .from(productReviewImage)
+          .where(
+            and(
+              eq(
+                productReviewImage.businessId,
+                currentCustomer.businessId,
+              ),
+              inArray(
+                productReviewImage.reviewId,
+                reviewIds,
+              ),
+              isNull(productReviewImage.deletedAt),
+            ),
+          )
+          .orderBy(
+            asc(productReviewImage.createdAt),
+          )
+        : [];
+
+    const imagesByReviewId = new Map<
+      string,
+      typeof imageRows
+    >();
+
+    for (const image of imageRows) {
+      const existingImages =
+        imagesByReviewId.get(image.reviewId) ?? [];
+
+      existingImages.push(image);
+
+      imagesByReviewId.set(
+        image.reviewId,
+        existingImages,
+      );
+    }
+
+    const reviews = items.map((item) => ({
+      ...item.product_reviews,
+
+      product: item.products,
+
+      images:
+        imagesByReviewId.get(
+          item.product_reviews.id,
+        ) ?? [],
+    }));
+
     return paginatedResponse(
-      items.map((item) => ({
-        ...item.product_reviews,
-        product: item.products,
-      })),
+      reviews,
       {
         page,
         limit,
         total,
         totalPages: Math.ceil(total / limit),
       },
-      "Customer product reviews were loaded successfully. The response includes the requested page of storefront reviews from this customer and pagination metadata for browsing more results.",
+      "Customer product reviews were loaded successfully.",
     );
   }
 
@@ -1596,13 +1767,13 @@ export class StorefrontCustomerService {
         inventoryStock,
         wishlistItem.variantId
           ? and(
-              eq(inventoryStock.productId, customerWishlist.productId),
-              eq(inventoryStock.variantId, customerWishlist.variantId),
-            )
+            eq(inventoryStock.productId, customerWishlist.productId),
+            eq(inventoryStock.variantId, customerWishlist.variantId),
+          )
           : or(
-              eq(inventoryStock.productId, customerWishlist.productId),
-              eq(inventoryStock.variantId, customerWishlist.variantId),
-            ),
+            eq(inventoryStock.productId, customerWishlist.productId),
+            eq(inventoryStock.variantId, customerWishlist.variantId),
+          ),
       )
       .leftJoin(productImage, eq(product.id, productImage.productId))
       .leftJoin(
@@ -1618,12 +1789,12 @@ export class StorefrontCustomerService {
 
     return row
       ? {
-          ...row.item,
-          stockSummary: row.stock,
-          product: row.product,
-          variant: row.variant,
-          image: row.image,
-        }
+        ...row.item,
+        stockSummary: row.stock,
+        product: row.product,
+        variant: row.variant,
+        image: row.image,
+      }
       : wishlistItem;
   }
 

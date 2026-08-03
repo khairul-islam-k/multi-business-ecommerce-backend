@@ -9,9 +9,17 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
-import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from "@nestjs/swagger";
 
 import { CurrentCustomer } from "../customer-auth/decorators/current-customer.decorator";
 import { CustomerAuthGuard } from "../customer-auth/guards/customer-auth.guard";
@@ -36,6 +44,9 @@ import {
 import { StorefrontCustomerService } from "./storefront-customer.service";
 
 import type { CurrentCustomerPayload } from "../customer-auth/strategies/customer-jwt.strategy";
+import { FileInterceptor } from "@nestjs/platform-express";
+import type { UploadableMediaFile } from "../media/uploaders/media-uploader.types";
+import { UploadMediaDto } from "../media/dto/upload-media.dto";
 
 @ApiTags("Storefront Customers")
 @ApiBearerAuth()
@@ -498,6 +509,42 @@ export class StorefrontCustomerController {
       this.getRequestHost(host, forwardedHost),
       dto,
     );
+  }
+
+  @Post("images")
+  @UseInterceptors(FileInterceptor("file"))
+  @ApiConsumes("multipart/form-data")
+  @ApiOperation({
+    summary: "Upload image",
+    description:
+      "Upload image. Use this endpoint when staff need this business action from the API.",
+  })
+  @ApiBody({
+    schema: {
+      type: "object",
+      required: ["file"],
+      properties: {
+        file: {
+          type: "string",
+          format: "binary",
+        },
+        altText: {
+          type: "string",
+          example: "Hero banner",
+        },
+        tags: {
+          type: "string",
+          example: "hero,banner,homepage",
+        },
+      },
+    },
+  })
+  uploadImage(
+    @CurrentCustomer() customer: CurrentCustomerPayload,
+    @UploadedFile() file: UploadableMediaFile | undefined,
+    @Body() dto: UploadMediaDto,
+  ) {
+    return this.storefrontCustomers.uploadImage(customer, file, dto);
   }
 
   private getRequestHost(host?: string, forwardedHost?: string) {

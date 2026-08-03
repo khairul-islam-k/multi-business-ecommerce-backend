@@ -3,7 +3,6 @@ import {
   AnyPgColumn,
   boolean,
   index,
-  integer,
   pgEnum,
   pgTable,
   text,
@@ -605,3 +604,61 @@ export const productReview = pgTable(
 );
 export type ProductReview = typeof productReview.$inferSelect;
 export type NewProductReview = typeof productReview.$inferInsert;
+
+export const productReviewImage = pgTable(
+  "product_review_images",
+  {
+    id: uuid().primaryKey().defaultRandom().notNull(),
+
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, {
+        onDelete: "cascade",
+      }),
+
+    reviewId: uuid("review_id")
+      .notNull()
+      .references((): AnyPgColumn => productReview.id, {
+        onDelete: "cascade",
+      }),
+
+    imageUrl: text("image_url").notNull(),
+
+    altText: varchar("alt_text", {
+      length: 255,
+    }),
+
+    createdAt: timestamp("created_at", {
+      mode: "date",
+    })
+      .defaultNow()
+      .notNull(),
+
+    updatedAt: timestamp("updated_at", {
+      mode: "date",
+    })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+
+    deletedAt: timestamp("deleted_at", {
+      mode: "date",
+    }),
+  },
+  (table) => [
+    index("product_review_images_business_id_idx").on(table.businessId),
+
+    index("product_review_images_review_id_idx").on(table.reviewId),
+
+    index("product_review_images_business_id_review_id_idx").on(
+      table.businessId,
+      table.reviewId,
+    ),
+
+    index("product_review_images_deleted_at_idx").on(table.deletedAt),
+  ],
+);
+
+export type ProductReviewImage = typeof productReviewImage.$inferSelect;
+
+export type NewProductReviewImage = typeof productReviewImage.$inferInsert;

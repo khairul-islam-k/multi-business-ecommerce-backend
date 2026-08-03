@@ -1,5 +1,6 @@
 import { Type } from "class-transformer";
 import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsEnum,
@@ -8,6 +9,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUrl,
   IsUUID,
   Max,
   MaxLength,
@@ -102,33 +104,58 @@ export class UpdateStorefrontCartItemDto {
 }
 
 export class CreateStorefrontReviewDto {
-  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @ApiPropertyOptional({
+    example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913",
+  })
   @IsOptional()
   @IsUUID()
   productId!: string;
 
-  @ApiPropertyOptional({ example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913" })
+  @ApiPropertyOptional({
+    example: "2d8d0f8f-95aa-4f23-a2fd-0ca6f5f8a913",
+  })
   @IsOptional()
   @IsUUID()
   variantId?: string;
 
-  @ApiProperty({ example: 5 })
+  @ApiProperty({
+    example: 5,
+  })
   @Type(() => Number)
   @IsNumber()
   @Min(0.01)
   @Max(5)
   rating!: number;
 
-  @ApiPropertyOptional({ example: "Great keyboard" })
+  @ApiPropertyOptional({
+    example: "Great keyboard",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(150)
   title?: string;
 
-  @ApiPropertyOptional({ example: "The build quality feels excellent." })
+  @ApiPropertyOptional({
+    example: "The build quality feels excellent.",
+  })
   @IsOptional()
   @IsString()
   comment?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: 5,
+    example: [
+      "https://example.com/uploads/reviews/review-1.webp",
+      "https://example.com/uploads/reviews/review-2.webp",
+    ],
+    description: "Review image URLs. Maximum 5 images.",
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @IsUrl({}, { each: true })
+  images?: string[];
 }
 
 export class StorefrontReviewQueryDto {

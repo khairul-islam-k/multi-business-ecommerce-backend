@@ -14,7 +14,9 @@ import {
 
 import {
   CatalogProductStatus,
+  contact,
   inventoryStock,
+  NewStorefrontContact,
   product,
   productAttribute,
   productAttributeValue,
@@ -54,6 +56,7 @@ import { WebsiteService } from "../website/website.service";
 import {
   ResolveStorefrontVariantDto,
   StorefrontCatalogSearchDto,
+  StorefrontContactDto,
   StorefrontProductQueryDto,
   StorefrontProductReviewQueryDto,
   StorefrontProductSortBy,
@@ -105,13 +108,13 @@ export class StorefrontService {
           isNull(productCategory.deletedAt),
           search
             ? or(
-                ilike(productCategory.name, `%${search}%`),
-                ilike(productCategory.description, `%${search}%`),
-                searchUuid ? eq(productCategory.id, searchUuid) : undefined,
-                searchUuid
-                  ? eq(productCategory.parentId, searchUuid)
-                  : undefined,
-              )
+              ilike(productCategory.name, `%${search}%`),
+              ilike(productCategory.description, `%${search}%`),
+              searchUuid ? eq(productCategory.id, searchUuid) : undefined,
+              searchUuid
+                ? eq(productCategory.parentId, searchUuid)
+                : undefined,
+            )
             : undefined,
         ),
       )
@@ -163,10 +166,10 @@ export class StorefrontService {
           isNull(productBrand.deletedAt),
           search
             ? or(
-                ilike(productBrand.name, `%${search}%`),
-                ilike(productBrand.description, `%${search}%`),
-                searchUuid ? eq(productBrand.id, searchUuid) : undefined,
-              )
+              ilike(productBrand.name, `%${search}%`),
+              ilike(productBrand.description, `%${search}%`),
+              searchUuid ? eq(productBrand.id, searchUuid) : undefined,
+            )
             : undefined,
         ),
       );
@@ -189,9 +192,9 @@ export class StorefrontService {
           isNull(productTag.deletedAt),
           search
             ? or(
-                ilike(productTag.name, `%${search}%`),
-                searchUuid ? eq(productTag.id, searchUuid) : undefined,
-              )
+              ilike(productTag.name, `%${search}%`),
+              searchUuid ? eq(productTag.id, searchUuid) : undefined,
+            )
             : undefined,
         ),
       );
@@ -214,44 +217,44 @@ export class StorefrontService {
       query.brandId ? eq(product.brandId, query.brandId) : undefined,
       query.tagId
         ? inArray(
-            product.id,
-            this.db
-              .select({
-                productId: productTagMap.productId,
-              })
-              .from(productTagMap)
-              .where(eq(productTagMap.tagId, query.tagId)),
-          )
+          product.id,
+          this.db
+            .select({
+              productId: productTagMap.productId,
+            })
+            .from(productTagMap)
+            .where(eq(productTagMap.tagId, query.tagId)),
+        )
         : undefined,
       search
         ? or(
-            searchUuid ? eq(product.id, searchUuid) : undefined,
-            ilike(product.name, `%${search}%`),
-            ilike(product.slug, `%${search}%`),
-            ilike(product.description, `%${search}%`),
-            ilike(product.sku, `%${search}%`),
-            ilike(product.barcode, `%${search}%`),
-            exists(
-              this.db
-                .select({ id: productVariant.id })
-                .from(productVariant)
-                .where(
-                  and(
-                    eq(productVariant.businessId, website.businessId),
-                    eq(productVariant.productId, product.id),
-                    isNull(productVariant.deletedAt),
-                    or(
-                      searchUuid
-                        ? eq(productVariant.id, searchUuid)
-                        : undefined,
-                      ilike(productVariant.title, `%${search}%`),
-                      ilike(productVariant.sku, `%${search}%`),
-                      ilike(productVariant.barcode, `%${search}%`),
-                    ),
+          searchUuid ? eq(product.id, searchUuid) : undefined,
+          ilike(product.name, `%${search}%`),
+          ilike(product.slug, `%${search}%`),
+          ilike(product.description, `%${search}%`),
+          ilike(product.sku, `%${search}%`),
+          ilike(product.barcode, `%${search}%`),
+          exists(
+            this.db
+              .select({ id: productVariant.id })
+              .from(productVariant)
+              .where(
+                and(
+                  eq(productVariant.businessId, website.businessId),
+                  eq(productVariant.productId, product.id),
+                  isNull(productVariant.deletedAt),
+                  or(
+                    searchUuid
+                      ? eq(productVariant.id, searchUuid)
+                      : undefined,
+                    ilike(productVariant.title, `%${search}%`),
+                    ilike(productVariant.sku, `%${search}%`),
+                    ilike(productVariant.barcode, `%${search}%`),
                   ),
                 ),
-            ),
-          )
+              ),
+          ),
+        )
         : undefined,
     );
 
@@ -435,6 +438,30 @@ export class StorefrontService {
     return apiResponse(await this.hydrateVariant(item, matchedVariant));
   }
 
+  async contactMessage(host: string | undefined, dto: StorefrontContactDto) {
+    const website = await this.getPublishedWebsite(host);
+
+    const contactData: NewStorefrontContact = {
+      businessId: website.businessId,
+      name: dto.name.trim(),
+      phone: dto.phone.trim(),
+      email: dto.email.trim().toLowerCase(),
+      subject: dto.subject?.trim() || null,
+      message: dto.message?.trim() || null,
+    };
+
+    const [createdContact] = await this.db
+      .insert(contact)
+      .values(contactData)
+      .returning();
+
+    return {
+      success: true,
+      message: "Contact message submitted successfully.",
+      data: createdContact,
+    };
+  }
+
   async findProductReviews(
     host: string | undefined,
     productSlug: string,
@@ -517,17 +544,17 @@ export class StorefrontService {
     ] = await Promise.all([
       item.categoryId
         ? this.db
-            .select()
-            .from(productCategory)
-            .where(eq(productCategory.id, item.categoryId))
-            .then(([row]) => row ?? null)
+          .select()
+          .from(productCategory)
+          .where(eq(productCategory.id, item.categoryId))
+          .then(([row]) => row ?? null)
         : Promise.resolve(null),
       item.brandId
         ? this.db
-            .select()
-            .from(productBrand)
-            .where(eq(productBrand.id, item.brandId))
-            .then(([row]) => row ?? null)
+          .select()
+          .from(productBrand)
+          .where(eq(productBrand.id, item.brandId))
+          .then(([row]) => row ?? null)
         : Promise.resolve(null),
       this.db
         .select({
@@ -572,15 +599,15 @@ export class StorefrontService {
       variantIds.length === 0
         ? []
         : await this.db
-            .select()
-            .from(productImage)
-            .where(
-              and(
-                eq(productImage.productId, item.id),
-                inArray(productImage.variantId, variantIds),
-                isNull(productImage.deletedAt),
-              ),
-            );
+          .select()
+          .from(productImage)
+          .where(
+            and(
+              eq(productImage.productId, item.id),
+              inArray(productImage.variantId, variantIds),
+              isNull(productImage.deletedAt),
+            ),
+          );
     const productEffectivePrice = resolveProductEffectivePrice(item);
 
     return {
@@ -617,11 +644,11 @@ export class StorefrontService {
     const [parent, children, childCount, productCount] = await Promise.all([
       category.parentId
         ? this.db
-            .select()
-            .from(productCategory)
-            .where(eq(productCategory.id, category.parentId))
-            .limit(1)
-            .then(([row]) => row ?? null)
+          .select()
+          .from(productCategory)
+          .where(eq(productCategory.id, category.parentId))
+          .limit(1)
+          .then(([row]) => row ?? null)
         : Promise.resolve(null),
       this.db
         .select()

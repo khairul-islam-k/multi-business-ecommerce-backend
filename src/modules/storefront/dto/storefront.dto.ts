@@ -7,6 +7,10 @@ import {
   IsUUID,
   IsString,
   ValidateNested,
+  IsNotEmpty,
+  MinLength,
+  MaxLength,
+  IsEmail,
 } from "class-validator";
 
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
@@ -15,6 +19,55 @@ import {
   PaginationQueryDto,
   SortedPaginationQueryDto,
 } from "../../../common/http/query.dto";
+
+export class StorefrontContactDto {
+  @ApiProperty({
+    example: "John Doe",
+    description: "Customer full name",
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(2)
+  @MaxLength(100)
+  name!: string;
+
+  @ApiProperty({
+    example: "+8801712345678",
+    description: "Customer phone number",
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(7)
+  @MaxLength(20)
+  phone!: string;
+
+  @ApiProperty({
+    example: "john@example.com",
+    description: "Customer email address",
+  })
+  @IsEmail()
+  @IsNotEmpty()
+  @MaxLength(150)
+  email!: string;
+
+  @ApiPropertyOptional({
+    example: "Product inquiry",
+    description: "Subject of the contact message",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  subject?: string;
+
+  @ApiPropertyOptional({
+    example: "I would like to know more about this product.",
+    description: "Customer contact message",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  message?: string;
+}
 
 export class StorefrontCatalogSearchDto {
   @ApiPropertyOptional({ example: "search" })

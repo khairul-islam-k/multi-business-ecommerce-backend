@@ -9,6 +9,7 @@ import { StorefrontCustomerController } from "./storefront-customer.controller";
 import { StorefrontCustomerService } from "./storefront-customer.service";
 import { StorefrontController } from "./storefront.controller";
 import { StorefrontService } from "./storefront.service";
+import { MediaModule } from "../media/media.module";
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { StorefrontService } from "./storefront.service";
     CustomerAuthModule,
     OrderModule,
     CourierModule,
+    MediaModule,
   ],
   controllers: [StorefrontController, StorefrontCustomerController],
   providers: [StorefrontService, StorefrontCustomerService],

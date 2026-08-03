@@ -378,3 +378,67 @@ export const customerWishlist = pgTable(
 );
 export type CustomerWishlist = typeof customerWishlist.$inferSelect;
 export type NewCustomerWishlist = typeof customerWishlist.$inferInsert;
+
+export const contact = pgTable(
+  "contact_messages",
+  {
+    id: uuid().primaryKey().defaultRandom().notNull(),
+
+    businessId: uuid("business_id")
+      .notNull()
+      .references((): AnyPgColumn => business.id, {
+        onDelete: "cascade",
+      }),
+
+    name: varchar("name", {
+      length: 100,
+    }).notNull(),
+
+    phone: varchar("phone", {
+      length: 20,
+    }).notNull(),
+
+    email: varchar("email", {
+      length: 150,
+    }).notNull(),
+
+    subject: varchar("subject", {
+      length: 200,
+    }),
+
+    message: text("message"),
+
+    createdAt: timestamp("created_at", {
+      mode: "date",
+    })
+      .defaultNow()
+      .notNull(),
+
+    updatedAt: timestamp("updated_at", {
+      mode: "date",
+    })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+
+    deletedAt: timestamp("deleted_at", {
+      mode: "date",
+    }),
+  },
+  (table) => [
+    index("storefront_contacts_business_id_idx").on(table.businessId),
+
+    index("storefront_contacts_email_idx").on(table.email),
+
+    index("storefront_contacts_phone_idx").on(table.phone),
+
+    index("storefront_contacts_created_at_idx").on(table.createdAt),
+
+    index("storefront_contacts_business_id_created_at_idx").on(
+      table.businessId,
+      table.createdAt,
+    ),
+  ],
+);
+export type StorefrontContact = typeof contact.$inferSelect;
+export type NewStorefrontContact = typeof contact.$inferInsert;
