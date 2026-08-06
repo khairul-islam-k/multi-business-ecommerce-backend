@@ -1,6 +1,6 @@
 import Decimal from "decimal.js";
 
-import { CourierConfigMode, CourierShipmentStatus } from "@/database/schema";
+import { CourierConfigMode, CourierProvider, CourierShipmentStatus } from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
@@ -9,6 +9,9 @@ import {
 
 export const REDX_LIVE_BASE_URL = "https://openapi.redx.com.bd";
 export const REDX_SANDBOX_BASE_URL = "https://sandbox.redx.com.bd";
+
+export const PATHAO_LIVE_BASE_URL = "https://openapi.redx.com.bd";
+export const PATHAO_SANDBOX_BASE_URL = "https://sandbox.redx.com.bd";
 
 export type RedxConfig = {
   apiAccessToken: string;
@@ -98,6 +101,7 @@ export class CourierProviderService {
 
   sanitizeRedxConfigData(config: Record<string, unknown>) {
     const sanitized = { ...config };
+
     delete sanitized.baseUrl;
     delete sanitized.mode;
 
@@ -230,29 +234,6 @@ export class CourierProviderService {
     });
   }
 
-  // updatePickupStore(
-  //   config: RedxConfig,
-  //   storeId: string,
-  //   dto: RedxPickupStoreUpdateRequest,
-  // ) {
-  //   return this.request(
-  //     config,
-  //     `/v1.0.0-beta/pickup/stores/${encodeURIComponent(storeId)}`,
-  //     {
-  //       method: "PATCH",
-  //       body: this.buildPickupStorePayload(dto),
-  //     },
-  //   );
-  // }
-
-  // deletePickupStore(config: RedxConfig, storeId: string) {
-  //   return this.request(
-  //     config,
-  //     `/v1.0.0-beta/pickup/stores/${encodeURIComponent(storeId)}`,
-  //     { method: "DELETE" },
-  //   );
-  // }
-
   listPickupStores(config: RedxConfig) {
     return this.request(config, "/v1.0.0-beta/pickup/stores");
   }
@@ -273,6 +254,28 @@ export class CourierProviderService {
       ...(dto.address !== undefined && { address: dto.address }),
       ...(dto.areaId !== undefined && { area_id: Number(dto.areaId) }),
     };
+  }
+
+  // FOR PATHAO
+  async getAccessTokenAndRefreshToke(
+    mode: CourierConfigMode,
+    code: CourierProvider,
+    dto: Record<string, unknown>,
+  ) {
+    const baseUrl = this.getBaseUrl(mode, code);
+    console.log("base", baseUrl);
+  }
+
+  private getBaseUrl(mode: CourierConfigMode, code: CourierProvider) {
+    switch (code) {
+      case CourierProvider.PATHAO:
+        return mode === "SANDBOX"
+          ? PATHAO_SANDBOX_BASE_URL
+          : PATHAO_LIVE_BASE_URL;
+
+      default:
+        return "";
+    }
   }
 
   mapWebhookStatus(status?: string | null) {

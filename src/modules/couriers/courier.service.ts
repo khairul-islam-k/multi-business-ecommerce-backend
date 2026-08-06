@@ -135,10 +135,10 @@ export class CourierService {
       query.status ? eq(courier.status, query.status) : undefined,
       search
         ? or(
-            searchUuid ? eq(courier.id, searchUuid) : undefined,
-            ilike(courier.name, `%${search}%`),
-            ilike(courier.code, `%${search}%`),
-          )
+          searchUuid ? eq(courier.id, searchUuid) : undefined,
+          ilike(courier.name, `%${search}%`),
+          ilike(courier.code, `%${search}%`),
+        )
         : undefined,
     );
 
@@ -176,11 +176,11 @@ export class CourierService {
       query.status ? eq(courierConfig.status, query.status) : undefined,
       search
         ? or(
-            searchUuid ? eq(courierConfig.id, searchUuid) : undefined,
-            searchUuid ? eq(courierConfig.courierId, searchUuid) : undefined,
-            ilike(courier.name, `%${search}%`),
-            ilike(courier.code, `%${search}%`),
-          )
+          searchUuid ? eq(courierConfig.id, searchUuid) : undefined,
+          searchUuid ? eq(courierConfig.courierId, searchUuid) : undefined,
+          ilike(courier.name, `%${search}%`),
+          ilike(courier.code, `%${search}%`),
+        )
         : undefined,
     );
 
@@ -232,81 +232,81 @@ export class CourierService {
         : undefined,
       search
         ? or(
-            searchUuid ? eq(courierShipment.id, searchUuid) : undefined,
-            searchUuid ? eq(courierShipment.orderId, searchUuid) : undefined,
-            searchUuid ? eq(courierShipment.courierId, searchUuid) : undefined,
-            searchUuid
-              ? eq(courierShipment.courierConfigId, searchUuid)
-              : undefined,
-            searchUuid
-              ? eq(courierShipment.pickupWarehouseId, searchUuid)
-              : undefined,
-            ilike(courierShipment.shipmentNo, `%${search}%`),
-            ilike(courierShipment.consignmentId, `%${search}%`),
-            ilike(courierShipment.trackingCode, `%${search}%`),
-            ilike(courierShipment.providerStatus, `%${search}%`),
-            ilike(courierShipment.recipientName, `%${search}%`),
-            ilike(courierShipment.recipientPhone, `%${search}%`),
-            ilike(courierShipment.deliveryAreaId, `%${search}%`),
-            ilike(courierShipment.deliveryAreaName, `%${search}%`),
-            ilike(courierShipment.deliveryPostCode, `%${search}%`),
-            ilike(courierShipment.pickupAreaId, `%${search}%`),
-            ilike(courierShipment.pickupAreaName, `%${search}%`),
-            ilike(courierShipment.pickupStoreId, `%${search}%`),
-            exists(
-              this.db
-                .select({ id: order.id })
-                .from(order)
-                .where(
-                  and(
-                    eq(order.id, courierShipment.orderId),
-                    eq(order.businessId, businessId),
-                    isNull(order.deletedAt),
-                    or(
-                      ilike(order.orderNo, `%${search}%`),
-                      ilike(order.customerName, `%${search}%`),
-                      ilike(order.customerPhone, `%${search}%`),
-                      ilike(order.customerEmail, `%${search}%`),
-                    ),
+          searchUuid ? eq(courierShipment.id, searchUuid) : undefined,
+          searchUuid ? eq(courierShipment.orderId, searchUuid) : undefined,
+          searchUuid ? eq(courierShipment.courierId, searchUuid) : undefined,
+          searchUuid
+            ? eq(courierShipment.courierConfigId, searchUuid)
+            : undefined,
+          searchUuid
+            ? eq(courierShipment.pickupWarehouseId, searchUuid)
+            : undefined,
+          ilike(courierShipment.shipmentNo, `%${search}%`),
+          ilike(courierShipment.consignmentId, `%${search}%`),
+          ilike(courierShipment.trackingCode, `%${search}%`),
+          ilike(courierShipment.providerStatus, `%${search}%`),
+          ilike(courierShipment.recipientName, `%${search}%`),
+          ilike(courierShipment.recipientPhone, `%${search}%`),
+          ilike(courierShipment.deliveryAreaId, `%${search}%`),
+          ilike(courierShipment.deliveryAreaName, `%${search}%`),
+          ilike(courierShipment.deliveryPostCode, `%${search}%`),
+          ilike(courierShipment.pickupAreaId, `%${search}%`),
+          ilike(courierShipment.pickupAreaName, `%${search}%`),
+          ilike(courierShipment.pickupStoreId, `%${search}%`),
+          exists(
+            this.db
+              .select({ id: order.id })
+              .from(order)
+              .where(
+                and(
+                  eq(order.id, courierShipment.orderId),
+                  eq(order.businessId, businessId),
+                  isNull(order.deletedAt),
+                  or(
+                    ilike(order.orderNo, `%${search}%`),
+                    ilike(order.customerName, `%${search}%`),
+                    ilike(order.customerPhone, `%${search}%`),
+                    ilike(order.customerEmail, `%${search}%`),
                   ),
                 ),
-            ),
-            exists(
-              this.db
-                .select({ id: product.id })
-                .from(courierShipmentItem)
-                .innerJoin(
-                  product,
-                  eq(product.id, courierShipmentItem.productId),
-                )
-                .leftJoin(
-                  productVariant,
-                  eq(productVariant.id, courierShipmentItem.variantId),
-                )
-                .where(
-                  and(
-                    eq(courierShipmentItem.shipmentId, courierShipment.id),
-                    eq(product.businessId, businessId),
-                    or(
-                      searchUuid
-                        ? eq(courierShipmentItem.id, searchUuid)
-                        : undefined,
-                      searchUuid ? eq(product.id, searchUuid) : undefined,
-                      searchUuid
-                        ? eq(productVariant.id, searchUuid)
-                        : undefined,
-                      ilike(product.name, `%${search}%`),
-                      ilike(product.slug, `%${search}%`),
-                      ilike(product.sku, `%${search}%`),
-                      ilike(product.barcode, `%${search}%`),
-                      ilike(productVariant.title, `%${search}%`),
-                      ilike(productVariant.sku, `%${search}%`),
-                      ilike(productVariant.barcode, `%${search}%`),
-                    ),
+              ),
+          ),
+          exists(
+            this.db
+              .select({ id: product.id })
+              .from(courierShipmentItem)
+              .innerJoin(
+                product,
+                eq(product.id, courierShipmentItem.productId),
+              )
+              .leftJoin(
+                productVariant,
+                eq(productVariant.id, courierShipmentItem.variantId),
+              )
+              .where(
+                and(
+                  eq(courierShipmentItem.shipmentId, courierShipment.id),
+                  eq(product.businessId, businessId),
+                  or(
+                    searchUuid
+                      ? eq(courierShipmentItem.id, searchUuid)
+                      : undefined,
+                    searchUuid ? eq(product.id, searchUuid) : undefined,
+                    searchUuid
+                      ? eq(productVariant.id, searchUuid)
+                      : undefined,
+                    ilike(product.name, `%${search}%`),
+                    ilike(product.slug, `%${search}%`),
+                    ilike(product.sku, `%${search}%`),
+                    ilike(product.barcode, `%${search}%`),
+                    ilike(productVariant.title, `%${search}%`),
+                    ilike(productVariant.sku, `%${search}%`),
+                    ilike(productVariant.barcode, `%${search}%`),
                   ),
                 ),
-            ),
-          )
+              ),
+          ),
+        )
         : undefined,
     );
 
@@ -351,29 +351,72 @@ export class CourierService {
       ...decrypted,
       ...(dto.configData ?? {}),
     });
+
+    console.log("row", row.courier.name, row);
     const nextStatus = dto.status ?? row.status;
 
-    if (nextStatus === CourierConfigStatus.ACTIVE) {
-      this.assertRedxConfigUsable(nextConfigData, nextMode);
-    }
+    // if (nextStatus === CourierConfigStatus.ACTIVE) {
+    //   this.assertRedxConfigUsable(nextConfigData, nextMode);
+    // }
 
     const nextWebhookToken = dto.rotateWebhookToken
       ? this.generateWebhookToken()
       : null;
 
+    const pathaoToken =
+      row.courier.code === "PATHAO" &&
+      (await this.provider.getAccessTokenAndRefreshToke(
+        nextMode,
+        row.courier.code,
+        nextConfigData,
+      ));
+
+    console.log("token", pathaoToken);
+
+    let updatePayload: Record<string, unknown>;
+
+    switch (row.courier.code) {
+      case CourierProvider.REDX:
+        updatePayload = {
+          ...((dto.configData !== undefined || "baseUrl" in decrypted) && {
+            configData: this.configEncryption.encrypt(nextConfigData),
+          }),
+          ...(dto.mode !== undefined && { mode: dto.mode }),
+          ...(dto.status !== undefined && { status: dto.status }),
+          ...(nextWebhookToken && {
+            webhookTokenHash: this.hashWebhookToken(nextWebhookToken),
+          }),
+          updatedBy: currentUser.id,
+        };
+        break;
+
+      case CourierProvider.PATHAO:
+        updatePayload = {
+          ...((dto.configData !== undefined || "baseUrl" in decrypted) && {
+            configData: this.configEncryption.encrypt({
+              ...nextConfigData,
+              accessToken: "khafasldk",
+              refreshToken: "kdjasljdksj",
+            }),
+          }),
+          ...(dto.mode !== undefined && { mode: dto.mode }),
+          ...(dto.status !== undefined && { status: dto.status }),
+          ...(nextWebhookToken && {
+            webhookTokenHash: this.hashWebhookToken(nextWebhookToken),
+          }),
+          updatedBy: currentUser.id,
+        };
+        break;
+
+      default:
+        throw new BadRequestException(
+          `Unsupported courier provider: ${row?.courier?.name}`,
+        );
+    }
+
     const [updated] = await this.db
       .update(courierConfig)
-      .set({
-        ...((dto.configData !== undefined || "baseUrl" in decrypted) && {
-          configData: this.configEncryption.encrypt(nextConfigData),
-        }),
-        ...(dto.mode !== undefined && { mode: dto.mode }),
-        ...(dto.status !== undefined && { status: dto.status }),
-        ...(nextWebhookToken && {
-          webhookTokenHash: this.hashWebhookToken(nextWebhookToken),
-        }),
-        updatedBy: currentUser.id,
-      })
+      .set(updatePayload)
       .where(eq(courierConfig.id, configId))
       .returning();
 
@@ -827,6 +870,8 @@ export class CourierService {
       businessId,
       shipment.courierConfigId,
     );
+
+    console.log("runtime", runtime);
     const [orderRow] = await this.db
       .select()
       .from(order)
@@ -933,23 +978,23 @@ export class CourierService {
     );
     const itemMetrics = options.items
       ? await this.calculateItemMetrics(
-          businessId,
-          options.items,
-          runtime.defaultParcelWeight,
-        )
+        businessId,
+        options.items,
+        runtime.defaultParcelWeight,
+      )
       : null;
     const orderWeight = options.orderId
       ? await this.calculatePersistedOrderWeight(
-          businessId,
-          options.orderId,
-          runtime.defaultParcelWeight,
-        )
+        businessId,
+        options.orderId,
+        runtime.defaultParcelWeight,
+      )
       : null;
     const requestWeight =
       "weight" in dto && typeof dto.weight === "number" ? dto.weight : null;
     const requestCashCollectionAmount =
       "cashCollectionAmount" in dto &&
-      typeof dto.cashCollectionAmount === "number"
+        typeof dto.cashCollectionAmount === "number"
         ? dto.cashCollectionAmount
         : null;
     const weight = itemMetrics?.weight ?? orderWeight ?? requestWeight;
@@ -1229,23 +1274,23 @@ export class CourierService {
 
     const selectedVariant = variantId
       ? await this.db
-          .select({
-            id: productVariant.id,
-            priceOverride: productVariant.priceOverride,
-            weight: productVariant.weight,
-          })
-          .from(productVariant)
-          .where(
-            and(
-              eq(productVariant.id, variantId),
-              eq(productVariant.productId, productId),
-              eq(productVariant.businessId, businessId),
-              eq(productVariant.status, ProductVariantStatus.ACTIVE),
-              isNull(productVariant.deletedAt),
-            ),
-          )
-          .limit(1)
-          .then(([row]) => row ?? null)
+        .select({
+          id: productVariant.id,
+          priceOverride: productVariant.priceOverride,
+          weight: productVariant.weight,
+        })
+        .from(productVariant)
+        .where(
+          and(
+            eq(productVariant.id, variantId),
+            eq(productVariant.productId, productId),
+            eq(productVariant.businessId, businessId),
+            eq(productVariant.status, ProductVariantStatus.ACTIVE),
+            isNull(productVariant.deletedAt),
+          ),
+        )
+        .limit(1)
+        .then(([row]) => row ?? null)
       : null;
 
     if (variantId && !selectedVariant) {
@@ -1589,47 +1634,47 @@ export class CourierService {
           .then(([row]) => row ?? null),
         shipment.courierId
           ? this.db
-              .select()
-              .from(courier)
-              .where(eq(courier.id, shipment.courierId))
-              .limit(1)
-              .then(([row]) => row ?? null)
+            .select()
+            .from(courier)
+            .where(eq(courier.id, shipment.courierId))
+            .limit(1)
+            .then(([row]) => row ?? null)
           : Promise.resolve(null),
         shipment.courierConfigId
           ? this.db
-              .select({ config: courierConfig, courier })
-              .from(courierConfig)
-              .innerJoin(courier, eq(courier.id, courierConfig.courierId))
-              .where(
-                and(
-                  eq(courierConfig.id, shipment.courierConfigId),
-                  eq(courierConfig.businessId, shipment.businessId),
-                  isNull(courierConfig.deletedAt),
-                ),
-              )
-              .limit(1)
-              .then(([row]) =>
-                row
-                  ? this.serializeConfig({
-                      ...row.config,
-                      courier: row.courier,
-                    })
-                  : null,
-              )
+            .select({ config: courierConfig, courier })
+            .from(courierConfig)
+            .innerJoin(courier, eq(courier.id, courierConfig.courierId))
+            .where(
+              and(
+                eq(courierConfig.id, shipment.courierConfigId),
+                eq(courierConfig.businessId, shipment.businessId),
+                isNull(courierConfig.deletedAt),
+              ),
+            )
+            .limit(1)
+            .then(([row]) =>
+              row
+                ? this.serializeConfig({
+                  ...row.config,
+                  courier: row.courier,
+                })
+                : null,
+            )
           : Promise.resolve(null),
         shipment.pickupWarehouseId
           ? this.db
-              .select()
-              .from(warehouse)
-              .where(
-                and(
-                  eq(warehouse.id, shipment.pickupWarehouseId),
-                  eq(warehouse.businessId, shipment.businessId),
-                  isNull(warehouse.deletedAt),
-                ),
-              )
-              .limit(1)
-              .then(([row]) => row ?? null)
+            .select()
+            .from(warehouse)
+            .where(
+              and(
+                eq(warehouse.id, shipment.pickupWarehouseId),
+                eq(warehouse.businessId, shipment.businessId),
+                isNull(warehouse.deletedAt),
+              ),
+            )
+            .limit(1)
+            .then(([row]) => row ?? null)
           : Promise.resolve(null),
         this.db
           .select({

@@ -19,6 +19,11 @@ const couriers = [
     name: "REDX",
     description: "Courier delivery provider by REDX.",
   },
+  {
+    code: CourierProvider.PATHAO,
+    name: "PATHAO",
+    description: "Courier delivery provider by Pathao.",
+  },
 ] as const;
 
 const main = async () => {

@@ -1,7 +1,7 @@
 import Decimal from "decimal.js";
-import { and, avg, count, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, avg, count, desc, eq, isNull } from "drizzle-orm";
 
-import { productReview, ProductReviewStatus } from "@/database/schema";
+import { productReview, productReviewImage, ProductReviewStatus } from "@/database/schema";
 import { Injectable, NotFoundException } from "@nestjs/common";
 
 import {
@@ -132,37 +132,84 @@ export class ProductReviewService {
     const limit = query?.limit ?? 12;
     const skip = (page - 1) * limit;
 
-    const [reviews, total] = await Promise.all([
+    const conditions = and(
+      eq(productReview.businessId, businessId),
+      eq(productReview.productId, productId),
+      variantId ? eq(productReview.variantId, variantId) : undefined,
+      eq(productReview.status, ProductReviewStatus.APPROVED),
+      isNull(productReview.deletedAt),
+    );
+
+    const paginatedReviewIds = this.db
+      .select({
+        id: productReview.id,
+        createdAt: productReview.createdAt,
+      })
+      .from(productReview)
+      .where(conditions)
+      .orderBy(desc(productReview.createdAt))
+      .limit(limit)
+      .offset(skip)
+      .as("paginated_review_ids");
+
+    const [joinedRows, total] = await Promise.all([
       this.db
-        .select()
+        .select({
+          review: productReview,
+          image: productReviewImage
+        })
         .from(productReview)
-        .where(
+        .innerJoin(
+          paginatedReviewIds,
+          eq(productReview.id, paginatedReviewIds.id),
+        )
+        .leftJoin(
+          productReviewImage,
           and(
-            eq(productReview.businessId, businessId),
-            eq(productReview.productId, productId),
-            variantId ? eq(productReview.variantId, variantId) : undefined,
-            eq(productReview.status, ProductReviewStatus.APPROVED),
-            isNull(productReview.deletedAt),
+            eq(productReviewImage.reviewId, productReview.id),
+            eq(productReviewImage.businessId, businessId),
+            isNull(productReviewImage.deletedAt),
           ),
         )
-        .orderBy(desc(productReview.createdAt))
-        .limit(limit)
-        .offset(skip),
+        .orderBy(
+          desc(productReview.createdAt),
+          asc(productReviewImage.createdAt),
+        ),
 
       this.db
-        .select({ value: count() })
+        .select({
+          value: count(),
+        })
         .from(productReview)
-        .where(
-          and(
-            eq(productReview.businessId, businessId),
-            eq(productReview.productId, productId),
-            variantId ? eq(productReview.variantId, variantId) : undefined,
-            eq(productReview.status, ProductReviewStatus.APPROVED),
-            isNull(productReview.deletedAt),
-          ),
-        )
+        .where(conditions)
         .then(([row]) => row?.value ?? 0),
     ]);
+
+    type ReviewRow = typeof productReview.$inferSelect;
+
+    type ReviewImageRow = typeof productReviewImage.$inferSelect;
+
+    const reviewMap = new Map<
+      string,
+      ReviewRow & {
+        images: ReviewImageRow[];
+      }
+    >();
+
+    for (const row of joinedRows) {
+      if (!reviewMap.has(row.review.id)) {
+        reviewMap.set(row.review.id, {
+          ...row.review,
+          images: [],
+        });
+      }
+
+      if (row.image) {
+        reviewMap.get(row.review.id)!.images.push(row.image);
+      }
+    }
+
+    const reviews = Array.from(reviewMap.values());
 
     return {
       reviews,

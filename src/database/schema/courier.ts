@@ -20,10 +20,14 @@ import { systemUser } from "./system";
 
 export const CourierProvider = {
   REDX: "REDX",
+  PATHAO: "PATHAO",
 } as const;
 export type CourierProvider =
   (typeof CourierProvider)[keyof typeof CourierProvider];
-export const courierProviderEnum = pgEnum("CourierProvider", ["REDX"]);
+export const courierProviderEnum = pgEnum("CourierProvider", [
+  "REDX",
+  "PATHAO",
+]);
 
 export const CourierStatus = {
   ACTIVE: "ACTIVE",
