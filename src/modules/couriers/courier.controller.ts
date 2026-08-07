@@ -86,12 +86,12 @@ export class CourierController {
   @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.READ)
   @Get("configs/:configId/redx/areas")
   @ApiOperation({ summary: "Get REDX delivery areas" })
-  getRedxAreas(
+  getRedxCities(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("configId", ParseUUIDPipe) configId: string,
     @Query() query: RedxAreaQueryDto,
   ) {
-    return this.couriers.getRedxAreas(businessId, configId, query);
+    return this.couriers.getCities(businessId, configId, query);
   }
 
   @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.READ)

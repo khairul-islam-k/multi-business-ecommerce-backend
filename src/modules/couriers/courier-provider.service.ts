@@ -1,6 +1,10 @@
 import Decimal from "decimal.js";
 
-import { CourierConfigMode, CourierProvider, CourierShipmentStatus } from "@/database/schema";
+import {
+  CourierConfigMode,
+  CourierProvider,
+  CourierShipmentStatus,
+} from "@/database/schema";
 import {
   BadRequestException,
   Injectable,
@@ -10,17 +14,23 @@ import {
 export const REDX_LIVE_BASE_URL = "https://openapi.redx.com.bd";
 export const REDX_SANDBOX_BASE_URL = "https://sandbox.redx.com.bd";
 
-export const PATHAO_LIVE_BASE_URL = "https://openapi.redx.com.bd";
-export const PATHAO_SANDBOX_BASE_URL = "https://sandbox.redx.com.bd";
+export const PATHAO_LIVE_BASE_URL = "https://api-hermes.pathao.com";
+export const PATHAO_SANDBOX_BASE_URL = "https://courier-api-sandbox.pathao.com";
 
 export type RedxConfig = {
   apiAccessToken: string;
-  baseUrl: string;
+  refreshToken?: string;
+  baseUrl?: string;
   mode: CourierConfigMode;
   defaultParcelWeight?: number;
   defaultParcelValue?: number;
   isClosedBox?: boolean;
   instruction?: string;
+  clientId?: string;
+  clientSecret?: string;
+  email?: string;
+  password?: string;
+  code: CourierProvider;
 };
 
 export type RedxAreaQuery = {
@@ -74,25 +84,52 @@ export type RedxWebhookPayload = {
 
 @Injectable()
 export class CourierProviderService {
-  normalizeRedxConfig(
+  normalizeCourierConfig(
+    code: string,
     config: Record<string, unknown>,
     mode: CourierConfigMode = CourierConfigMode.LIVE,
   ): RedxConfig {
-    const apiAccessToken = this.requiredString(
-      config.apiAccessToken,
-      "REDX API access token is required before activating or using REDX.",
-    );
+    switch (code) {
+      case "REDX": {
+        const apiAccessToken = this.requiredString(
+          config.apiAccessToken,
+          "REDX API access token is required before activating or using REDX.",
+        );
 
-    return {
-      apiAccessToken,
-      baseUrl: this.resolveRedxBaseUrl(mode),
-      mode,
-      defaultParcelWeight: this.optionalNumber(config.defaultParcelWeight),
-      defaultParcelValue: this.optionalNumber(config.defaultParcelValue),
-      isClosedBox:
-        typeof config.isClosedBox === "boolean" ? config.isClosedBox : true,
-      instruction: this.optionalString(config.instruction),
-    };
+        return {
+          apiAccessToken,
+          baseUrl: this.resolveRedxBaseUrl(mode),
+          mode,
+          code,
+          defaultParcelWeight: this.optionalNumber(config.defaultParcelWeight),
+          defaultParcelValue: this.optionalNumber(config.defaultParcelValue),
+          isClosedBox:
+            typeof config.isClosedBox === "boolean" ? config.isClosedBox : true,
+          instruction: this.optionalString(config.instruction),
+        };
+      }
+
+      case "PATHAO": {
+        const accessToken = this.requiredString(
+          config.accessToken,
+          "PATHAO access token is required before activating or using PATHAO.",
+        );
+
+        return {
+          apiAccessToken: accessToken,
+          refreshToken: this.optionalString(config.refreshToken),
+          clientId: this.optionalString(config.clientId),
+          clientSecret: this.optionalString(config.clientSecret),
+          email: this.optionalString(config.email),
+          password: this.optionalString(config.password),
+          mode,
+          code,
+        };
+      }
+
+      default:
+        throw new BadRequestException(`Unsupported courier provider: ${code}`);
+    }
   }
 
   redactRedxConfig(config: Record<string, unknown>) {
@@ -117,16 +154,103 @@ export class CourierProviderService {
   async getAreas(config: RedxConfig, query: RedxAreaQuery = {}) {
     const params = new URLSearchParams();
 
-    if (query.postCode !== undefined) {
-      params.set("post_code", String(query.postCode));
-    }
+    switch (config.code) {
+      case "REDX": {
+        if (query.postCode !== undefined) {
+          params.set("post_code", String(query.postCode));
+        }
 
-    if (query.districtName) {
-      params.set("district_name", query.districtName);
-    }
+        if (query.districtName) {
+          params.set("district_name", query.districtName);
+        }
 
-    const suffix = params.toString() ? `?${params.toString()}` : "";
-    return this.request(config, `/v1.0.0-beta/areas${suffix}`);
+        const suffix = params.toString() ? `?${params.toString()}` : "";
+
+        const response = await this.apiRequest(
+          config,
+          `/v1.0.0-beta/areas${suffix}`,
+        );
+        return this.normalizeCityResponse(config.code, response);
+      }
+
+      case "PATHAO": {
+        const response = await this.apiRequest(
+          config,
+          "/aladdin/api/v1/city-list",
+        );
+
+        return this.normalizeCityResponse(config.code, response);
+      }
+
+      default: {
+        throw new BadRequestException(`Unsupported courier provider`);
+      }
+    }
+  }
+
+  private normalizeCityResponse(code: CourierProvider, payload: unknown) {
+    switch (code) {
+      case "PATHAO": {
+        const response = payload as {
+          message?: string;
+          type?: string;
+          data?: {
+            data?: Array<{
+              city_id: number;
+              city_name: string;
+            }>;
+          };
+        };
+
+        return {
+          data: {
+            areas:
+              response.data?.data?.map((item) => ({
+                city_id: item.city_id,
+                city_name: item.city_name.trim(),
+                post_code: null,
+                district_name: null,
+                division_name: null,
+                zone_id: null,
+              })) ?? [],
+            message: response.message ?? "City successfully fetched.",
+            type: response.type ?? "success",
+          },
+        };
+      }
+
+      case "REDX": {
+        const response = payload as {
+          areas?: Array<{
+            id: number;
+            name: string;
+            post_code?: number;
+            district_name?: string;
+            division_name?: string;
+            zone_id?: number;
+          }>;
+        };
+
+        return {
+          data: {
+            areas:
+              response.areas?.map((item) => ({
+                city_id: item.id,
+                city_name: item.name.trim(),
+                post_code: item.post_code ?? null,
+                district_name: item.district_name ?? null,
+                division_name: item.division_name ?? null,
+                zone_id: item.zone_id ?? null,
+              })) ?? [],
+            message: "City successfully fetched.",
+            type: "success",
+          },
+        };
+      }
+
+      default:
+        throw new BadRequestException(`Unsupported courier provider`);
+    }
   }
 
   async calculateCharge(config: RedxConfig, dto: RedxChargeRequest) {
@@ -261,9 +385,64 @@ export class CourierProviderService {
     mode: CourierConfigMode,
     code: CourierProvider,
     dto: Record<string, unknown>,
-  ) {
+  ): Promise<{
+    access_token: string;
+    refresh_token: string;
+  }> {
     const baseUrl = this.getBaseUrl(mode, code);
-    console.log("base", baseUrl);
+
+    const pathaoPayload = {
+      client_id: dto.clientId,
+      client_secret: dto.clientSecret,
+      grant_type: "password",
+      username: dto.email,
+      password: dto.password,
+    };
+
+    const response = await fetch(`${baseUrl}/aladdin/api/v1/issue-token`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(pathaoPayload),
+    });
+
+    const payload = await this.parseResponse(response);
+
+    if (!response.ok) {
+      const message =
+        typeof payload === "object"
+          ? (payload as { message: string }).message
+          : null;
+      throw new BadRequestException({
+        message: message
+          ? `PATHAO request failed: ${message}`
+          : "PATHAO request failed",
+        statusCode: response.status,
+        response: payload,
+      });
+    }
+
+    if (
+      typeof payload !== "object" ||
+      payload === null ||
+      !("access_token" in payload) ||
+      !("refresh_token" in payload) ||
+      typeof payload.access_token !== "string" ||
+      typeof payload.refresh_token !== "string"
+    ) {
+      throw new BadRequestException({
+        message: "PATHAO returned an invalid token response.",
+        statusCode: response.status,
+        response: payload,
+      });
+    }
+
+    return {
+      access_token: payload.access_token,
+      refresh_token: payload.refresh_token,
+    };
   }
 
   private getBaseUrl(mode: CourierConfigMode, code: CourierProvider) {
@@ -272,6 +451,8 @@ export class CourierProviderService {
         return mode === "SANDBOX"
           ? PATHAO_SANDBOX_BASE_URL
           : PATHAO_LIVE_BASE_URL;
+      case CourierProvider.REDX:
+        return mode === "SANDBOX" ? REDX_SANDBOX_BASE_URL : REDX_LIVE_BASE_URL;
 
       default:
         return "";
@@ -329,6 +510,7 @@ export class CourierProviderService {
     );
   }
 
+  // I want to change it
   private async request(
     config: RedxConfig,
     endpoint: string,
@@ -350,6 +532,60 @@ export class CourierProviderService {
       },
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
+
+    const payload = await this.parseResponse(response);
+
+    if (!response.ok) {
+      const message =
+        typeof payload === "object"
+          ? (payload as { message: string }).message
+          : null;
+      throw new BadRequestException({
+        message: message
+          ? `REDX request failed: ${message}`
+          : "REDX request failed",
+        statusCode: response.status,
+        response: payload,
+      });
+    }
+
+    return payload;
+  }
+
+  private async apiRequest(
+    config: RedxConfig,
+    endpoint: string,
+    options: {
+      method?: "GET" | "POST" | "PATCH" | "DELETE";
+      query?: Record<string, string>;
+      body?: Record<string, unknown>;
+    } = {},
+  ) {
+    console.log("config", config);
+    const query = options.query
+      ? `?${new URLSearchParams(options.query).toString()}`
+      : "";
+    const response = await fetch(
+      `${this.getBaseUrl(config.mode, config.code)}${endpoint}${query}`,
+      {
+        method: options.method ?? "GET",
+
+        headers:
+          config.code === "REDX"
+            ? {
+                "API-ACCESS-TOKEN": `Bearer ${config.apiAccessToken}`,
+                Accept: "application/json",
+                ...(options.body ? { "Content-Type": "application/json" } : {}),
+              }
+            : {
+                Authorization: `Bearer ${config.apiAccessToken}`,
+                Accept: "application/json",
+                "Content-Type": "application/json; charset=UTF-8",
+              },
+
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      },
+    );
 
     const payload = await this.parseResponse(response);
 

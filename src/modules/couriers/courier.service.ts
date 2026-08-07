@@ -118,7 +118,7 @@ export class CourierService {
     private readonly orderCodes: OrderCodeRepository,
     private readonly inventory: InventoryLookupService,
     private readonly financeCodes: FinanceCodeService,
-  ) {}
+  ) { }
 
   private get db() {
     return this.database.db;
@@ -352,9 +352,6 @@ export class CourierService {
       ...(dto.configData ?? {}),
     });
 
-    console.log("row", row.courier.name, row);
-    const nextStatus = dto.status ?? row.status;
-
     // if (nextStatus === CourierConfigStatus.ACTIVE) {
     //   this.assertRedxConfigUsable(nextConfigData, nextMode);
     // }
@@ -370,8 +367,6 @@ export class CourierService {
         row.courier.code,
         nextConfigData,
       ));
-
-    console.log("token", pathaoToken);
 
     let updatePayload: Record<string, unknown>;
 
@@ -391,12 +386,26 @@ export class CourierService {
         break;
 
       case CourierProvider.PATHAO:
+        if (
+          typeof pathaoToken !== "object" ||
+          pathaoToken === null ||
+          !("access_token" in pathaoToken) ||
+          !("refresh_token" in pathaoToken) ||
+          typeof pathaoToken.access_token !== "string" ||
+          typeof pathaoToken.refresh_token !== "string"
+        ) {
+          throw new BadRequestException({
+            message: "PATHAO returned an invalid token response.",
+            response: pathaoToken,
+          });
+        }
+
         updatePayload = {
           ...((dto.configData !== undefined || "baseUrl" in decrypted) && {
             configData: this.configEncryption.encrypt({
               ...nextConfigData,
-              accessToken: "khafasldk",
-              refreshToken: "kdjasljdksj",
+              accessToken: pathaoToken.access_token,
+              refreshToken: pathaoToken.refresh_token,
             }),
           }),
           ...(dto.mode !== undefined && { mode: dto.mode }),
@@ -461,12 +470,13 @@ export class CourierService {
     return apiResponse(results, "Courier configurations updated successfully.");
   }
 
-  async getRedxAreas(
+  async getCities(
     businessId: string,
     configId: string,
     query: RedxAreaQueryDto,
   ) {
-    const { runtime } = await this.getActiveRedxRuntime(businessId, configId);
+    console.log("call this function");
+    const { runtime } = await this.getActiveConfigRuntime(businessId, configId);
     return apiResponse(await this.provider.getAreas(runtime, query));
   }
 
@@ -480,7 +490,7 @@ export class CourierService {
   }
 
   async listRedxPickupStores(businessId: string, configId: string) {
-    const { runtime } = await this.getActiveRedxRuntime(businessId, configId);
+    const { runtime } = await this.getActiveConfigRuntime(businessId, configId);
     return apiResponse(await this.provider.listPickupStores(runtime));
   }
 
@@ -489,7 +499,7 @@ export class CourierService {
     configId: string,
     dto: RedxCreatePickupStoreDto,
   ) {
-    const { runtime } = await this.getActiveRedxRuntime(businessId, configId);
+    const { runtime } = await this.getActiveConfigRuntime(businessId, configId);
     return apiResponse(
       await this.provider.createPickupStore(runtime, {
         name: dto.name.trim(),
@@ -505,7 +515,7 @@ export class CourierService {
     configId: string,
     storeId: string,
   ) {
-    const { runtime } = await this.getActiveRedxRuntime(businessId, configId);
+    const { runtime } = await this.getActiveConfigRuntime(businessId, configId);
     return apiResponse(
       await this.provider.getPickupStoreDetails(runtime, storeId),
     );
@@ -534,7 +544,7 @@ export class CourierService {
   //     );
   //   }
 
-  //   const { runtime } = await this.getActiveRedxRuntime(businessId, configId);
+  //   const { runtime } = await this.getActiveConfigRuntime(businessId, configId);
   //   return apiResponse(
   //     await this.provider.updatePickupStore(runtime, storeId, payload),
   //     "REDX pickup store updated successfully.",
@@ -546,7 +556,7 @@ export class CourierService {
   //   configId: string,
   //   storeId: string,
   // ) {
-  //   const { runtime } = await this.getActiveRedxRuntime(businessId, configId);
+  //   const { runtime } = await this.getActiveConfigRuntime(businessId, configId);
   //   return apiResponse(
   //     await this.provider.deletePickupStore(runtime, storeId),
   //     "REDX pickup store deleted successfully.",
@@ -583,7 +593,7 @@ export class CourierService {
     query: RedxAreaQueryDto,
   ) {
     const storefront = await this.websites.findPublishedByHostOrThrow(host);
-    return this.getRedxAreas(storefront.businessId, configId, query);
+    return this.getCities(storefront.businessId, configId, query);
   }
 
   async calculateStorefrontShippingCharge(
@@ -732,7 +742,7 @@ export class CourierService {
       );
     }
 
-    const { runtime } = await this.getActiveRedxRuntime(
+    const { runtime } = await this.getActiveConfigRuntime(
       businessId,
       shipment.courierConfigId,
     );
@@ -866,7 +876,7 @@ export class CourierService {
       return shipment;
     }
 
-    const { runtime } = await this.getActiveRedxRuntime(
+    const { runtime } = await this.getActiveConfigRuntime(
       businessId,
       shipment.courierConfigId,
     );
@@ -967,7 +977,7 @@ export class CourierService {
       collectCash?: boolean;
     } = {},
   ) {
-    const { row, runtime } = await this.getActiveRedxRuntime(
+    const { row, runtime } = await this.getActiveConfigRuntime(
       businessId,
       configId,
     );
@@ -1570,27 +1580,27 @@ export class CourierService {
       );
   }
 
-  private async getActiveRedxRuntime(
+  private async getActiveConfigRuntime(
     businessId: string,
     configId?: string | null,
   ) {
     if (!configId) {
-      throw new BadRequestException("REDX courier config is required");
+      throw new BadRequestException("courier config is required");
     }
 
     const row = await this.getConfigRowOrThrow(businessId, configId);
 
     if (
       row.status !== CourierConfigStatus.ACTIVE ||
-      row.courier.status !== CourierStatus.ACTIVE ||
-      row.courier.code !== CourierProvider.REDX
+      row.courier.status !== CourierStatus.ACTIVE
     ) {
-      throw new BadRequestException("REDX courier config is not active");
+      throw new BadRequestException("courier config is not active");
     }
 
     return {
       row,
-      runtime: this.provider.normalizeRedxConfig(
+      runtime: this.provider.normalizeCourierConfig(
+        row.courier.code,
         this.configEncryption.decrypt(row.configData),
         row.mode,
       ),
