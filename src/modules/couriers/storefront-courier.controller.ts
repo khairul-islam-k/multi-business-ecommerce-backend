@@ -32,15 +32,17 @@ export class StorefrontCourierController {
     );
   }
 
-  @Get("storefront/couriers/:configId/redx/areas")
-  @ApiOperation({ summary: "Get REDX delivery areas for storefront checkout" })
-  findStorefrontRedxAreas(
+  @Get("storefront/couriers/:configId/courier/cities")
+  @ApiOperation({
+    summary: "Get courier delivery cities for storefront checkout",
+  })
+  findStorefrontCourierCities(
     @Param("configId") configId: string,
     @Query() query: RedxAreaQueryDto,
     @Headers("host") host?: string,
     @Headers("x-forwarded-host") forwardedHost?: string,
   ) {
-    return this.couriers.findStorefrontRedxAreas(
+    return this.couriers.findStorefrontCourierCities(
       this.getRequestHost(host, forwardedHost),
       configId,
       query,

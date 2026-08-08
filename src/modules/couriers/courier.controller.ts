@@ -84,8 +84,8 @@ export class CourierController {
   }
 
   @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.READ)
-  @Get("configs/:configId/redx/areas")
-  @ApiOperation({ summary: "Get REDX delivery areas" })
+  @Get("configs/:configId/courier/cities")
+  @ApiOperation({ summary: "Get courier delivery cities" })
   getRedxCities(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("configId", ParseUUIDPipe) configId: string,
@@ -95,35 +95,57 @@ export class CourierController {
   }
 
   @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.READ)
+  @Get("configs/:configId/courier/zones/:cityId")
+  @ApiOperation({ summary: "Get Zones inside cities for pathao" })
+  getZonesInsideCity(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("configId", ParseUUIDPipe) configId: string,
+    @Param("cityId") cityId: string,
+  ) {
+    return this.couriers.getZonesInsideCity(businessId, configId, cityId);
+  }
+
+  @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.READ)
+  @Get("configs/:configId/courier/area/:zoneId")
+  @ApiOperation({ summary: "Get areas inside zones for pathao" })
+  getAreaInsideZone(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("configId", ParseUUIDPipe) configId: string,
+    @Param("zoneId") zoneId: string,
+  ) {
+    return this.couriers.getAreaInsideZone(businessId, configId, zoneId);
+  }
+
+  @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.READ)
   @Post("configs/:configId/redx/charge")
-  @ApiOperation({ summary: "Calculate REDX delivery charge" })
-  calculateRedxCharge(
+  @ApiOperation({ summary: "Calculate courier delivery charge" })
+  calculateCourierCharge(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("configId", ParseUUIDPipe) configId: string,
     @Body() dto: RedxChargeQuoteDto,
   ) {
-    return this.couriers.calculateRedxCharge(businessId, configId, dto);
+    return this.couriers.calculateCourierCharge(businessId, configId, dto);
   }
 
   @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.READ)
-  @Get("configs/:configId/redx/pickup-stores")
-  @ApiOperation({ summary: "List REDX pickup stores" })
-  listRedxPickupStores(
+  @Get("configs/:configId/courier/pickup-stores")
+  @ApiOperation({ summary: "List courier pickup stores" })
+  listCourierPickupStores(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("configId", ParseUUIDPipe) configId: string,
   ) {
-    return this.couriers.listRedxPickupStores(businessId, configId);
+    return this.couriers.listCourierPickupStores(businessId, configId);
   }
 
   @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.CREATE)
-  @Post("configs/:configId/redx/pickup-stores")
-  @ApiOperation({ summary: "Create REDX pickup store" })
-  createRedxPickupStore(
+  @Post("configs/:configId/courier/pickup-stores")
+  @ApiOperation({ summary: "Create courier pickup store" })
+  createCourierPickupStore(
     @Param("businessId", ParseUUIDPipe) businessId: string,
     @Param("configId", ParseUUIDPipe) configId: string,
     @Body() dto: RedxCreatePickupStoreDto,
   ) {
-    return this.couriers.createRedxPickupStore(businessId, configId, dto);
+    return this.couriers.createCourierPickupStore(businessId, configId, dto);
   }
 
   @RequirePermission(RbacFeature.COURIER_MANAGEMENT, PermissionAction.READ)

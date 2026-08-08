@@ -62,12 +62,7 @@ export type RedxParcelRequest = {
   isClosedBox?: boolean;
 };
 
-export type RedxPickupStoreRequest = {
-  name: string;
-  phone: string;
-  address: string;
-  areaId: string | number;
-};
+export type RedxPickupStoreRequest = Record<string, unknown>;
 
 export type RedxPickupStoreUpdateRequest = Partial<RedxPickupStoreRequest>;
 
@@ -80,6 +75,30 @@ export type RedxWebhookPayload = {
   invoice_number?: string;
   delivery_type?: string;
   [key: string]: unknown;
+};
+
+type CommonStoreResponse = {
+  data: {
+    store_id: number;
+    store_name: string;
+    area_name: string | null;
+    area_id: number | null;
+    phone: string | null;
+  };
+};
+
+type CommonStoreListResponse = {
+  stores: {
+    store_id: number;
+    store_name: string;
+    store_address: string | null;
+    area_name: string | null;
+    area_id: number | null;
+    phone: string | null;
+    city_id: number | null;
+    zone_id: number | null;
+    is_active: boolean | null;
+  }[];
 };
 
 @Injectable()
@@ -253,6 +272,22 @@ export class CourierProviderService {
     }
   }
 
+  async getZonesInsideCity(config: RedxConfig, cityId: string) {
+    const response = await this.apiRequest(
+      config,
+      `/aladdin/api/v1/cities/${cityId}/zone-list`,
+    );
+    return response;
+  }
+
+  async getAreaInsideZone(config: RedxConfig, zoneId: string) {
+    const response = await this.apiRequest(
+      config,
+      `/aladdin/api/v1/zones/${zoneId}/area-list`,
+    );
+    return response;
+  }
+
   async calculateCharge(config: RedxConfig, dto: RedxChargeRequest) {
     const response = await this.request(
       config,
@@ -346,20 +381,172 @@ export class CourierProviderService {
     });
   }
 
-  createPickupStore(config: RedxConfig, dto: RedxPickupStoreRequest) {
-    return this.request(config, "/v1.0.0-beta/pickup/store", {
-      method: "POST",
-      body: {
-        name: dto.name,
-        phone: dto.phone,
-        address: dto.address,
-        area_id: Number(dto.areaId),
-      },
-    });
+  async createPickupStore(config: RedxConfig, dto: RedxPickupStoreRequest) {
+    switch (config.code) {
+      case "REDX": {
+        const res = await this.apiRequest(config, "/v1.0.0-beta/pickup/store", {
+          method: "POST",
+          body: dto,
+        });
+        console.log("res api", res);
+        return this.normalizeStoreResponse(config.code, res);
+      }
+      case "PATHAO": {
+        const res = await this.apiRequest(config, "/aladdin/api/v1/stores", {
+          method: "POST",
+          body: dto,
+        });
+        return this.normalizeStoreResponse(config.code, res);
+      }
+      default:
+        break;
+    }
   }
 
-  listPickupStores(config: RedxConfig) {
-    return this.request(config, "/v1.0.0-beta/pickup/stores");
+  private normalizeStoreResponse(
+    provider: CourierProvider,
+    response: unknown,
+  ): CommonStoreResponse {
+    console.log("res", response);
+    switch (provider) {
+      case "PATHAO": {
+        const pathaoResponse = response as {
+          message: string;
+          type: string;
+          code: number;
+          data: {
+            store_id: number;
+            store_name: string;
+          };
+        };
+
+        const store = pathaoResponse.data;
+
+        return {
+          data: {
+            store_id: store.store_id,
+            store_name: store.store_name,
+            area_name: null,
+            area_id: null,
+            phone: null,
+          },
+        };
+      }
+
+      case "REDX": {
+        const redxResponse = response as {
+          id: number;
+          name: string;
+          address: string;
+          area_name: string;
+          area_id: number;
+          phone: string;
+        };
+        const store = redxResponse;
+
+        return {
+          data: {
+            store_id: store.id,
+            store_name: store.name,
+            area_name: store.area_name,
+            area_id: store.area_id,
+            phone: store.phone,
+          },
+        };
+      }
+
+      default:
+        throw new BadRequestException("Unsupported courier provider");
+    }
+  }
+
+  async listPickupStores(config: RedxConfig) {
+    switch (config.code) {
+      case "REDX": {
+        const res = await this.apiRequest(config, "/v1.0.0-beta/pickup/stores");
+        return this.normalizeStoreListResponse(config.code, res);
+      }
+      case "PATHAO": {
+        const res = await this.apiRequest(config, "/aladdin/api/v1/stores");
+        return this.normalizeStoreListResponse(config.code, res);
+      }
+      default:
+        break;
+    }
+  }
+
+  private normalizeStoreListResponse(
+    provider: CourierProvider,
+    response: unknown,
+  ): CommonStoreListResponse {
+    console.log("res", response);
+    switch (provider) {
+      case "REDX": {
+        const redxResponse = response as {
+          pickup_stores: {
+            id: number;
+            name: string;
+            address: string;
+            area_name: string;
+            area_id: number;
+            phone: string;
+            created_at: string;
+          }[];
+        };
+
+        return {
+          stores: redxResponse.pickup_stores.map((store) => ({
+            store_id: store.id,
+            store_name: store.name,
+            store_address: store.address,
+            area_name: store.area_name,
+            area_id: store.area_id,
+            phone: store.phone,
+            city_id: null,
+            zone_id: null,
+            is_active: null,
+          })),
+        };
+      }
+
+      case "PATHAO": {
+        const pathaoResponse = response as {
+          message: string;
+          type: string;
+          code: number;
+          data: {
+            data: {
+              store_id: number;
+              store_name: string;
+              store_address: string;
+              is_active: number;
+              city_id: number;
+              zone_id: number;
+              hub_id: number;
+              is_default_store: boolean;
+              is_default_return_store: boolean;
+            }[];
+          };
+        };
+
+        return {
+          stores: pathaoResponse.data.data.map((store) => ({
+            store_id: store.store_id,
+            store_name: store.store_name,
+            store_address: store.store_address,
+            area_name: null,
+            area_id: null,
+            phone: null,
+            city_id: store.city_id,
+            zone_id: store.zone_id,
+            is_active: store.is_active === 1,
+          })),
+        };
+      }
+
+      default:
+        throw new BadRequestException("Unsupported courier provider");
+    }
   }
 
   getPickupStoreDetails(config: RedxConfig, storeId: string) {
@@ -590,14 +777,21 @@ export class CourierProviderService {
     const payload = await this.parseResponse(response);
 
     if (!response.ok) {
-      const message =
-        typeof payload === "object"
-          ? (payload as { message: string }).message
-          : null;
+      const errorPayload = payload as {
+        message?: string;
+        errors?: {
+          name?: string[];
+        };
+      };
+
+      const message = errorPayload.message ?? null;
+
+      console.log("message", response, errorPayload.errors?.name);
+
       throw new BadRequestException({
         message: message
-          ? `REDX request failed: ${message}`
-          : "REDX request failed",
+          ? `Courier request failed: ${errorPayload?.errors?.name?.[0]} ${message}`
+          : "Courier request failed",
         statusCode: response.status,
         response: payload,
       });
@@ -616,7 +810,7 @@ export class CourierProviderService {
     try {
       return JSON.parse(text) as unknown;
     } catch {
-      throw new InternalServerErrorException("REDX returned invalid JSON");
+      throw new InternalServerErrorException("Courier returned invalid JSON");
     }
   }
 

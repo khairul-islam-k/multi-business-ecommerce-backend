@@ -475,12 +475,29 @@ export class CourierService {
     configId: string,
     query: RedxAreaQueryDto,
   ) {
-    console.log("call this function");
     const { runtime } = await this.getActiveConfigRuntime(businessId, configId);
     return apiResponse(await this.provider.getAreas(runtime, query));
   }
 
-  async calculateRedxCharge(
+  async getZonesInsideCity(
+    businessId: string,
+    configId: string,
+    cityId: string,
+  ) {
+    const { runtime } = await this.getActiveConfigRuntime(businessId, configId);
+    return apiResponse(await this.provider.getZonesInsideCity(runtime, cityId));
+  }
+
+  async getAreaInsideZone(
+    businessId: string,
+    configId: string,
+    zoneId: string,
+  ) {
+    const { runtime } = await this.getActiveConfigRuntime(businessId, configId);
+    return apiResponse(await this.provider.getAreaInsideZone(runtime, zoneId));
+  }
+
+  async calculateCourierCharge(
     businessId: string,
     configId: string,
     dto: RedxChargeQuoteDto,
@@ -489,25 +506,49 @@ export class CourierService {
     return apiResponse(quote);
   }
 
-  async listRedxPickupStores(businessId: string, configId: string) {
+  async listCourierPickupStores(businessId: string, configId: string) {
     const { runtime } = await this.getActiveConfigRuntime(businessId, configId);
     return apiResponse(await this.provider.listPickupStores(runtime));
   }
 
-  async createRedxPickupStore(
+  async createCourierPickupStore(
     businessId: string,
     configId: string,
     dto: RedxCreatePickupStoreDto,
   ) {
     const { runtime } = await this.getActiveConfigRuntime(businessId, configId);
-    return apiResponse(
-      await this.provider.createPickupStore(runtime, {
-        name: dto.name.trim(),
-        phone: dto.phone.trim(),
-        address: dto.address.trim(),
-        areaId: dto.areaId.trim(),
-      }),
-    );
+
+    let payload: Record<string, unknown>;
+    switch (runtime.code) {
+      case "REDX": {
+        payload = {
+          name: dto.name.trim(),
+          phone: dto.phone.trim(),
+          address: dto.address.trim(),
+          area_id: Number(dto.cityId),
+        };
+        break;
+      }
+
+      case "PATHAO": {
+        payload = {
+          name: dto.name.trim(),
+          contact_name: dto.contactName.trim(),
+          contact_number: dto.phone.trim(),
+          otp_number: dto.phone.trim(),
+          address: dto.address.trim(),
+          city_id: Number(dto.cityId),
+          zone_id: Number(dto.zoneId),
+          area_id: Number(dto.areaId),
+        };
+        break;
+      }
+
+      default:
+        throw new BadRequestException(`Unsupported courier provider`);
+    }
+
+    return apiResponse(await this.provider.createPickupStore(runtime, payload));
   }
 
   async getRedxPickupStore(
@@ -573,7 +614,6 @@ export class CourierService {
         and(
           eq(courierConfig.businessId, storefront.businessId),
           eq(courierConfig.status, CourierConfigStatus.ACTIVE),
-          eq(courier.code, CourierProvider.REDX),
           eq(courier.status, CourierStatus.ACTIVE),
           isNull(courierConfig.deletedAt),
         ),
@@ -587,7 +627,7 @@ export class CourierService {
     );
   }
 
-  async findStorefrontRedxAreas(
+  async findStorefrontCourierCities(
     host: string | undefined,
     configId: string,
     query: RedxAreaQueryDto,
@@ -602,7 +642,7 @@ export class CourierService {
     dto: StorefrontCourierQuoteDto,
   ) {
     const storefront = await this.websites.findPublishedByHostOrThrow(host);
-    return this.calculateRedxCharge(storefront.businessId, configId, dto);
+    return this.calculateCourierCharge(storefront.businessId, configId, dto);
   }
 
   async prepareStorefrontOrderCourier(
@@ -981,17 +1021,19 @@ export class CourierService {
       businessId,
       configId,
     );
+
     const pickupWarehouse = await this.resolvePickupWarehouse(
       businessId,
       dto.warehouseId,
       options.orderId,
     );
+
     const itemMetrics = options.items
       ? await this.calculateItemMetrics(
         businessId,
         options.items,
         runtime.defaultParcelWeight,
-      )
+        )
       : null;
     const orderWeight = options.orderId
       ? await this.calculatePersistedOrderWeight(
@@ -1284,7 +1326,7 @@ export class CourierService {
 
     const selectedVariant = variantId
       ? await this.db
-        .select({
+          .select({
           id: productVariant.id,
           priceOverride: productVariant.priceOverride,
           weight: productVariant.weight,

@@ -8,7 +8,6 @@ import {
   IsNumber,
   IsObject,
   IsOptional,
-  IsPhoneNumber,
   IsString,
   IsUUID,
   MaxLength,
@@ -113,13 +112,19 @@ export class BulkUpdateCourierConfigDto {
 }
 
 export class RedxAreaQueryDto {
-  @ApiPropertyOptional({ example: "1209" })
+  @ApiPropertyOptional({
+    example: "1209",
+    description: "Postal code for redx",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(20)
   postCode?: string;
 
-  @ApiPropertyOptional({ example: "Dhaka" })
+  @ApiPropertyOptional({
+    example: "Dhaka",
+    description: "district name code for redx",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(100)
@@ -216,14 +221,32 @@ export class RedxCreatePickupStoreDto {
   @MaxLength(150)
   name!: string;
 
+  @ApiProperty({ example: "Default Warehouse" })
+  @IsString()
+  @IsOptional()
+  @MaxLength(150)
+  contactName!: string;
+
   @ApiProperty({ example: "+8801700000000" })
-  @IsPhoneNumber()
+  @IsString()
   @MaxLength(30)
   phone!: string;
 
   @ApiProperty({ example: "House 10, Road 2, Dhaka" })
   @IsString()
   address!: string;
+
+  @ApiPropertyOptional({ example: "115" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  cityId?: string;
+
+  @ApiPropertyOptional({ example: "115" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  zoneId?: string;
 
   @ApiProperty({ example: "115" })
   @IsString()
