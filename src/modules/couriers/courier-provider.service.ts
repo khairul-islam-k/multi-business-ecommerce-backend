@@ -38,6 +38,13 @@ export type RedxAreaQuery = {
   districtName?: string;
 };
 
+type PathaoPricePlanResponse = {
+  data: {
+    price: number;
+    cod_percentage: number;
+  };
+};
+
 export type RedxChargeRequest = {
   pickupAreaId: string | number;
   deliveryAreaId: string | number;
@@ -87,7 +94,7 @@ type CommonStoreResponse = {
   };
 };
 
-type CommonStoreListResponse = {
+export type CommonStoreListResponse = {
   stores: {
     store_id: number;
     store_name: string;
@@ -288,40 +295,79 @@ export class CourierProviderService {
     return response;
   }
 
-  async calculateCharge(config: RedxConfig, dto: RedxChargeRequest) {
-    const response = await this.request(
-      config,
-      "/v1.0.0-beta/charge/charge_calculator",
-      {
-        method: "GET",
-        query: {
-          pickup_area_id: String(dto.pickupAreaId),
-          delivery_area_id: String(dto.deliveryAreaId),
+  async calculateCharge(config: RedxConfig, dto: Record<string, unknown>) {
+    switch (config.code) {
+      case "REDX": {
+        const payload = {
+          pickup_area_id: String(dto.pickup_area_id),
+          delivery_area_id: String(dto.delivery_area_id),
           weight: String(dto.weight),
-          cash_collection_amount: new Decimal(dto.cashCollectionAmount).toFixed(
-            2,
-          ),
-        },
-      },
-    );
+          cash_collection_amount: String(dto.cash_collection_amount),
+        };
+        const response = await this.apiRequest(
+          config,
+          "/v1.0.0-beta/charge/charge_calculator",
+          {
+            method: "GET",
+            query: payload,
+          },
+        );
 
-    const deliveryCharge = this.moneyFromPayload(response, [
-      "delivery_charge",
-      "deliveryCharge",
-      "charge",
-      "total_charge",
-    ]);
-    const codCharge = this.moneyFromPayload(response, [
-      "cod_charge",
-      "codCharge",
-    ]);
+        console.log("response", response);
 
-    return {
-      raw: response,
-      deliveryCharge,
-      codCharge,
-      courierFee: deliveryCharge.plus(codCharge),
-    };
+        const deliveryCharge = this.moneyFromPayload(response, [
+          "delivery_charge",
+          "deliveryCharge",
+          "charge",
+          "total_charge",
+        ]);
+        const codCharge = this.moneyFromPayload(response, [
+          "cod_charge",
+          "codCharge",
+        ]);
+
+        return {
+          raw: response,
+          deliveryCharge,
+          codCharge,
+          courierFee: deliveryCharge.plus(codCharge),
+        };
+      }
+
+      case "PATHAO": {
+        const response = (await this.apiRequest(
+          config,
+          "/aladdin/api/v1/merchant/price-plan",
+          {
+            method: "POST",
+            body: dto,
+          },
+        )) as PathaoPricePlanResponse;
+
+        const payload = {
+          deliveryCharge: response?.data?.price,
+          codCharge: response?.data.cod_percentage,
+        };
+
+        const deliveryCharge = this.moneyFromPayload(payload, [
+          "delivery_charge",
+          "deliveryCharge",
+          "charge",
+          "total_charge",
+        ]);
+        const codCharge = this.moneyFromPayload(payload, [
+          "cod_charge",
+          "codCharge",
+        ]);
+
+        return {
+          raw: payload,
+          deliveryCharge,
+          codCharge,
+          courierFee: deliveryCharge.plus(codCharge),
+        };
+      }
+    }
   }
 
   async createParcel(config: RedxConfig, dto: RedxParcelRequest) {
@@ -388,7 +434,6 @@ export class CourierProviderService {
           method: "POST",
           body: dto,
         });
-        console.log("res api", res);
         return this.normalizeStoreResponse(config.code, res);
       }
       case "PATHAO": {
@@ -407,7 +452,6 @@ export class CourierProviderService {
     provider: CourierProvider,
     response: unknown,
   ): CommonStoreResponse {
-    console.log("res", response);
     switch (provider) {
       case "PATHAO": {
         const pathaoResponse = response as {
@@ -479,7 +523,6 @@ export class CourierProviderService {
     provider: CourierProvider,
     response: unknown,
   ): CommonStoreListResponse {
-    console.log("res", response);
     switch (provider) {
       case "REDX": {
         const redxResponse = response as {
@@ -500,9 +543,9 @@ export class CourierProviderService {
             store_name: store.name,
             store_address: store.address,
             area_name: store.area_name,
-            area_id: store.area_id,
+            area_id: null,
             phone: store.phone,
-            city_id: null,
+            city_id: store.area_id,
             zone_id: null,
             is_active: null,
           })),

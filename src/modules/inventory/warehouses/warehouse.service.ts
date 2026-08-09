@@ -30,6 +30,7 @@ import {
 import { DatabaseService } from "../../../database/database.service";
 import { InventoryLookupService } from "../common/inventory-lookup.service";
 import {
+  AssignCourierStore,
   CreateWarehouseDto,
   QueryWarehouseDto,
   UpdateWarehouseDto,
@@ -37,12 +38,14 @@ import {
 } from "./dto/warehouse.dto";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
+import { CourierService } from "@/modules/couriers/courier.service";
 
 @Injectable()
 export class WarehouseService {
   constructor(
     private readonly database: DatabaseService,
     private readonly lookup: InventoryLookupService,
+    private readonly courier: CourierService,
   ) {}
 
   private get db() {
@@ -201,6 +204,53 @@ export class WarehouseService {
           ...(dto.status !== undefined && { status: dto.status }),
           updatedBy: currentUser.id,
         })
+        .where(eq(warehouse.id, warehouseId))
+        .returning();
+
+      return apiResponse(
+        await this.withWarehouseCount(updatedWarehouse),
+        "Warehouse updated successfully",
+      );
+    } catch (error) {
+      this.lookup.handleUniqueError(error, "Warehouse name already exists");
+    }
+  }
+
+  async assignCourierStore(
+    businessId: string,
+    warehouseId: string,
+    dto: AssignCourierStore,
+  ) {
+    const { runtime } = await this.courier.getActiveConfigRuntime(
+      businessId,
+      dto.configId,
+    );
+
+    const payload: {
+      pathaoStoreId?: string;
+      redxStoreId?: string;
+    } = {};
+
+    switch (runtime.code) {
+      case "PATHAO": {
+        payload.pathaoStoreId = String(dto.storeId);
+        break;
+      }
+
+      case "REDX": {
+        payload.redxStoreId = String(dto.storeId);
+        break;
+      }
+
+      default: {
+        throw new BadRequestException("Unsupported courier provider");
+      }
+    }
+
+    try {
+      const [updatedWarehouse] = await this.db
+        .update(warehouse)
+        .set(payload)
         .where(eq(warehouse.id, warehouseId))
         .returning();
 

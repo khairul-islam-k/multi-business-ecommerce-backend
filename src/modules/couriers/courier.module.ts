@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 
 import { AccessModule } from "../access/access.module";
 import { BusinessModule } from "../business/business.module";
@@ -19,8 +19,8 @@ import { StorefrontCourierController } from "./storefront-courier.controller";
     AccessModule,
     BusinessModule,
     FinanceModule,
-    InventoryModule,
-    OrderModule,
+    forwardRef(() => InventoryModule),
+    forwardRef(() => OrderModule),
     PackageModule,
     PermissionModule,
     WebsiteModule,
@@ -31,6 +31,6 @@ import { StorefrontCourierController } from "./storefront-courier.controller";
     CourierConfigEncryptionService,
     CourierProviderService,
   ],
-  exports: [CourierService],
+  exports: [CourierService, CourierProviderService],
 })
 export class CourierModule {}

@@ -51,6 +51,20 @@ import { OrderPaymentService } from "./order-payment.service";
 
 import type { CurrentUserPayload } from "../../auth/decorators/current-user.decorator";
 import type { OrderItemWithPrice } from "../domain/order.types";
+import { CourierService } from "@/modules/couriers/courier.service";
+import { CommonStoreListResponse, CourierProviderService } from "@/modules/couriers/courier-provider.service";
+
+type TypeStore = {
+  store_id: number;
+  store_name: string;
+  store_address: string | null;
+  area_name: string | null;
+  area_id: number | null;
+  phone: string | null;
+  city_id: number | null;
+  zone_id: number | null;
+  is_active: boolean | null;
+}
 
 @Injectable()
 export class CreateOrderService {
@@ -60,7 +74,9 @@ export class CreateOrderService {
     private readonly financeLedgerService: FinanceLedgerService,
     private readonly orderCodeRepository: OrderCodeRepository,
     private readonly orderPaymentService: OrderPaymentService,
-  ) {}
+    private readonly courierProvider: CourierService,
+    private readonly courierApi: CourierProviderService,
+  ) { }
 
   private get db() {
     return this.database.db;
@@ -147,6 +163,7 @@ export class CreateOrderService {
       this.orderCodeRepository.generateUniqueOrderNo(businessId),
       this.orderCodeRepository.generateUniqueInvoiceNo(businessId),
     ]);
+
     const warehouseId =
       params.warehouseId ??
       (await this.resolveDefaultWarehouseIdOrThrow(businessId));
@@ -368,11 +385,53 @@ export class CreateOrderService {
       )
       .limit(1);
 
-    if (!pickupWarehouse?.redxAreaId || !pickupWarehouse.redxAreaName) {
-      throw new BadRequestException(
-        "Pickup warehouse must have REDX area metadata before a REDX shipment can be created.",
-      );
+    // console.log("wareHouse", pickupWarehouse, pickupWarehouse.redxStoreId);
+
+    const { runtime } = await this.courierProvider.getActiveConfigRuntime(
+      params.businessId,
+      params.courier.courierConfigId,
+    );
+
+    const stores = await this.courierApi.listPickupStores(runtime);
+
+    let store: TypeStore | undefined;
+    let courierStoreId: string | null;
+
+    switch (runtime.code) {
+      case "REDX": {
+        courierStoreId = pickupWarehouse.redxStoreId;
+        store = stores?.stores.find(
+          (data) =>
+            Number(data.store_id) === Number(pickupWarehouse.redxStoreId),
+        );
+        break;
+      }
+
+      case "PATHAO": {
+        courierStoreId = pickupWarehouse.pathaoStoreId;
+        store = stores?.stores.find(
+          (data) =>
+            Number(data.store_id) === Number(pickupWarehouse.pathaoStoreId),
+        );
+        break;
+      }
     }
+
+    if (!store) {
+      throw new BadRequestException("Please asign a courier  store");
+    }
+
+    const cities = await this.courierApi.getAreas(runtime);
+
+    const city = cities?.data?.areas?.find(
+      (data) => data.city_id === store.city_id,
+    );
+
+    // if (!pickupWarehouse?.redxAreaId || !pickupWarehouse.redxAreaName) {
+    //   throw new BadRequestException(
+    //     "Pickup warehouse must have REDX area metadata before a REDX shipment can be created.",
+    //   );
+    // }
 
     const [shipment] = await tx
       .insert(courierShipment)
@@ -407,10 +466,10 @@ export class CreateOrderService {
         deliveryDivisionName: this.normalizeNullableText(
           params.courier.deliveryDivisionName,
         ),
-        pickupAreaId: pickupWarehouse.redxAreaId,
+        pickupAreaId: city?.city_id ?? 1,
         pickupAreaName: pickupWarehouse.redxAreaName,
-        pickupPostCode: pickupWarehouse.redxPostCode,
-        pickupStoreId: pickupWarehouse.redxPickupStoreId,
+        pickupPostCode: city?.post_code ?? 1212,
+        pickupStoreId: courierStoreId,
         deliveryAddressSnapshot:
           (params.courier.deliveryAddressSnapshot as JsonValue | undefined) ??
           params.order.shippingAddressSnapshot ??
@@ -484,21 +543,21 @@ export class CreateOrderService {
 
       const selectedVariant = item.variantId
         ? await this.db
-            .select({
-              id: productVariant.id,
-              priceOverride: productVariant.priceOverride,
-            })
-            .from(productVariant)
-            .where(
-              and(
-                eq(productVariant.id, item.variantId),
-                eq(productVariant.productId, item.productId),
-                eq(productVariant.businessId, businessId),
-                isNull(productVariant.deletedAt),
-                eq(productVariant.status, ProductVariantStatus.ACTIVE),
-              ),
-            )
-            .then(([row]) => row ?? null)
+          .select({
+            id: productVariant.id,
+            priceOverride: productVariant.priceOverride,
+          })
+          .from(productVariant)
+          .where(
+            and(
+              eq(productVariant.id, item.variantId),
+              eq(productVariant.productId, item.productId),
+              eq(productVariant.businessId, businessId),
+              isNull(productVariant.deletedAt),
+              eq(productVariant.status, ProductVariantStatus.ACTIVE),
+            ),
+          )
+          .then(([row]) => row ?? null)
         : null;
 
       if (item.variantId && !selectedVariant) {

@@ -140,7 +140,13 @@ export class RedxChargeQuoteDto {
   @ApiProperty({ example: "115" })
   @IsString()
   @MaxLength(80)
-  deliveryAreaId!: string;
+  deliveryCityId!: string;
+
+  @ApiProperty({ example: "115" })
+  @IsString()
+  @IsOptional()
+  @MaxLength(80)
+  deliveryZoneId?: string;
 
   @ApiPropertyOptional({ example: "Dhanmondi" })
   @IsOptional()
@@ -182,8 +188,13 @@ export class StorefrontCourierSelectionDto {
 
   @ApiProperty({ example: "115" })
   @IsString()
-  @MaxLength(80)
-  deliveryAreaId!: string;
+  @MaxLength(255)
+  deliveryCityId!: string;
+
+  @ApiProperty({ example: "115" })
+  @IsString()
+  @MaxLength(255)
+  deliveryZoneId?: string;
 
   @ApiPropertyOptional({ example: "Dhanmondi" })
   @IsOptional()

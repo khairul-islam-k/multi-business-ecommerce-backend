@@ -20,6 +20,7 @@ import { SubscriptionGuard } from "../../packages/guards/subscription.guard";
 import { RequirePermission } from "../../permissions/decorators/require-permission.decorator";
 import { PermissionGuard } from "../../permissions/guards/permission.guard";
 import {
+  AssignCourierStore,
   CreateWarehouseDto,
   QueryWarehouseDto,
   UpdateWarehouseDto,
@@ -92,6 +93,21 @@ export class WarehouseController {
     @Body() dto: UpdateWarehouseDto,
   ) {
     return this.warehouses.update(user, businessId, warehouseId, dto);
+  }
+
+  @RequirePermission(RbacFeature.INVENTORY_MANAGEMENT, PermissionAction.UPDATE)
+  @Patch(":warehouseId/assign_courier")
+  @ApiOperation({
+    summary: "Assign courier store",
+    description:
+      "Updates warehouse with the new information provided. Only the fields sent in the request are changed.",
+  })
+  assignCourierStore(
+    @Param("businessId", ParseUUIDPipe) businessId: string,
+    @Param("warehouseId", ParseUUIDPipe) warehouseId: string,
+    @Body() dto: AssignCourierStore,
+  ) {
+    return this.warehouses.assignCourierStore(businessId, warehouseId, dto);
   }
 
   @RequirePermission(RbacFeature.INVENTORY_MANAGEMENT, PermissionAction.DELETE)

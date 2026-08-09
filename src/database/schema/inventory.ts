@@ -143,6 +143,8 @@ export const warehouse = pgTable(
     name: varchar({ length: 150 }).notNull(),
     phone: varchar({ length: 30 }),
     address: text(),
+    pathaoStoreId: varchar("pathao_store_id", { length: 255 }),
+    redxStoreId: varchar("redx_store_id", { length: 255 }),
     redxAreaId: varchar("redx_area_id", { length: 80 }),
     redxAreaName: varchar("redx_area_name", { length: 150 }),
     redxPostCode: varchar("redx_post_code", { length: 20 }),

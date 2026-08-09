@@ -1,4 +1,13 @@
-import { IsEnum, IsIn, IsOptional, IsString, MaxLength } from "class-validator";
+import {
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsPositive,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from "class-validator";
 
 import { WarehouseStatus } from "@/database/schema";
 import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
@@ -62,6 +71,24 @@ export class CreateWarehouseDto {
 }
 
 export class UpdateWarehouseDto extends PartialType(CreateWarehouseDto) {}
+
+export class AssignCourierStore {
+  @ApiProperty({
+    description: "Courier configuration ID",
+    example: "9f7d2a35-4cb5-4caa-bb5b-78fd5b33c36c",
+  })
+  @IsUUID()
+  configId!: string;
+
+  @ApiProperty({
+    description: "Courier store ID",
+    example: 150674,
+    type: Number,
+  })
+  @IsInt()
+  @IsPositive()
+  storeId!: number;
+}
 
 export class QueryWarehouseDto extends SortedPaginationQueryDto<WarehouseSortBy> {
   @ApiPropertyOptional({ enum: WarehouseStatus })

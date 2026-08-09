@@ -103,7 +103,7 @@ export class StorefrontCustomerService {
     private readonly orderCodes: OrderCodeRepository,
     private readonly couriers: CourierService,
     private readonly mediaService: MediaService,
-  ) { }
+  ) {}
 
   private get db() {
     return this.database.db;
@@ -929,6 +929,7 @@ export class StorefrontCustomerService {
         ),
       )
       : dto.shippingAddressSnapshot;
+      
     const courierSelection = dto.courierConfigId
       ? await this.couriers.prepareStorefrontOrderCourier(
         currentCustomer.businessId,

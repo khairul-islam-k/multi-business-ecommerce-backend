@@ -71,6 +71,7 @@ import { resolveProductEffectivePrice } from "../product-catalog/common/product-
 import { WebsiteService } from "../website/website.service";
 import { CourierConfigEncryptionService } from "./courier-config-encryption.service";
 import {
+  CommonStoreListResponse,
   CourierProviderService,
   RedxWebhookPayload,
 } from "./courier-provider.service";
@@ -118,7 +119,7 @@ export class CourierService {
     private readonly orderCodes: OrderCodeRepository,
     private readonly inventory: InventoryLookupService,
     private readonly financeCodes: FinanceCodeService,
-  ) { }
+  ) {}
 
   private get db() {
     return this.database.db;
@@ -669,7 +670,7 @@ export class CourierService {
         courierId: quote.courierId,
         courierConfigId: configId,
         pickupWarehouseId: quote.pickupWarehouse.id,
-        deliveryAreaId: dto.deliveryAreaId,
+        deliveryCityId: dto.deliveryCityId, // deliveryAreaId
         deliveryAreaName: dto.deliveryAreaName,
         deliveryPostCode: dto.deliveryPostCode,
         deliveryDivisionName: dto.deliveryDivisionName,
@@ -701,7 +702,7 @@ export class CourierService {
         courierId: quote.courierId,
         courierConfigId: dto.courierConfigId,
         pickupWarehouseId: quote.pickupWarehouse.id,
-        deliveryAreaId: dto.deliveryAreaId,
+        deliveryAreaId: dto.deliveryCityId,
         deliveryAreaName: dto.deliveryAreaName,
         deliveryPostCode: dto.deliveryPostCode,
         deliveryDivisionName: dto.deliveryDivisionName,
@@ -912,6 +913,7 @@ export class CourierService {
   ) {
     const shipment = await this.getShipmentOrThrow(businessId, shipmentId);
 
+
     if (shipment.trackingCode) {
       return shipment;
     }
@@ -921,7 +923,6 @@ export class CourierService {
       shipment.courierConfigId,
     );
 
-    console.log("runtime", runtime);
     const [orderRow] = await this.db
       .select()
       .from(order)
@@ -1026,6 +1027,7 @@ export class CourierService {
       businessId,
       dto.warehouseId,
       options.orderId,
+      runtime.code,
     );
 
     const itemMetrics = options.items
@@ -1065,12 +1067,61 @@ export class CourierService {
         (options.orderId
           ? await this.getOrderCodDueAmount(businessId, options.orderId)
           : 0));
-    const charge = await this.provider.calculateCharge(runtime, {
-      pickupAreaId: pickupWarehouse.redxAreaId,
-      deliveryAreaId: dto.deliveryAreaId,
-      weight: Number(new Decimal(weight).toDecimalPlaces(2).toString()),
-      cashCollectionAmount,
-    });
+
+
+    const stores = await this.provider.listPickupStores(runtime);
+
+    let store: CommonStoreListResponse["stores"][number] | undefined;
+
+    switch (runtime.code) {
+      case "PATHAO": {
+        store = stores?.stores.find(
+          (singleData) =>
+            Number(singleData.store_id) ===
+            Number(pickupWarehouse.pathaoStoreId),
+        );
+        break;
+      }
+
+      case "REDX": {
+        store = stores?.stores.find(
+          (singleData) =>
+            Number(singleData.store_id) === Number(pickupWarehouse.redxStoreId),
+        );
+        break;
+      }
+    }
+
+    // charge payload
+    let payload: Record<string, unknown> = {};
+
+    switch (runtime.code) {
+      case "REDX": {
+        payload = {
+          pickup_area_id: String(store?.city_id),
+          delivery_area_id: String(dto.deliveryCityId),
+          weight: new Decimal(weight).toDecimalPlaces(2).toString(),
+          cash_collection_amount: new Decimal(cashCollectionAmount).toFixed(2),
+        };
+        break;
+      }
+      case "PATHAO": {
+        payload = {
+          store_id: pickupWarehouse.pathaoStoreId,
+          item_type: 2,
+          delivery_type: 48,
+          item_weight: Number(weight),
+          recipient_city: dto.deliveryCityId,
+          recipient_zone: dto.deliveryZoneId,
+        };
+        break;
+      }
+
+      default:
+        break;
+    }
+
+    const charge = await this.provider.calculateCharge(runtime, payload);
 
     return {
       courierId: row.courier.id,
@@ -1086,13 +1137,13 @@ export class CourierService {
       raw: charge.raw,
       pickupWarehouse: {
         id: pickupWarehouse.id,
-        redxAreaId: pickupWarehouse.redxAreaId,
-        redxAreaName: pickupWarehouse.redxAreaName,
-        redxPostCode: pickupWarehouse.redxPostCode,
-        redxPickupStoreId: pickupWarehouse.redxPickupStoreId,
+        cityId: store?.city_id,
+        areaName: store?.area_name,
+        PostCode: null,
+        pickupStoreId: store?.store_id,
       },
       delivery: {
-        areaId: dto.deliveryAreaId,
+        areaId: dto.deliveryCityId,
         areaName: dto.deliveryAreaName ?? null,
         postCode: dto.deliveryPostCode ?? null,
         divisionName: dto.deliveryDivisionName ?? null,
@@ -1622,10 +1673,7 @@ export class CourierService {
       );
   }
 
-  private async getActiveConfigRuntime(
-    businessId: string,
-    configId?: string | null,
-  ) {
+  async getActiveConfigRuntime(businessId: string, configId?: string | null) {
     if (!configId) {
       throw new BadRequestException("courier config is required");
     }
@@ -1788,6 +1836,7 @@ export class CourierService {
     businessId: string,
     warehouseId?: string,
     orderId?: string,
+    code?: CourierProvider,
   ): Promise<RedxPickupWarehouse> {
     const resolvedWarehouseId =
       warehouseId ??
@@ -1811,11 +1860,31 @@ export class CourierService {
       throw new BadRequestException("Pickup warehouse is missing or inactive");
     }
 
-    if (!row.redxAreaId || !row.redxAreaName) {
-      throw new BadRequestException(
-        "Pickup warehouse must have REDX area metadata before REDX can be used",
-      );
+    switch (code) {
+      case "PATHAO": {
+        if (!row.pathaoStoreId) {
+          throw new BadRequestException(
+            "PATHAO: You haven't assigned a courier store yet.",
+          );
+        }
+        break;
+      }
+
+      case "REDX": {
+        if (!row.redxStoreId) {
+          throw new BadRequestException(
+            "REDX: You haven't assigned a courier store yet.",
+          );
+        }
+        break;
+      }
     }
+
+    // if (!row.redxAreaId || !row.redxAreaName) {
+    //   throw new BadRequestException(
+    //     "Pickup warehouse must have REDX area metadata before REDX can be used",
+    //   );
+    // }
 
     return row as RedxPickupWarehouse;
   }
