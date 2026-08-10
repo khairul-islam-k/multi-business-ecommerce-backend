@@ -637,6 +637,15 @@ export class CourierService {
     return this.getCities(storefront.businessId, configId, query);
   }
 
+  async findStoreFrontZone(
+    host: string | undefined,
+    configId: string,
+    cityId: string,
+  ) {
+    const storefront = await this.websites.findPublishedByHostOrThrow(host);
+    return this.getZonesInsideCity(storefront.businessId, configId, cityId);
+  }
+
   async calculateStorefrontShippingCharge(
     host: string | undefined,
     configId: string,

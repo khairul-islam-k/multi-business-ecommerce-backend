@@ -49,6 +49,23 @@ export class StorefrontCourierController {
     );
   }
 
+  @Get("storefront/couriers/:configId/cities/:cityId")
+  @ApiOperation({
+    summary: "Get courier delivery zone inside a cities for (pathao)",
+  })
+  findStoreFrontZone(
+    @Param("configId") configId: string,
+    @Param("cityId") cityId: string,
+    @Headers("host") host?: string,
+    @Headers("x-forwarded-host") forwardedHost?: string,
+  ) {
+    return this.couriers.findStoreFrontZone(
+      this.getRequestHost(host, forwardedHost),
+      configId,
+      cityId,
+    );
+  }
+
   @Post("storefront/couriers/:configId/shipping-charge")
   @ApiOperation({ summary: "Calculate REDX storefront shipping charge" })
   calculateShippingCharge(
