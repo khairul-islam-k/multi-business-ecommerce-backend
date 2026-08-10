@@ -108,6 +108,13 @@ export type CommonStoreListResponse = {
   }[];
 };
 
+export interface CommonCourierOrderResponse {
+  trackingId: string;
+  merchantOrderId?: string;
+  orderStatus?: string;
+  deliveryFee?: number;
+}
+
 @Injectable()
 export class CourierProviderService {
   normalizeCourierConfig(
@@ -313,8 +320,6 @@ export class CourierProviderService {
           },
         );
 
-        console.log("response", response);
-
         const deliveryCharge = this.moneyFromPayload(response, [
           "delivery_charge",
           "deliveryCharge",
@@ -370,40 +375,61 @@ export class CourierProviderService {
     }
   }
 
-  async createParcel(config: RedxConfig, dto: RedxParcelRequest) {
-    const payload = {
-      merchant_parcel_id: dto.merchantParcelId,
-      customer_name: dto.customerName,
-      customer_phone: dto.customerPhone,
-      customer_address: dto.deliveryAddress,
-      delivery_area: dto.deliveryAreaName,
-      delivery_area_id: Number(dto.deliveryAreaId),
-      delivery_address: dto.deliveryAddress,
-      cash_collection_amount: Number(
-        new Decimal(dto.cashCollectionAmount).toFixed(2),
-      ),
-      parcel_weight: dto.parcelWeight,
-      value:
-        dto.parcelValue === undefined
-          ? undefined
-          : new Decimal(dto.parcelValue).toFixed(2),
-      parcel_value:
-        dto.parcelValue === undefined
-          ? undefined
-          : Number(new Decimal(dto.parcelValue).toFixed(2)),
-      instruction: dto.instruction ?? undefined,
-      pickup_area_id: Number(dto.pickupAreaId),
-      pickup_area: dto.pickupAreaName ?? undefined,
-      pickup_store_id: dto.pickupStoreId
-        ? Number(dto.pickupStoreId)
-        : undefined,
-      is_closed_box: dto.isClosedBox ?? true,
-    };
+  async createParcel(config: RedxConfig, dto: Record<string, unknown>) {
+    switch (config.code) {
+      case "REDX": {
+        const res = await this.apiRequest(config, "/v1.0.0-beta/parcel", {
+          method: "POST",
+          body: dto,
+        });
+        return this.normalizeCreateOrderResponse(config.code, res);
+      }
+      case "PATHAO": {
+        const res = await this.apiRequest(config, "/aladdin/api/v1/orders", {
+          method: "POST",
+          body: dto,
+        });
+        return this.normalizeCreateOrderResponse(config.code, res);
+      }
+    }
+  }
 
-    return this.request(config, "/v1.0.0-beta/parcel", {
-      method: "POST",
-      body: payload,
-    });
+  private normalizeCreateOrderResponse(
+    provider: CourierProvider,
+    response: unknown,
+  ): CommonCourierOrderResponse {
+    switch (provider) {
+      case "PATHAO": {
+        const pathaoResponse = response as {
+          message: string;
+          type: string;
+          code: number;
+          data: {
+            consignment_id: string;
+            merchant_order_id: string;
+            order_status: string;
+            delivery_fee: number;
+          };
+        };
+
+        return {
+          trackingId: pathaoResponse.data.consignment_id,
+          merchantOrderId: pathaoResponse.data.merchant_order_id,
+          orderStatus: pathaoResponse.data.order_status,
+          deliveryFee: pathaoResponse.data.delivery_fee,
+        };
+      }
+
+      case "REDX": {
+        const redxResponse = response as {
+          tracking_id: string;
+        };
+
+        return {
+          trackingId: redxResponse.tracking_id,
+        };
+      }
+    }
   }
 
   getParcelInfo(config: RedxConfig, trackingId: string) {
@@ -413,11 +439,23 @@ export class CourierProviderService {
     );
   }
 
-  trackParcel(config: RedxConfig, trackingId: string) {
-    return this.request(
-      config,
-      `/v1.0.0-beta/parcel/track/${encodeURIComponent(trackingId)}`,
-    );
+  async trackParcel(config: RedxConfig, trackingId: string) {
+    switch (config.code) {
+      case "REDX": {
+        const res = await this.apiRequest(
+          config,
+          `/v1.0.0-beta/parcel/track/${encodeURIComponent(trackingId)}`,
+        );
+        return res;
+      }
+      case "PATHAO": {
+        const res = await this.apiRequest(
+          config,
+          `/aladdin/api/v1/orders/${encodeURIComponent(trackingId)}/info`,
+        );
+        return res;
+      }
+    }
   }
 
   updateParcel(config: RedxConfig, payload: Record<string, unknown>) {
@@ -791,7 +829,6 @@ export class CourierProviderService {
       body?: Record<string, unknown>;
     } = {},
   ) {
-    console.log("config", config);
     const query = options.query
       ? `?${new URLSearchParams(options.query).toString()}`
       : "";
@@ -828,8 +865,6 @@ export class CourierProviderService {
       };
 
       const message = errorPayload.message ?? null;
-
-      console.log("message", response, errorPayload.errors?.name);
 
       throw new BadRequestException({
         message: message

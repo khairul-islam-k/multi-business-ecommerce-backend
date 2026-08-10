@@ -787,10 +787,12 @@ export class CourierService {
       businessId,
       shipment.courierConfigId,
     );
+
     const providerTracking = await this.provider.trackParcel(
       runtime,
       shipment.trackingCode,
     );
+
     const providerStatus =
       this.provider.extractProviderStatus(providerTracking);
     const nextStatus = providerStatus
@@ -913,7 +915,6 @@ export class CourierService {
   ) {
     const shipment = await this.getShipmentOrThrow(businessId, shipmentId);
 
-
     if (shipment.trackingCode) {
       return shipment;
     }
@@ -936,6 +937,7 @@ export class CourierService {
     }
 
     const deliveryAddress = this.addressText(shipment.deliveryAddressSnapshot);
+
     const request = {
       merchantParcelId: shipment.shipmentNo,
       customerName:
@@ -964,11 +966,121 @@ export class CourierService {
       pickupStoreId: shipment.pickupStoreId,
       isClosedBox: runtime.isClosedBox,
     };
+
+    let courierPayload: Record<string, unknown>;
+
+
+    const pickupAreaId = this.required(
+      shipment.pickupAreaId,
+      "Pickup area is missing",
+    );
+
+    const deliverycityId = this.required(
+      shipment.deliveryAreaId,
+      "Delivery area is missing",
+    );
+
+    const items = await this.db
+    .select()
+    .from(orderItem)
+    .where(eq(orderItem.orderId, shipment.orderId));
+
+
+    switch (runtime.code) {
+      case "REDX": {
+        courierPayload = {
+          merchant_parcel_id: shipment.shipmentNo,
+
+          customer_name:
+            shipment.recipientName ?? orderRow.customerName ?? "Customer",
+
+          customer_phone:
+            shipment.recipientPhone ?? orderRow.customerPhone ?? "0123456789",
+
+          customer_address: deliveryAddress,
+
+          delivery_area: shipment.deliveryAreaName,
+
+          delivery_area_id: Number(deliverycityId),
+
+          delivery_address: deliveryAddress,
+
+          cash_collection_amount:
+            Number(new Decimal(shipment.codAmount).toFixed(2)),
+
+          parcel_weight: Number(
+            this.payloadObject(shipment.providerRequest).parcelWeight ?? 1,
+          ),
+
+          value: Number(new Decimal(orderRow.totalAmount).toFixed(2)),
+
+          parcel_value: Number(new Decimal(orderRow.totalAmount).toFixed(2)),
+
+          instruction: this.payloadObject(shipment.providerRequest).instruction as
+        | string
+        | undefined,
+
+          pickup_area_id: Number(pickupAreaId),
+
+          pickup_area: shipment.pickupAreaName,
+
+          pickup_store_id: shipment.pickupStoreId
+            ? Number(shipment.pickupStoreId)
+            : undefined,
+
+          is_closed_box: runtime.isClosedBox ?? true,
+        };
+        break;
+      }
+
+      case "PATHAO": {
+        courierPayload = {
+          store_id: shipment.pickupStoreId
+            ? Number(shipment.pickupStoreId)
+            : undefined,
+
+          merchant_order_id: shipment.shipmentNo,
+
+          recipient_name:
+            shipment.recipientName ?? orderRow.customerName ?? "Customer",
+
+          recipient_phone:
+            shipment.recipientPhone ?? orderRow.customerPhone ?? "0123456789",
+
+          recipient_address: deliveryAddress,
+
+          delivery_type: Number(48),
+
+          item_type: Number(2),
+
+          special_instruction: this.payloadObject(shipment.providerRequest).instruction as
+        | string
+        | undefined,
+
+          item_quantity: Number(items.length ?? 1),
+
+          item_weight: Number(
+            this.payloadObject(shipment.providerRequest).parcelWeight ?? 1,
+          ),
+
+          item_description: this.payloadObject(shipment.providerRequest)
+          .instruction as
+        | string
+        | undefined,
+
+          amount_to_collect: Number(new Decimal(shipment.codAmount).toFixed(2)),
+        };
+        break;
+      }
+  }
+
+
+
     let response: unknown;
     let trackingId: string | null;
 
     try {
-      response = await this.provider.createParcel(runtime, request);
+      response = await this.provider.createParcel(runtime, courierPayload);
       trackingId = this.provider.extractTrackingId(response);
 
       if (!trackingId) {

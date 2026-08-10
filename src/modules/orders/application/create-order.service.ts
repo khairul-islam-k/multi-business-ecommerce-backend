@@ -76,7 +76,7 @@ export class CreateOrderService {
     private readonly orderPaymentService: OrderPaymentService,
     private readonly courierProvider: CourierService,
     private readonly courierApi: CourierProviderService,
-  ) { }
+  ) {}
 
   private get db() {
     return this.database.db;
@@ -276,6 +276,7 @@ export class CreateOrderService {
           currentUserId: currentUser.id,
         });
       }
+      console.log("parame", params);
 
       if (params.courier) {
         await this.createCourierShipment(tx, {
@@ -418,7 +419,7 @@ export class CreateOrderService {
     }
 
     if (!store) {
-      throw new BadRequestException("Please asign a courier  store");
+      throw new BadRequestException("Please assign a courier  store");
     }
 
     const cities = await this.courierApi.getAreas(runtime);
@@ -426,12 +427,6 @@ export class CreateOrderService {
     const city = cities?.data?.areas?.find(
       (data) => data.city_id === store.city_id,
     );
-
-    // if (!pickupWarehouse?.redxAreaId || !pickupWarehouse.redxAreaName) {
-    //   throw new BadRequestException(
-    //     "Pickup warehouse must have REDX area metadata before a REDX shipment can be created.",
-    //   );
-    // }
 
     const [shipment] = await tx
       .insert(courierShipment)
@@ -455,7 +450,7 @@ export class CreateOrderService {
           this.normalizeNullableText(params.courier.recipientPhone) ??
           params.order.customerPhone,
         deliveryAreaId: this.normalizeNullableText(
-          params.courier.deliveryAreaId,
+          params.courier.deliveryCityId,
         ),
         deliveryAreaName: this.normalizeNullableText(
           params.courier.deliveryAreaName,

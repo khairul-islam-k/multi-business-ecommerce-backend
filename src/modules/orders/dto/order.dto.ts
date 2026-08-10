@@ -99,7 +99,7 @@ export class OrderCourierInputDto {
   @IsOptional()
   @IsString()
   @MaxLength(80)
-  deliveryAreaId?: string;
+  deliveryCityId?: string;
 
   @ApiPropertyOptional({ example: "Dhanmondi" })
   @IsOptional()
