@@ -193,6 +193,7 @@ export class StorefrontCourierSelectionDto {
 
   @ApiProperty({ example: "115" })
   @IsString()
+  @IsOptional()
   @MaxLength(255)
   deliveryZoneId?: string;
 
@@ -261,6 +262,7 @@ export class RedxCreatePickupStoreDto {
 
   @ApiProperty({ example: "115" })
   @IsString()
+  @IsOptional()
   @MaxLength(80)
   areaId!: string;
 }

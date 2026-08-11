@@ -82,12 +82,10 @@ export class AssignCourierStore {
 
   @ApiProperty({
     description: "Courier store ID",
-    example: 150674,
-    type: Number,
+    example: "150674",
   })
-  @IsInt()
-  @IsPositive()
-  storeId!: number;
+  @IsUUID()
+  warehouseId!: string;
 }
 
 export class QueryWarehouseDto extends SortedPaginationQueryDto<WarehouseSortBy> {

@@ -218,13 +218,15 @@ export class WarehouseService {
 
   async assignCourierStore(
     businessId: string,
-    warehouseId: string,
+    storeId: string,
     dto: AssignCourierStore,
   ) {
     const { runtime } = await this.courier.getActiveConfigRuntime(
       businessId,
       dto.configId,
     );
+
+    console.log("assing", businessId, storeId, dto);
 
     const payload: {
       pathaoStoreId?: string;
@@ -233,12 +235,12 @@ export class WarehouseService {
 
     switch (runtime.code) {
       case "PATHAO": {
-        payload.pathaoStoreId = String(dto.storeId);
+        payload.pathaoStoreId = String(storeId);
         break;
       }
 
       case "REDX": {
-        payload.redxStoreId = String(dto.storeId);
+        payload.redxStoreId = String(storeId);
         break;
       }
 
@@ -251,7 +253,7 @@ export class WarehouseService {
       const [updatedWarehouse] = await this.db
         .update(warehouse)
         .set(payload)
-        .where(eq(warehouse.id, warehouseId))
+        .where(eq(warehouse.id, dto.warehouseId))
         .returning();
 
       return apiResponse(

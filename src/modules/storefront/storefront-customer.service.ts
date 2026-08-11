@@ -864,6 +864,7 @@ export class StorefrontCustomerService {
     websiteId: string | undefined,
     dto: PlaceStorefrontOrderDto,
   ) {
+    console.log("payload", currentCustomer, dto);
     await this.assertStorefrontCustomer(currentCustomer, websiteId);
     const cart = await this.findActiveCart(currentCustomer);
 

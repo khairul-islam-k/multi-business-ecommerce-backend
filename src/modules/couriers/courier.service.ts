@@ -534,7 +534,7 @@ export class CourierService {
       case "PATHAO": {
         payload = {
           name: dto.name.trim(),
-          contact_name: dto.contactName.trim(),
+          contact_name: dto.name.trim(),
           contact_number: dto.phone.trim(),
           otp_number: dto.phone.trim(),
           address: dto.address.trim(),

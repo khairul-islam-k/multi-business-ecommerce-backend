@@ -276,7 +276,6 @@ export class CreateOrderService {
           currentUserId: currentUser.id,
         });
       }
-      console.log("parame", params);
 
       if (params.courier) {
         await this.createCourierShipment(tx, {
@@ -462,7 +461,7 @@ export class CreateOrderService {
           params.courier.deliveryDivisionName,
         ),
         pickupAreaId: city?.city_id ?? 1,
-        pickupAreaName: pickupWarehouse.redxAreaName,
+        pickupAreaName: pickupWarehouse?.redxAreaName ?? city?.city_name,
         pickupPostCode: city?.post_code ?? 1212,
         pickupStoreId: courierStoreId,
         deliveryAddressSnapshot:

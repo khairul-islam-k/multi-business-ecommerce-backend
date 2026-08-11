@@ -96,7 +96,7 @@ export class WarehouseController {
   }
 
   @RequirePermission(RbacFeature.INVENTORY_MANAGEMENT, PermissionAction.UPDATE)
-  @Patch(":warehouseId/assign_courier")
+  @Patch(":storeId/assign_courier")
   @ApiOperation({
     summary: "Assign courier store",
     description:
@@ -104,10 +104,10 @@ export class WarehouseController {
   })
   assignCourierStore(
     @Param("businessId", ParseUUIDPipe) businessId: string,
-    @Param("warehouseId", ParseUUIDPipe) warehouseId: string,
+    @Param("storeId") storeId: string,
     @Body() dto: AssignCourierStore,
   ) {
-    return this.warehouses.assignCourierStore(businessId, warehouseId, dto);
+    return this.warehouses.assignCourierStore(businessId, storeId, dto);
   }
 
   @RequirePermission(RbacFeature.INVENTORY_MANAGEMENT, PermissionAction.DELETE)
