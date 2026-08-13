@@ -863,6 +863,7 @@ export class CourierProviderService {
           name?: string[];
           otp_number?: string[];
           address?: string[];
+          recipient_phone?: string[];
         };
       };
 
@@ -870,7 +871,7 @@ export class CourierProviderService {
 
       throw new BadRequestException({
         message: message
-          ? `Courier request failed: ${errorPayload?.errors?.name?.[0]} ${errorPayload.errors?.address?.[0]} ${errorPayload?.errors?.otp_number?.[0]} ${message}`
+          ? `Courier request failed: ${errorPayload?.errors?.recipient_phone?.[0]} ${errorPayload?.errors?.name?.[0]} ${errorPayload.errors?.address?.[0]} ${errorPayload?.errors?.otp_number?.[0]} ${message}`
           : "Courier request failed",
         statusCode: response.status,
         response: payload,

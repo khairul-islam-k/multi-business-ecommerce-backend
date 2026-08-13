@@ -64,7 +64,7 @@ type TypeStore = {
   city_id: number | null;
   zone_id: number | null;
   is_active: boolean | null;
-}
+};
 
 @Injectable()
 export class CreateOrderService {
@@ -488,6 +488,7 @@ export class CreateOrderService {
       })),
     );
   }
+
 
   private async buildItems(businessId: string, items: OrderItemInputDto[]) {
     const builtItems: OrderItemWithPrice[] = [];

@@ -108,6 +108,18 @@ type CourierItemMetricInput = {
   quantity: Decimal.Value;
 };
 
+type TypeStore = {
+  store_id: number;
+  store_name: string;
+  store_address: string | null;
+  area_name: string | null;
+  area_id: number | null;
+  phone: string | null;
+  city_id: number | null;
+  zone_id: number | null;
+  is_active: boolean | null;
+};
+
 @Injectable()
 export class CourierService {
   constructor(
@@ -945,7 +957,58 @@ export class CourierService {
       throw new NotFoundException("Order not found for courier shipment");
     }
 
+    const [pickupWarehouse] = await this.db
+    .select()
+      .from(warehouse)
+      .where(
+        and(
+          eq(warehouse.id, shipment?.pickupWarehouseId),
+          eq(warehouse.businessId, businessId),
+          eq(warehouse.status, WarehouseStatus.ACTIVE),
+          isNull(warehouse.deletedAt),
+        ),
+      )
+      .limit(1);
+
+
     const deliveryAddress = this.addressText(shipment.deliveryAddressSnapshot);
+
+    const stores = await this.provider.listPickupStores(runtime);
+
+    let store: TypeStore | undefined;
+    let courierStoreId: string | null;
+
+    switch (runtime.code) {
+      case "REDX": {
+        courierStoreId = pickupWarehouse.redxStoreId;
+        store = stores?.stores.find(
+          (data) =>
+            Number(data.store_id) === Number(pickupWarehouse.redxStoreId),
+        );
+        break;
+      }
+
+      case "PATHAO": {
+        courierStoreId = pickupWarehouse.pathaoStoreId;
+        store = stores?.stores.find(
+          (data) =>
+            Number(data.store_id) === Number(pickupWarehouse.pathaoStoreId),
+        );
+        break;
+      }
+    }
+
+    if (!store) {
+      throw new BadRequestException("Please assign a courier  store");
+    }
+
+    const cities = await this.provider.getAreas(runtime);
+
+    const cityId =
+      runtime.code === "REDX" && runtime.mode === "SANDBOX" ? 1 : store.city_id;
+
+    const city = cities?.data?.areas?.find((data) => data.city_id === cityId);
+
 
     const request = {
       merchantParcelId: shipment.shipmentNo,
@@ -968,7 +1031,7 @@ export class CourierService {
         | string
         | undefined,
       pickupAreaId: this.required(
-        shipment.pickupAreaId,
+        String(city?.city_id),
         "Pickup area is missing",
       ),
       pickupAreaName: shipment.pickupAreaName,
@@ -978,9 +1041,8 @@ export class CourierService {
 
     let courierPayload: Record<string, unknown>;
 
-
     const pickupAreaId = this.required(
-      shipment.pickupAreaId,
+      String(city?.city_id),
       "Pickup area is missing",
     );
 
@@ -1025,17 +1087,13 @@ export class CourierService {
 
           parcel_value: Number(new Decimal(orderRow.totalAmount).toFixed(2)),
 
-          instruction: this.payloadObject(shipment.providerRequest).instruction as
-        | string
-        | undefined,
+          instruction: this.payloadObject(shipment.providerRequest).instruction,
 
           pickup_area_id: Number(pickupAreaId),
 
           pickup_area: shipment.pickupAreaName,
 
-          pickup_store_id: shipment.pickupStoreId
-            ? Number(shipment.pickupStoreId)
-            : undefined,
+          pickup_store_id: courierStoreId ? Number(courierStoreId) : undefined,
 
           is_closed_box: runtime.isClosedBox ?? true,
         };
@@ -1044,9 +1102,7 @@ export class CourierService {
 
       case "PATHAO": {
         courierPayload = {
-          store_id: shipment.pickupStoreId
-            ? Number(shipment.pickupStoreId)
-            : undefined,
+          store_id: courierStoreId ? Number(courierStoreId) : undefined,
 
           merchant_order_id: shipment.shipmentNo,
 
@@ -1054,7 +1110,7 @@ export class CourierService {
             shipment.recipientName ?? orderRow.customerName ?? "Customer",
 
           recipient_phone:
-            shipment.recipientPhone ?? orderRow.customerPhone ?? "0123456789",
+            shipment.recipientPhone ?? orderRow.customerPhone ?? "01712345678",
 
           recipient_address: deliveryAddress,
 
@@ -1062,9 +1118,7 @@ export class CourierService {
 
           item_type: Number(2),
 
-          special_instruction: this.payloadObject(shipment.providerRequest).instruction as
-        | string
-        | undefined,
+          special_instruction: this.payloadObject(shipment.providerRequest).instruction,
 
           item_quantity: Number(items.length ?? 1),
 
@@ -1073,9 +1127,7 @@ export class CourierService {
           ),
 
           item_description: this.payloadObject(shipment.providerRequest)
-          .instruction as
-        | string
-        | undefined,
+          .instruction,
 
           amount_to_collect: Number(new Decimal(shipment.codAmount).toFixed(2)),
         };
