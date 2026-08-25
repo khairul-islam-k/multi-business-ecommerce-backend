@@ -76,7 +76,7 @@ export class CreateOrderService {
     private readonly orderPaymentService: OrderPaymentService,
     private readonly courierProvider: CourierService,
     private readonly courierApi: CourierProviderService,
-  ) {}
+  ) { }
 
   private get db() {
     return this.database.db;
@@ -280,6 +280,7 @@ export class CreateOrderService {
       if (params.courier) {
         await this.createCourierShipment(tx, {
           businessId,
+          customerPhone: params.customerPhone,
           order: createdOrder,
           items: createdItems,
           courier: params.courier,
@@ -356,6 +357,7 @@ export class CreateOrderService {
     tx: DatabaseTransaction,
     params: {
       businessId: string;
+      customerPhone?: string;
       order: Order;
       items: OrderItem[];
       courier: NonNullable<CreateOrderDto["courier"]>;
@@ -385,7 +387,7 @@ export class CreateOrderService {
       )
       .limit(1);
 
-    // console.log("wareHouse", pickupWarehouse, pickupWarehouse.redxStoreId);
+    console.log("params phone", params.customerPhone);
 
     const { runtime } = await this.courierProvider.getActiveConfigRuntime(
       params.businessId,
@@ -446,6 +448,7 @@ export class CreateOrderService {
           this.normalizeNullableText(params.courier.recipientName) ??
           params.order.customerName,
         recipientPhone:
+          this.normalizeNullableText(params.customerPhone) ??
           this.normalizeNullableText(params.courier.recipientPhone) ??
           params.order.customerPhone,
         deliveryAreaId: this.normalizeNullableText(
@@ -488,7 +491,6 @@ export class CreateOrderService {
       })),
     );
   }
-
 
   private async buildItems(businessId: string, items: OrderItemInputDto[]) {
     const builtItems: OrderItemWithPrice[] = [];

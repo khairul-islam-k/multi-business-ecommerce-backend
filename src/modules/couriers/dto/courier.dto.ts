@@ -215,6 +215,11 @@ export class StorefrontCourierSelectionDto {
   @MaxLength(100)
   deliveryDivisionName?: string;
 
+  @ApiPropertyOptional({ example: "01737623568" })
+  @IsOptional()
+  @IsString()
+  customerPhone?: string;
+
   @ApiPropertyOptional({ example: "Please call before delivery" })
   @IsOptional()
   @IsString()

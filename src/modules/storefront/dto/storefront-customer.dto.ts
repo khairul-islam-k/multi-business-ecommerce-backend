@@ -9,7 +9,6 @@ import {
   IsObject,
   IsOptional,
   IsString,
-  IsUrl,
   IsUUID,
   Max,
   MaxLength,

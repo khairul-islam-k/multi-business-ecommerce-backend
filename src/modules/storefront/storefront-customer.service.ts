@@ -103,7 +103,7 @@ export class StorefrontCustomerService {
     private readonly orderCodes: OrderCodeRepository,
     private readonly couriers: CourierService,
     private readonly mediaService: MediaService,
-  ) {}
+  ) { }
 
   private get db() {
     return this.database.db;
@@ -864,7 +864,6 @@ export class StorefrontCustomerService {
     websiteId: string | undefined,
     dto: PlaceStorefrontOrderDto,
   ) {
-    console.log("payload", currentCustomer, dto);
     await this.assertStorefrontCustomer(currentCustomer, websiteId);
     const cart = await this.findActiveCart(currentCustomer);
 
@@ -884,6 +883,7 @@ export class StorefrontCustomerService {
     await this.assertStorefrontCustomer(currentCustomer, websiteId);
     const cart = await this.getPlaceableCartOrThrow(currentCustomer, cartId);
 
+    console.log("dto", dto);
     return this.placeCartOrder(currentCustomer, cart, dto);
   }
 
@@ -930,7 +930,7 @@ export class StorefrontCustomerService {
         ),
       )
       : dto.shippingAddressSnapshot;
-      
+
     const courierSelection = dto.courierConfigId
       ? await this.couriers.prepareStorefrontOrderCourier(
         currentCustomer.businessId,
@@ -950,7 +950,9 @@ export class StorefrontCustomerService {
       {
         customerId: currentCustomer.customerId,
         customerName: customerRow.name,
-        customerPhone: customerRow.phone ?? undefined,
+        customerPhone: dto.courierQuote?.customerPhone
+          ? dto.courierQuote.customerPhone
+          : (customerRow.phone ?? undefined),
         customerEmail: currentCustomer.email,
         shippingAddressSnapshot,
         shippingCharge: courierSelection?.shippingCharge ?? 0,
@@ -960,7 +962,9 @@ export class StorefrontCustomerService {
           courier: {
             ...courierSelection.courier,
             recipientName: customerRow.name,
-            recipientPhone: customerRow.phone ?? undefined,
+            recipientPhone: dto.courierQuote?.customerPhone
+              ? dto.courierQuote.customerPhone
+              : (customerRow.phone ?? undefined),
             deliveryAddressSnapshot: this.withCourierQuoteSnapshot(
               shippingAddressSnapshot,
               dto.courierQuote,
@@ -978,7 +982,7 @@ export class StorefrontCustomerService {
     const courierBooking = courierSelection
       ? await this.couriers.tryBookShipmentForOrder(
         currentCustomer.businessId,
-        createdOrderResponse.data.id,
+        createdOrderResponse?.data.id,
       )
       : null;
 
