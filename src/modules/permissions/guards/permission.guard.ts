@@ -50,7 +50,6 @@ export class PermissionGuard implements CanActivate {
     if (businessId === null) {
       request.businessId = null;
       request.businessContext = null;
-
       return true;
     }
 
